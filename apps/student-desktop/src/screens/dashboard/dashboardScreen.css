@@ -1,0 +1,88 @@
+/* Whole-screen background and spacing */
+.dashboard-screen {
+  min-height: 100vh;
+  background-color: var(--bg-app);
+  padding: 32px;
+  display: flex;
+  flex-direction: column;
+  gap: 24px;
+}
+
+/* Targets the <h1> *inside* .dashboard-screen specifically */
+.dashboard-screen h1 {
+  color: var(--text-primary);
+  font-size: 20px;
+  margin: 0;
+}
+
+/* The "No Active Session" badge */
+.dashboard-screen span {
+  color: var(--text-secondary);
+  font-size: 12px;
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 4px 12px;
+  align-self: flex-start;
+}
+
+/* The card itself */
+.initialize-session-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 640px;
+  display: flex;
+  flex-direction: column;
+  gap: 16px;
+}
+
+.initialize-session-card h2 {
+  color: var(--text-primary);
+  font-size: 16px;
+  margin: 0;
+}
+
+.initialize-session-card input {
+  background-color: var(--bg-app);
+  border: 1px solid var(--border-subtle);
+  border-radius: 8px;
+  padding: 10px 14px;
+  color: var(--text-primary);
+  font-size: 14px;
+}
+
+.initialize-session-card input::placeholder {
+  color: var(--text-secondary);
+}
+
+.initialize-session-card button {
+  background-color: var(--accent-blue);
+  color: white;
+  border: none;
+  border-radius: 8px;
+  padding: 10px 18px;
+  font-size: 14px;
+  font-weight: 500;
+  cursor: pointer;
+  align-self: flex-start;
+}
+
+.initialize-session-card button:hover {
+  opacity: 0.9;
+}
+
+.prev-exam-card {
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
+  border-radius: 12px;
+  padding: 24px;
+  max-width: 640px;
+  text-align: center;
+}
+
+.prev-exam-card p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0;
+}
