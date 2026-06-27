@@ -1,7 +1,6 @@
-import { DashboardScreen } from "./screens/dashboard/dashboardScreen";
-
+import { AppRouter } from "./router/appRouter";
 function App() {
-  return <DashboardScreen />;
+  return <AppRouter />;
 }
 
 export default App;
