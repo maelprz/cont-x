@@ -7,6 +7,6 @@ interface AppRouterState {
 }
 
 export const useRouterLogic = create<AppRouterState>((set) => ({
-  currentScreen: "dashboard", //default screen is dashboard but i think ipoint pani sa Login screen
+  currentScreen: "login", //default screen is dashboard but i think ipoint pani sa Login screen, I AM TAKING OVER JOBERT THIS IS NOW LOGIN -dlkg
   navigateTo: (screen: ScreenName) => set({ currentScreen: screen }), //method to switch screens
 }));
