@@ -1,0 +1,13 @@
+/* Two-column layout: sidebar on the left, whichever screen is active on the right */
+.app-shell {
+  display: flex; /* places sidebar and content side-by-side */
+  height: 100vh; /* fills the entire Electron window height */
+}
+
+.app-shell-content {
+  flex: 1; /* takes up all remaining width after the sidebar */
+  background-color: var(
+    --bg-app
+  ); /* main app background, behind whatever screen renders here */
+  overflow-y: auto; /* scrolls independently if a screen's content is taller than the window */
+}

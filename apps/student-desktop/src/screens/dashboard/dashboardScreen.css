@@ -1,62 +1,97 @@
-/* Whole-screen background and spacing */
+/* Inner content area — the sidebar's sibling (.app-shell-content) already provides the background and scroll */
 .dashboard-screen {
-  min-height: 100vh;
-  background-color: var(--bg-app);
-  padding: 32px;
+  display: flex; /* stacks header, card, and empty state vertically */
+  flex-direction: column;
+  gap: 32px; /* spacing between each major section */
+}
+
+/* Top bar: screen title + status badge, side-by-side */
+.dashboard-header {
+  display: flex; /* places title and badge in a row */
+  align-items: center;
+  gap: 16px;
+  padding: 20px 32px; /* inner spacing around the header row */
+  border-bottom: 1px solid var(--border-subtle); /* separates header from the content below */
+}
+
+.dashboard-title {
+  color: var(--text-primary);
+  font-size: 18px;
+  font-weight: 600;
+  margin: 0; /* removes the browser's default heading margin */
+}
+
+/* Placeholder status badge — becomes LockdownStatusIndicator in a later, separate stage */
+.dashboard-status-badge {
+  color: var(--accent-blue); /* blue, to read as an active/positive status */
+  font-size: 11px;
+  font-weight: 600;
+  text-transform: uppercase; /* matches the reference image's all-caps badge style */
+  letter-spacing: 0.04em;
+}
+
+/* Wraps every section below the header, so they share consistent side padding */
+.dashboard-content {
+  padding: 0 32px 32px; /* no top padding here — the header already has its own */
   display: flex;
   flex-direction: column;
-  gap: 24px;
+  gap: 48px; /* generous spacing between the card and the empty state */
 }
 
-/* Targets the <h1> *inside* .dashboard-screen specifically */
-.dashboard-screen h1 {
-  color: var(--text-primary);
-  font-size: 20px;
-  margin: 0;
-}
-
-/* The "No Active Session" badge */
-.dashboard-screen span {
-  color: var(--text-secondary);
-  font-size: 12px;
-  border: 1px solid var(--border-subtle);
-  border-radius: 999px;
-  padding: 4px 12px;
-  align-self: flex-start;
-}
-
-/* The card itself */
+/* The card containing the exam code entry UI */
 .initialize-session-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-subtle);
+  background-color: var(
+    --bg-card
+  ); /* lighter than the page background, reads as a "card" */
+  border: 1px solid var(--border-subtle); /* faint outline so the card edge is visible */
   border-radius: 12px;
   padding: 24px;
-  max-width: 640px;
-  display: flex;
-  flex-direction: column;
-  gap: 16px;
+  display: flex; /* places the text block and the input/button block side-by-side */
+  align-items: center;
+  justify-content: space-between; /* pushes the action block toward the right edge */
+  gap: 24px;
+  flex-wrap: wrap; /* lets the action block drop below the text on narrower widths, instead of overflowing */
 }
 
-.initialize-session-card h2 {
+.initialize-session-text h2 {
   color: var(--text-primary);
-  font-size: 16px;
-  margin: 0;
+  font-size: 18px;
+  margin: 0 0 8px; /* small gap below the heading, before the description */
 }
 
-.initialize-session-card input {
-  background-color: var(--bg-app);
+.initialize-session-text p {
+  color: var(--text-secondary);
+  font-size: 14px;
+  margin: 0;
+  max-width: 420px; /* keeps the description from stretching too wide and looking unbalanced */
+}
+
+.initialize-session-action {
+  display: flex; /* places the input and button side-by-side */
+  gap: 12px;
+  flex-shrink: 0; /* stops this block from being squeezed by the text block next to it */
+}
+
+.initialize-session-action input {
+  background-color: var(
+    --bg-app
+  ); /* darker than the card, so the input "sits inside" it */
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 10px 14px;
   color: var(--text-primary);
   font-size: 14px;
+  min-width: 200px; /* keeps the input from collapsing too narrow */
 }
 
-.initialize-session-card input::placeholder {
-  color: var(--text-secondary);
+.initialize-session-action input::placeholder {
+  color: var(--text-secondary); /* dims the hint text */
 }
 
-.initialize-session-card button {
+.initialize-session-action button {
+  display: flex; /* lets the arrow icon sit next to the label text */
+  align-items: center;
+  gap: 6px;
   background-color: var(--accent-blue);
   color: white;
   border: none;
@@ -65,24 +100,45 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  align-self: flex-start;
+  white-space: nowrap; /* keeps "Verify Exam Code" from wrapping onto two lines */
 }
 
-.initialize-session-card button:hover {
-  opacity: 0.9;
+.initialize-session-action button:hover {
+  opacity: 0.9; /* slight dimming on hover, a lightweight click-affordance cue */
 }
 
-.prev-exam-card {
-  background-color: var(--bg-card);
-  border: 1px solid var(--border-subtle);
-  border-radius: 12px;
-  padding: 24px;
-  max-width: 640px;
+/* Empty state — no exam history yet */
+.empty-exams-state {
+  display: flex; /* centers icon, title, and description in a vertical stack */
+  flex-direction: column;
+  align-items: center;
   text-align: center;
+  gap: 12px;
+  padding: 48px 0; /* breathing room above and below this block */
 }
 
-.prev-exam-card p {
+.empty-exams-icon-circle {
+  width: 72px; /* fixed circle size */
+  height: 72px;
+  border-radius: 50%; /* makes it a circle */
+  border: 1px solid var(--border-subtle); /* faint ring, matches the reference image's subtle outline */
+  display: flex; /* centers the icon inside the circle */
+  align-items: center;
+  justify-content: center;
+  color: var(
+    --accent-blue
+  ); /* tints the icon blue, matching the rest of the app's accent color */
+}
+
+.empty-exams-title {
+  color: var(--text-primary);
+  font-size: 18px;
+  margin: 0;
+}
+
+.empty-exams-description {
   color: var(--text-secondary);
   font-size: 14px;
+  max-width: 360px; /* keeps the description readable, not stretched edge-to-edge */
   margin: 0;
 }

@@ -1,0 +1,120 @@
+/* The sidebar panel itself */
+.app-sidebar {
+  width: 220px; /* default expanded width */
+  background-color: var(
+    --bg-sidebar
+  ); /* slightly different shade than the main app background */
+  border-right: 1px solid var(--border-subtle); /* faint line separating sidebar from content */
+  display: flex; /* lays out header, nav, footer as a vertical stack */
+  flex-direction: column;
+  transition: width 0.2s ease; /* animates the width change when collapsing/expanding */
+  flex-shrink: 0; /* stops the sidebar from being squeezed by the content area */
+}
+
+.app-sidebar--collapsed {
+  width: 64px; /* just wide enough for icons, no labels */
+}
+
+.app-sidebar-header {
+  display: flex; /* places brand text and collapse button side-by-side */
+  align-items: center;
+  justify-content: space-between; /* pushes the collapse button to the far right */
+  padding: 20px 16px; /* inner spacing */
+  border-bottom: 1px solid var(--border-subtle); /* separates header from the nav list below */
+}
+
+.app-sidebar-brand {
+  display: flex; /* stacks logo text above tagline */
+  flex-direction: column;
+}
+
+.app-sidebar-logo {
+  color: var(--text-primary); /* main readable text color */
+  font-weight: 700; /* bold, since it's the product name */
+  font-size: 18px;
+}
+
+.app-sidebar-tagline {
+  color: var(--text-secondary); /* dimmer, since it's secondary info */
+  font-size: 10px;
+  text-transform: uppercase; /* matches the reference image's all-caps subtitle style */
+  letter-spacing: 0.05em; /* slight spacing between letters, readable at this small size */
+  margin-top: 2px;
+}
+
+.app-sidebar-collapse-button {
+  background: transparent; /* blends into the sidebar background */
+  border: 1px solid var(--border-subtle); /* faint outline so it's still visible as clickable */
+  border-radius: 6px;
+  color: var(--text-secondary);
+  cursor: pointer; /* hand cursor on hover */
+  padding: 4px;
+  display: flex; /* centers the arrow icon inside the button */
+  align-items: center;
+}
+
+.app-sidebar-nav {
+  display: flex; /* stacks nav items vertically */
+  flex-direction: column;
+  gap: 4px; /* small spacing between nav items */
+  padding: 16px 12px;
+}
+
+.app-sidebar-nav-item {
+  display: flex; /* places icon and label side-by-side */
+  align-items: center;
+  gap: 10px;
+  padding: 10px 12px;
+  border-radius: 8px;
+  color: var(
+    --text-secondary
+  ); /* dim by default, since it's not the active item */
+  font-size: 14px;
+  cursor: pointer;
+}
+
+.app-sidebar-nav-item--active {
+  background-color: var(
+    --accent-blue-soft
+  ); /* faint blue background marking it as selected */
+  color: var(--accent-blue); /* brighter text/icon color when active */
+}
+
+.app-sidebar-footer {
+  margin-top: auto; /* pushes this block to the bottom of the sidebar, regardless of nav item count */
+  display: flex; /* places avatar and user info side-by-side */
+  align-items: center;
+  gap: 10px;
+  padding: 16px;
+  border-top: 1px solid var(--border-subtle); /* separates footer from the nav list above */
+}
+
+.app-sidebar-avatar {
+  width: 32px; /* fixed size circle */
+  height: 32px;
+  border-radius: 50%; /* makes it a circle */
+  background-color: var(--accent-blue-soft);
+  color: var(--accent-blue);
+  display: flex; /* centers the "G" letter inside the circle */
+  align-items: center;
+  justify-content: center;
+  font-weight: 600;
+  flex-shrink: 0; /* keeps the circle from shrinking if space gets tight */
+}
+
+.app-sidebar-user-info {
+  display: flex; /* stacks name above session status */
+  flex-direction: column;
+  overflow: hidden; /* clips text instead of breaking layout if it's ever too long */
+}
+
+.app-sidebar-user-name {
+  color: var(--text-primary);
+  font-size: 13px;
+  font-weight: 500;
+}
+
+.app-sidebar-user-session {
+  color: var(--text-secondary);
+  font-size: 11px;
+}
