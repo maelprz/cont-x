@@ -2,11 +2,11 @@ import { useState } from "react";
 import type { ChangeEvent } from "react";
 import type { DashboardScreenProps } from "./dashboardScreen.types";
 import "./dashboardScreen.css";
-import { Terminal } from "lucide-react";
+import { useRouterLogic } from "../../router/routerLogic";
 
 export function DashboardScreen(_props: DashboardScreenProps) {
   const [examCodeInput, setExamCodeInput] = useState("");
-  const [isExamCodeModalOpen, setIsExamCodeModalOpen] = useState(false);
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
 
   //Handlers - what happens when the user interacts with the UI
   function handleExamCodeChange(event: ChangeEvent<HTMLInputElement>) {
@@ -15,7 +15,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
   }
 
   function handleVerifyExamCode() {
-    setIsExamCodeModalOpen(true);
+    navigateTo("examConfirmation");
   }
 
   return (
