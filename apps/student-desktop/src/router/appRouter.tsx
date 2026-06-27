@@ -1,9 +1,9 @@
 import type { ComponentType } from "react";
+
+import type { ScreenName } from "./route";
 import { useRouterLogic } from "./routerLogic";
 
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
-import type { ScreenName } from "./route";
-
 import { ExamConfirmationScreen } from "../screens/examConfirmation/examConfirmationScreen";
 
 const screenComponents: Record<ScreenName, ComponentType> = {
