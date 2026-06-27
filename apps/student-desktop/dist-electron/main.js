@@ -17,6 +17,7 @@ function createWindow() {
       preload: path.join(__dirname$1, "preload.mjs")
     }
   });
+  win.maximize();
   win.webContents.on("did-finish-load", () => {
     win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
   });
