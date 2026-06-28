@@ -13,7 +13,7 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   examConfirmation: ExamConfirmationScreen,
 };
 
-const screensWithSidebar: ScreenName[] = ["dashboard", "examConfirmation"];
+const screensWithSidebar: ScreenName[] = ["dashboard"];
 
 export function AppRouter() {
   const currentScreen = useRouterLogic((state) => state.currentScreen);
