@@ -1,22 +1,37 @@
 import { useState } from "react"; // remembers values across re-renders
 import type { ChangeEvent } from "react"; // type of the event fired when the input's text changes
-import { ArrowRight, TrendingUp } from "lucide-react"; // pre-made icon components used on this screen
+import { ArrowRight, TrendingUp } from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
-import "./dashboardScreen.css"; // styling for everything rendered below
+// no CSS import — the body below is Tailwind now; the header block keeps its own inline styles
+
+// Duplicated from ExamConfirmationScreen's own color object — kept as raw inline styles
+// to stay byte-for-byte consistent with that copy, since we chose NOT to share one header component.
+const C = {
+  surfaceContainer: "#122131",
+  surfaceContainerHighest: "#273647",
+  onSurface: "#d4e4fa",
+  onSurfaceVariant: "#c2c6d6",
+  outline: "#8c909f",
+  outlineVariant: "#424754",
+  primary: "#adc6ff",
+};
+
+// TEMPORARY mock identity — Login is skipped, so there's no real logged-in student yet.
+const mockStudentName = "Alex";
+const mockStudentId = "2021-00001";
 
 // Shape of one row in the Previous Exams table.
 interface ExamHistoryEntry {
-  id: string; // unique key, used by React's list rendering
-  moduleName: string; // human-readable exam name
-  moduleCode: string; // short code shown under the name
-  date: string; // when the exam was taken
-  resultPercent: number; // score, as a whole number percentage
-  passed: boolean; // controls which badge color renders
+  id: string;
+  moduleName: string;
+  moduleCode: string;
+  date: string;
+  resultPercent: number;
+  passed: boolean;
 }
 
 // TEMPORARY mock data — stands in for a real call to Supabase/IPC, which doesn't exist yet.
-// Swapping this for real data later means replacing this array, nothing else in this file.
 const examHistoryMock: ExamHistoryEntry[] = [
   {
     id: "1",
@@ -44,129 +59,271 @@ const examHistoryMock: ExamHistoryEntry[] = [
   },
 ];
 
-// TEMPORARY mock name — Login is skipped, so there's no real logged-in student yet.
-const mockStudentName = "Alex";
-
-// Renders the screen a student sees right after logging in.
 export function DashboardScreen(_props: DashboardScreenProps) {
-  // Holds whatever text the student has typed into the exam code box. Local only — nothing else needs it yet.
   const [examCodeInput, setExamCodeInput] = useState("");
-
-  // Pulls just the navigateTo action out of the router store, so this screen can switch screens.
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  // Runs every time the student types or deletes a character in the exam code box.
   function handleExamCodeChange(event: ChangeEvent<HTMLInputElement>) {
-    setExamCodeInput(event.target.value); // stores the new text only — no validation happens here
+    setExamCodeInput(event.target.value);
   }
 
-  // Runs when the student clicks "Verify Exam Code".
   function handleVerifyExamCode() {
-    navigateTo("examConfirmation"); // tells the router to switch to the Exam Confirmation screen
+    navigateTo("examConfirmation");
   }
+
+  const initials = mockStudentName
+    .split(" ")
+    .map((n) => n[0])
+    .join("")
+    .slice(0, 2)
+    .toUpperCase();
 
   return (
-    <div className="dashboard-screen">
-      {" "}
-      {/* outer wrapper for this screen's own content */}
-      {/* Hero section: welcome message + placeholder status badge */}
-      <header className="dashboard-hero">
-        <div className="dashboard-hero-text">
-          <h1>Welcome back, {mockStudentName}</h1>{" "}
-          {/* name is mock until real login exists */}
-          <p>
+    // flex flex-col: stacks header, hero, and content vertically
+    <div className="flex flex-col">
+      {/* Duplicated header bar — unchanged, kept as raw inline styles on purpose */}
+      <header
+        style={{
+          height: "56px",
+          display: "flex",
+          alignItems: "center",
+          padding: "0 32px",
+          background: "rgba(18, 33, 49, 0.9)",
+          backdropFilter: "blur(12px)",
+          borderBottom: `1px solid ${C.outlineVariant}`,
+        }}
+      >
+        <div
+          style={{
+            display: "flex",
+            justifyContent: "space-between",
+            alignItems: "center",
+            width: "100%",
+          }}
+        >
+          <span
+            style={{
+              color: C.primary,
+              fontSize: "18px",
+              fontWeight: 700,
+              letterSpacing: "4px",
+            }}
+          >
+            Cont/x
+          </span>
+          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
+            <span
+              style={{
+                fontFamily: "'JetBrains Mono', monospace",
+                fontSize: "10px",
+                fontWeight: 600,
+                letterSpacing: "0.18em",
+                textTransform: "uppercase",
+                color: C.onSurfaceVariant,
+              }}
+            >
+              Secure Terminal Session
+            </span>
+            <div
+              style={{
+                width: "1px",
+                height: "20px",
+                background: C.outlineVariant,
+              }}
+            />
+            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
+              <div
+                style={{
+                  width: "30px",
+                  height: "30px",
+                  borderRadius: "50%",
+                  background: C.surfaceContainerHighest,
+                  border: `1px solid ${C.outlineVariant}`,
+                  display: "flex",
+                  alignItems: "center",
+                  justifyContent: "center",
+                }}
+              >
+                <span
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: "10px",
+                    fontWeight: 600,
+                    color: C.primary,
+                  }}
+                >
+                  {initials}
+                </span>
+              </div>
+              <div>
+                <p
+                  style={{
+                    fontSize: "13px",
+                    fontWeight: 600,
+                    color: C.onSurface,
+                    margin: 0,
+                    lineHeight: 1,
+                  }}
+                >
+                  {mockStudentName}
+                </p>
+                <p
+                  style={{
+                    fontFamily: "'JetBrains Mono', monospace",
+                    fontSize: "10px",
+                    color: C.outline,
+                    margin: "3px 0 0 0",
+                  }}
+                >
+                  {mockStudentId}
+                </p>
+              </div>
+            </div>
+          </div>
+        </div>
+      </header>
+
+      {/* "Welcome back" hero — converted to Tailwind */}
+      <div className="flex items-start justify-between gap-4 px-8 pt-8">
+        <div>
+          <h1 className="font-[var(--font-headline)] text-[var(--text-primary)] text-2xl mb-2">
+            Welcome back, {mockStudentName}
+          </h1>
+          <p className="text-sm text-[var(--text-secondary)] max-w-[420px]">
             Ready to continue your certification journey? Your dashboard keeps
             track of upcoming and completed exams.
           </p>
         </div>
         {/* TODO: swap for <LockdownStatusIndicator /> once that's built, in a later stage */}
-        <span className="dashboard-status-badge">No Active Session</span>
-      </header>
-      <main className="dashboard-content">
-        {" "}
-        {/* everything below the hero */}
+        <span className="font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-full px-3 py-1 whitespace-nowrap">
+          No Active Session
+        </span>
+      </div>
+
+      <main className="flex flex-col gap-10 px-8 pb-8 pt-6">
         {/* Card where the student enters their exam code */}
-        <section className="initialize-session-card">
-          <div className="initialize-session-text">
-            {" "}
-            {/* left side: heading + description */}
-            <h2>Ready for your assessment?</h2>
-            <p>
+        <section className="bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-app)] border border-[var(--accent-blue)]/40 shadow-[0_8px_32px_rgba(0,0,0,0.35)] rounded-2xl p-7 flex items-center justify-between gap-6 flex-wrap">
+          <div>
+            <h2 className="font-[var(--font-headline)] text-[var(--text-primary)] text-lg mb-2">
+              Ready for your assessment?
+            </h2>
+            <p className="text-sm text-[var(--text-secondary)] max-w-[420px]">
               Enter the exam code your instructor gave you to verify and
               continue.
             </p>
           </div>
-          <div className="initialize-session-action">
-            {" "}
-            {/* right side: input + button */}
+          <div className="flex gap-3 shrink-0">
             <input
-              type="text" // plain text field
-              placeholder="Exam Code (e.g. CS101-42)" // gray hint text shown when empty
-              value={examCodeInput} // box always shows exactly what's in state
-              onChange={handleExamCodeChange} // fires on every keystroke
+              type="text"
+              placeholder="Exam Code (e.g. CS101-42)"
+              value={examCodeInput}
+              onChange={handleExamCodeChange}
+              className="bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-w-[200px]"
             />
             <button
-              type="button" // stops this from ever behaving like a form-submit button
-              onClick={handleVerifyExamCode} // fires once on click
+              type="button"
+              onClick={handleVerifyExamCode}
+              className="flex items-center gap-1.5 bg-[var(--accent-blue)] text-white rounded-lg px-4.5 py-2.5 text-sm font-medium hover:opacity-90 whitespace-nowrap shadow-[0_4px_16px_rgba(59,130,246,0.35)]"
             >
-              Verify Exam Code <ArrowRight size={16} />{" "}
-              {/* arrow icon for visual emphasis */}
+              Verify Exam Code <ArrowRight size={16} />
             </button>
           </div>
         </section>
+
         {/* Previous exams table, using the mock data defined above */}
-        <section className="exam-history-section">
-          <div className="exam-history-header">
-            <h2>Previous Exams</h2>
-            {/* Decorative only — no exam-archive screen exists yet, so this isn't clickable */}
-            <span className="exam-history-view-all">View Full Archive</span>
+        <section className="flex flex-col gap-4">
+          <div className="flex items-center justify-between">
+            <h2 className="font-[var(--font-headline)] text-[var(--text-primary)] text-lg">
+              Previous Exams
+            </h2>
+            <span className="text-[var(--accent-blue)] text-xs">
+              View Full Archive
+            </span>
           </div>
-          <table className="exam-history-table">
-            <thead>
-              <tr>
-                <th>Module</th>
-                <th>Date</th>
-                <th>Result</th>
-                <th>Actions</th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Renders one row per mock entry — same pattern works once real data replaces the mock */}
-              {examHistoryMock.map((entry) => (
-                <tr key={entry.id}>
-                  <td>
-                    <span className="exam-history-module-name">
-                      {entry.moduleName}
-                    </span>
-                    <span className="exam-history-module-code">
-                      Module {entry.moduleCode}
-                    </span>
-                  </td>
-                  <td>{entry.date}</td>
-                  <td>
-                    <span
-                      className={`exam-history-result-badge ${
-                        entry.passed
-                          ? "exam-history-result-badge--pass"
-                          : "exam-history-result-badge--fail"
+          {/* Card wrapper — gives the table its background/border/shadow instead of floating bare */}
+          <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden">
+            <table className="w-full border-collapse">
+              <thead>
+                <tr className="bg-white/[0.02]">
+                  <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                    Module
+                  </th>
+                  <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                    Date
+                  </th>
+                  <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                    Result
+                  </th>
+                  <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                    Actions
+                  </th>
+                </tr>
+              </thead>
+              <tbody>
+                {examHistoryMock.map((entry, index) => (
+                  <tr key={entry.id} className="hover:bg-white/[0.02]">
+                    <td
+                      className={`py-4 px-5 text-[var(--text-primary)] text-sm ${
+                        index < examHistoryMock.length - 1
+                          ? "border-b border-[var(--border-subtle)]"
+                          : ""
                       }`}
                     >
-                      {entry.resultPercent}% {entry.passed ? "Pass" : "Fail"}
-                    </span>
-                  </td>
-                  <td>
-                    <TrendingUp size={16} />{" "}
-                    {/* decorative icon — not wired to any action yet */}
-                  </td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
+                      <span className="block font-medium">
+                        {entry.moduleName}
+                      </span>
+                      <span className="block font-[var(--font-label)] text-xs text-[var(--text-secondary)] mt-0.5">
+                        Module {entry.moduleCode}
+                      </span>
+                    </td>
+                    <td
+                      className={`py-4 px-5 text-[var(--text-primary)] text-sm ${
+                        index < examHistoryMock.length - 1
+                          ? "border-b border-[var(--border-subtle)]"
+                          : ""
+                      }`}
+                    >
+                      {entry.date}
+                    </td>
+                    <td
+                      className={`py-4 px-5 text-sm ${
+                        index < examHistoryMock.length - 1
+                          ? "border-b border-[var(--border-subtle)]"
+                          : ""
+                      }`}
+                    >
+                      <span
+                        className={`font-[var(--font-label)] text-xs px-2.5 py-1 rounded-full ${
+                          entry.passed
+                            ? "bg-[var(--accent-green)]/15 text-[var(--accent-green)]"
+                            : "bg-[rgba(239,68,68,0.15)] text-[#ef4444]"
+                        }`}
+                      >
+                        {entry.resultPercent}% {entry.passed ? "Pass" : "Fail"}
+                      </span>
+                    </td>
+                    <td
+                      className={`py-4 px-5 ${
+                        index < examHistoryMock.length - 1
+                          ? "border-b border-[var(--border-subtle)]"
+                          : ""
+                      }`}
+                    >
+                      <TrendingUp
+                        size={16}
+                        className="text-[var(--text-primary)]"
+                      />
+                    </td>
+                  </tr>
+                ))}
+              </tbody>
+            </table>
+          </div>
         </section>
       </main>
-      <footer className="dashboard-footer">
-        <span>Cont/x — Development Build</span>{" "}
-        {/* honest placeholder, not claiming a real version/identity system yet */}
+
+      <footer className="px-8 py-4 border-t border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs text-center">
+        <span>Cont/x — Development Build</span>
       </footer>
     </div>
   );
