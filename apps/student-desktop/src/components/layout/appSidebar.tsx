@@ -2,14 +2,18 @@ import { useState } from "react";
 import {
   LayoutDashboard,
   Settings,
+  LogOut,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react";
+import { useRouterLogic } from "../../router/routerLogic"; //
 import type { AppSidebarProps } from "./appSidebar.types";
 import "./appSidebar.css";
 
 export function AppSidebar({ activeItem }: AppSidebarProps) {
   const [isCollapsed, setIsCollapsed] = useState(false);
+
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
 
   function handleToggleCollapse() {
     setIsCollapsed((current) => !current); //flips true of false ra
@@ -62,6 +66,19 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
           </div>
         )}
       </div>
+
+        {/* logout button */}
+      <button
+        type="button"
+        className="app-sidebar-logout"
+        onClick={() => navigateTo("login")} 
+        aria-label="Log out"
+      >
+        <LogOut size={16} />
+        {!isCollapsed && <span>Log Out</span>}
+      </button>
+
+
     </aside>
   );
 }

@@ -28,6 +28,7 @@ let win: BrowserWindow | null
 
 function createWindow() {
   win = new BrowserWindow({
+    title: 'Cont/x',
     icon: path.join(process.env.VITE_PUBLIC, 'electron-vite.svg'),
     webPreferences: {
       preload: path.join(__dirname, 'preload.mjs'),
@@ -35,6 +36,9 @@ function createWindow() {
   })
 
   win.maximize() // obviously for the window maximized >:D -dlkg
+
+  // prevents the page/Vite from overriding the window title we set above
+  win.on('page-title-updated', (evt) => evt.preventDefault())
 
   // Test active push message to Renderer-process.
   win.webContents.on('did-finish-load', () => {
