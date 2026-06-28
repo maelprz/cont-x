@@ -1,91 +1,100 @@
-/* Inner content area — the sidebar's sibling (.app-shell-content) already provides the background and scroll */
+/* Outer wrapper for everything on this screen */
 .dashboard-screen {
-  display: flex; /* stacks header, card, and empty state vertically */
+  display: flex; /* stacks hero, card, and table vertically */
   flex-direction: column;
-  gap: 32px; /* spacing between each major section */
 }
 
-/* Top bar: screen title + status badge, side-by-side */
-.dashboard-header {
-  display: flex; /* places title and badge in a row */
-  align-items: center;
+/* Top hero section: welcome message + status badge, side-by-side */
+.dashboard-hero {
+  display: flex; /* places text block and badge in a row */
+  align-items: flex-start;
+  justify-content: space-between; /* pushes the badge toward the right edge */
   gap: 16px;
-  padding: 20px 32px; /* inner spacing around the header row */
-  border-bottom: 1px solid var(--border-subtle); /* separates header from the content below */
+  padding: 32px 32px 0; /* no bottom padding — the content below has its own spacing */
 }
 
-.dashboard-title {
+.dashboard-hero-text h1 {
+  font-family: var(--font-headline); /* style guide's headline font */
   color: var(--text-primary);
-  font-size: 18px;
-  font-weight: 600;
-  margin: 0; /* removes the browser's default heading margin */
+  font-size: 28px;
+  margin: 0 0 8px; /* small gap before the paragraph below */
+}
+
+.dashboard-hero-text p {
+  color: var(
+    --text-secondary
+  ); /* muted, since it's supporting text under the heading */
+  font-size: 14px;
+  margin: 0;
+  max-width: 520px; /* keeps the line from stretching edge-to-edge */
 }
 
 /* Placeholder status badge — becomes LockdownStatusIndicator in a later, separate stage */
 .dashboard-status-badge {
-  color: var(--accent-blue); /* blue, to read as an active/positive status */
+  color: var(--text-secondary);
   font-size: 11px;
-  font-weight: 600;
-  text-transform: uppercase; /* matches the reference image's all-caps badge style */
-  letter-spacing: 0.04em;
+  font-family: var(
+    --font-label
+  ); /* style guide uses the mono label font for badges */
+  border: 1px solid var(--border-subtle);
+  border-radius: 999px;
+  padding: 4px 12px;
+  white-space: nowrap; /* keeps the badge text on one line */
 }
 
-/* Wraps every section below the header, so they share consistent side padding */
+/* Wraps everything below the hero, shares consistent side padding */
 .dashboard-content {
-  padding: 0 32px 32px; /* no top padding here — the header already has its own */
+  padding: 24px 32px 32px;
   display: flex;
   flex-direction: column;
-  gap: 48px; /* generous spacing between the card and the empty state */
+  gap: 40px; /* spacing between the session card and the exam history table */
 }
 
 /* The card containing the exam code entry UI */
 .initialize-session-card {
-  background-color: var(
-    --bg-card
-  ); /* lighter than the page background, reads as a "card" */
-  border: 1px solid var(--border-subtle); /* faint outline so the card edge is visible */
+  background-color: var(--bg-card);
+  border: 1px solid var(--border-subtle);
   border-radius: 12px;
   padding: 24px;
-  display: flex; /* places the text block and the input/button block side-by-side */
+  display: flex; /* places text block and input/button block side-by-side */
   align-items: center;
-  justify-content: space-between; /* pushes the action block toward the right edge */
+  justify-content: space-between;
   gap: 24px;
-  flex-wrap: wrap; /* lets the action block drop below the text on narrower widths, instead of overflowing */
+  flex-wrap: wrap; /* drops the action block below the text on narrower widths */
 }
 
 .initialize-session-text h2 {
+  font-family: var(--font-headline);
   color: var(--text-primary);
   font-size: 18px;
-  margin: 0 0 8px; /* small gap below the heading, before the description */
+  margin: 0 0 8px;
 }
 
 .initialize-session-text p {
   color: var(--text-secondary);
   font-size: 14px;
   margin: 0;
-  max-width: 420px; /* keeps the description from stretching too wide and looking unbalanced */
+  max-width: 420px;
 }
 
 .initialize-session-action {
-  display: flex; /* places the input and button side-by-side */
+  display: flex; /* places input and button side-by-side */
   gap: 12px;
-  flex-shrink: 0; /* stops this block from being squeezed by the text block next to it */
+  flex-shrink: 0; /* stops this block from being squeezed by the text next to it */
 }
 
 .initialize-session-action input {
-  background-color: var(
-    --bg-app
-  ); /* darker than the card, so the input "sits inside" it */
+  background-color: var(--bg-app);
   border: 1px solid var(--border-subtle);
   border-radius: 8px;
   padding: 10px 14px;
   color: var(--text-primary);
   font-size: 14px;
-  min-width: 200px; /* keeps the input from collapsing too narrow */
+  min-width: 200px;
 }
 
 .initialize-session-action input::placeholder {
-  color: var(--text-secondary); /* dims the hint text */
+  color: var(--text-secondary);
 }
 
 .initialize-session-action button {
@@ -100,45 +109,106 @@
   font-size: 14px;
   font-weight: 500;
   cursor: pointer;
-  white-space: nowrap; /* keeps "Verify Exam Code" from wrapping onto two lines */
+  white-space: nowrap; /* keeps the label from wrapping onto two lines */
 }
 
 .initialize-session-action button:hover {
-  opacity: 0.9; /* slight dimming on hover, a lightweight click-affordance cue */
+  opacity: 0.9; /* slight dimming on hover, signals it's clickable */
 }
 
-/* Empty state — no exam history yet */
-.empty-exams-state {
-  display: flex; /* centers icon, title, and description in a vertical stack */
+/* "Previous Exams" section */
+.exam-history-section {
+  display: flex; /* stacks the header row above the table */
   flex-direction: column;
-  align-items: center;
-  text-align: center;
-  gap: 12px;
-  padding: 48px 0; /* breathing room above and below this block */
+  gap: 16px;
 }
 
-.empty-exams-icon-circle {
-  width: 72px; /* fixed circle size */
-  height: 72px;
-  border-radius: 50%; /* makes it a circle */
-  border: 1px solid var(--border-subtle); /* faint ring, matches the reference image's subtle outline */
-  display: flex; /* centers the icon inside the circle */
+.exam-history-header {
+  display: flex; /* places title and "View Full Archive" side-by-side */
   align-items: center;
-  justify-content: center;
-  color: var(
-    --accent-blue
-  ); /* tints the icon blue, matching the rest of the app's accent color */
+  justify-content: space-between;
 }
 
-.empty-exams-title {
+.exam-history-header h2 {
+  font-family: var(--font-headline);
   color: var(--text-primary);
   font-size: 18px;
   margin: 0;
 }
 
-.empty-exams-description {
+/* Decorative only right now — no exam-archive screen exists yet, so this isn't clickable */
+.exam-history-view-all {
+  color: var(--accent-blue);
+  font-size: 13px;
+}
+
+.exam-history-table {
+  width: 100%; /* fills the available content width */
+  border-collapse: collapse; /* removes default double-borders between table cells */
+}
+
+.exam-history-table th {
+  text-align: left; /* column headers align with the data below them */
   color: var(--text-secondary);
+  font-family: var(
+    --font-label
+  ); /* style guide's mono font for small label-like text */
+  font-size: 11px;
+  text-transform: uppercase; /* matches the reference image's all-caps column headers */
+  letter-spacing: 0.04em;
+  padding: 0 12px 12px;
+  border-bottom: 1px solid var(--border-subtle); /* separates headers from the first data row */
+}
+
+.exam-history-table td {
+  padding: 16px 12px;
+  border-bottom: 1px solid var(--border-subtle); /* divider line between each row */
+  color: var(--text-primary);
   font-size: 14px;
-  max-width: 360px; /* keeps the description readable, not stretched edge-to-edge */
-  margin: 0;
+}
+
+.exam-history-module-name {
+  display: block; /* forces the module code below onto its own line */
+  font-weight: 500;
+}
+
+.exam-history-module-code {
+  display: block;
+  color: var(--text-secondary);
+  font-family: var(
+    --font-label
+  ); /* mono font, since this reads like an identifier/code */
+  font-size: 12px;
+  margin-top: 2px;
+}
+
+.exam-history-result-badge {
+  font-family: var(--font-label);
+  font-size: 12px;
+  padding: 4px 10px;
+  border-radius: 999px;
+}
+
+.exam-history-result-badge--pass {
+  background-color: var(--accent-green-soft);
+  color: var(--accent-green);
+}
+
+.exam-history-result-badge--fail {
+  background-color: rgba(
+    239,
+    68,
+    68,
+    0.15
+  ); /* faint red wash, not in the style guide — added for completeness */
+  color: #ef4444;
+}
+
+/* Bottom footer text */
+.dashboard-footer {
+  padding: 16px 32px;
+  border-top: 1px solid var(--border-subtle);
+  color: var(--text-secondary);
+  font-size: 12px;
+  text-align: center;
 }
