@@ -1,4 +1,5 @@
 import type { ExamConfirmationScreenProps, ExamDetail } from './examConfirmationScreen.types';
+import { useRouterLogic } from '../../router/routerLogic';
 
 // ---------------------------------------------------------------------------
 // Mock data — replace with real store/hook values when wiring up
@@ -48,6 +49,8 @@ export function ExamConfirmationScreen({
   onStartExam,
   onCancel,
 }: ExamConfirmationScreenProps) {
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
+
   const initials = studentName
     .split(' ')
     .map((n) => n[0])
@@ -55,8 +58,10 @@ export function ExamConfirmationScreen({
     .slice(0, 2)
     .toUpperCase();
 
-  // TODO: wire onCancel to navigate('/dashboard') via your router
-  const handleCancel = () => onCancel?.();
+  const handleCancel = () => {
+    onCancel?.();
+    navigateTo('dashboard');
+  };
 
   // TODO: replace with real IPC call via useIpcBridge
   const handleStart = () => onStartExam?.();
