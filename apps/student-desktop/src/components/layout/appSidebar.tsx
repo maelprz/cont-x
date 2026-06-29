@@ -1,17 +1,20 @@
 import { useState } from "react"; // remembers values across re-renders
 import {
   LayoutDashboard,
+  Archive as ArchiveIcon,
   Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
 } from "lucide-react"; // pre-made icon components
-import type { AppSidebarProps } from "./appSidebar.types"; // this component's expected props
+import type { AppSidebarProps } from "./appSidebar.types";
+import { useRouterLogic } from "../../router/routerLogic"; // this component's expected props
 // no CSS import — every style now lives as Tailwind classes below
 
 export function AppSidebar({ activeItem }: AppSidebarProps) {
   // Tracks whether the sidebar shows full labels or just icons. Local only.
   const [isCollapsed, setIsCollapsed] = useState(false);
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
 
   // Runs when the student clicks the collapse/expand arrow button.
   function handleToggleCollapse() {
@@ -63,11 +66,10 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
       </div>
 
       <nav className="flex flex-col gap-1 px-3 py-4">
-        {/* Dashboard nav item */}
+        {/* Dashboard nav item — now actually navigates, instead of doing nothing */}
         <div
+          onClick={() => navigateTo("dashboard")} // fires when clicked; previously this item had no click behavior at all
           className={`${navItemBaseClasses} ${
-            // bug fix: this checked for a class called "active", but the design never had
-            // one called that — it's purely a styling decision now, made via the variables above.
             activeItem === "dashboard"
               ? navItemActiveClasses
               : navItemInactiveClasses
@@ -76,8 +78,20 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
           <LayoutDashboard size={16} />
           {!isCollapsed && <span>Dashboard</span>}
         </div>
-      </nav>
 
+        {/* NEW — Archive nav item */}
+        <div
+          onClick={() => navigateTo("archive")}
+          className={`${navItemBaseClasses} ${
+            activeItem === "archive"
+              ? navItemActiveClasses
+              : navItemInactiveClasses
+          }`}
+        >
+          <ArchiveIcon size={16} />
+          {!isCollapsed && <span>Archive</span>}
+        </div>
+      </nav>
       {/* mt-auto pushes this footer block to the bottom of the sidebar, regardless of nav item count */}
       <div className="mt-auto flex items-center gap-2.5 p-4 border-t border-[var(--border-subtle)]">
         <div className="w-8 h-8 rounded-full bg-[var(--accent-blue)]/15 text-[var(--accent-blue)] flex items-center justify-center font-semibold shrink-0">

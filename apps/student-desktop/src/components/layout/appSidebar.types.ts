@@ -1,3 +1,5 @@
+import { ScreenName } from "../../router/route";
+
 export interface AppSidebarProps {
-  activeItem: "dashboard"; //To be add pa ang settings button ani
+  activeItem: ScreenName; //To be add pa ang settings button ani
 }

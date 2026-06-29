@@ -4,6 +4,7 @@ import { useRouterLogic } from "./routerLogic";
 import { LoginScreen } from "../screens/login/loginScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamConfirmationScreen } from "../screens/examConfirmation/examConfirmationScreen";
+import { ArchiveScreen } from "../screens/archive/archiveScreen";
 import { AppSidebar } from "../components/layout/appSidebar";
 import "./appRouter.css";
 
@@ -11,9 +12,10 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   login: LoginScreen,
   dashboard: DashboardScreen,
   examConfirmation: ExamConfirmationScreen,
+  archive: ArchiveScreen,
 };
 
-const screensWithSidebar: ScreenName[] = ["dashboard"];
+const screensWithSidebar: ScreenName[] = ["dashboard", "archive"]; // screens that should show the sidebar
 
 export function AppRouter() {
   const currentScreen = useRouterLogic((state) => state.currentScreen);
@@ -26,7 +28,7 @@ export function AppRouter() {
         {" "}
         {/* sidebar + content side-by-side */}
         {/* TODO: activeItem is hardcoded to "dashboard" for now — fine since only one real nav item exists yet */}
-        <AppSidebar activeItem="dashboard" />
+        <AppSidebar activeItem={currentScreen} />
         <div className="app-shell-content">
           <ScreenComponent />{" "}
           {/* renders whichever screen is currently active */}
