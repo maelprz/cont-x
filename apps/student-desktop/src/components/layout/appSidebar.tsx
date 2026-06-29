@@ -38,10 +38,10 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
       // bug fix: this used to be wrapped in single quotes, so ${...} never actually
       // interpolated — it was literal text. Backticks are required for that syntax to work.
       className={`flex flex-col shrink-0 transition-[width] duration-200 bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] ${
-        isCollapsed ? "w-16" : "w-56"
+        isCollapsed ? "w-16" : "w-70"
       }`}
     >
-      <div className="flex items-center justify-between px-4 py-5 border-b border-[var(--border-subtle)]">
+      <div className="flex items-center justify-between px-4 h-14 border-b border-[var(--border-subtle)]">
         {!isCollapsed && ( // only render the brand text when there's room to show it
           <div className="flex flex-col">
             <span className="text-[var(--text-primary)] font-bold text-lg">

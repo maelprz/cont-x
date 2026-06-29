@@ -3,7 +3,7 @@
 @layer base {
   :root {
     --bg-app: #0f172a;
-    --bg-sidebar: #1e293b;
+    --bg-sidebar: #122131;
     --bg-card: #1e293b;
     --accent-blue: #3b82f6;
     --accent-green: #22c55e;
@@ -87,5 +87,3 @@
     }
   }
 }
-
-
