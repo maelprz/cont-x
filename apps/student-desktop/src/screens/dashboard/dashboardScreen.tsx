@@ -236,9 +236,13 @@ export function DashboardScreen(_props: DashboardScreenProps) {
             <h2 className="font-[var(--font-headline)] text-[var(--text-primary)] text-lg">
               Previous Exams
             </h2>
-            <span className="text-[var(--accent-blue)] text-xs">
+            <button
+              type="button"
+              onClick={() => navigateTo("archive")} // navigateTo is already destructured at the top of this file
+              className="text-[var(--accent-blue)] text-xs bg-transparent cursor-pointer"
+            >
               View Full Archive
-            </span>
+            </button>
           </div>
           {/* Card wrapper — gives the table its background/border/shadow instead of floating bare */}
           <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden">
