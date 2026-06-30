@@ -5,6 +5,7 @@ import { LoginScreen } from "../screens/login/loginScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamConfirmationScreen } from "../screens/examConfirmation/examConfirmationScreen";
 import { ExamQuestionScreen } from "../screens/examQuestion/examQuestionScreen";
+import { ExamResultScreen } from "../screens/examResult/examResultScreen";
 import { ArchiveScreen } from "../screens/archive/archiveScreen";
 import { AppSidebar } from "../components/layout/appSidebar";
 import "./appRouter.css";
@@ -14,6 +15,7 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   dashboard: DashboardScreen,
   examConfirmation: ExamConfirmationScreen,
   examQuestion: ExamQuestionScreen,
+  examResult: ExamResultScreen,
   archive: ArchiveScreen,
 };
 
