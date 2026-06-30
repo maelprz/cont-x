@@ -4,6 +4,10 @@
   "version": "1.0.0",
   "description": "",
   "main": "index.js",
+  "overrides": {
+    "react": "19.2.7",
+    "react-dom": "19.2.7"
+  },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
   },
@@ -29,6 +33,7 @@
     "eslint": "^10.5.0",
     "eslint-config-prettier": "^10.1.8",
     "prettier": "^3.8.4",
-    "typescript": "^6.0.3"
+    "typescript": "^6.0.3",
+    "vite-plugin-electron-renderer": "^1.0.0"
   }
 }
