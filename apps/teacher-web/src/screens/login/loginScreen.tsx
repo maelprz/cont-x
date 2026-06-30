@@ -121,7 +121,7 @@ export function LoginScreen() {
             <FieldLabel text="User ID" icon={<PersonIcon />} />
             <input
               type="text"
-              placeholder=""
+              placeholder="Enter User ID"
               className="w-full border rounded-lg px-3.5 py-[11px] text-[13px] outline-none box-border"
               style={{
                 fontFamily: "'Inter', sans-serif",
@@ -140,7 +140,7 @@ export function LoginScreen() {
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder=""
+                placeholder="Enter User Password"
                 className="w-full border rounded-lg px-3.5 py-[11px] pr-10 text-[13px] outline-none box-border"
                 style={{
                   fontFamily: "'Inter', sans-serif",
