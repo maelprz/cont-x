@@ -7,6 +7,6 @@ interface AppRouterState {
 }
 
 export const useRouterLogic = create<AppRouterState>((set) => ({
-  currentScreen: "userManagement", // default landing screen for teacher-web
+  currentScreen: "login", // default landing screen for teacher-web
   navigateTo: (screen: ScreenName) => set({ currentScreen: screen }),
 }));
