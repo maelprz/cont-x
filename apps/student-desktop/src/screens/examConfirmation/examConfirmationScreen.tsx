@@ -1,5 +1,6 @@
 import type { ExamConfirmationScreenProps, ExamDetail } from './examConfirmationScreen.types';
 import { useRouterLogic } from '../../router/routerLogic';
+import { AppHeader } from '../../components/layout/appHeader';
 
 // ---------------------------------------------------------------------------
 // Mock data — replace with real store/hook values when wiring up
@@ -51,13 +52,6 @@ export function ExamConfirmationScreen({
 }: ExamConfirmationScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  const initials = studentName
-    .split(' ')
-    .map((n) => n[0])
-    .join('')
-    .slice(0, 2)
-    .toUpperCase();
-
   const handleCancel = () => {
     onCancel?.();
     navigateTo('dashboard');
@@ -79,50 +73,7 @@ export function ExamConfirmationScreen({
         fontFamily: "'Inter', sans-serif",
       }}
     >
-      {/* ── Header ────────────────────────────────────────────────── */}
-      <header
-        className="h-14 flex-shrink-0 flex items-center px-12 border-b border-[#424754] backdrop-blur-md"
-        style={{ background: 'rgba(18,33,49,0.9)' }}
-      >
-        <div className="flex justify-between items-center w-full max-w-[1280px] mx-auto">
-          {/* Brand */}
-          <span className="text-[#adc6ff] text-xl font-bold tracking-tight">
-            Cont/x
-          </span>
-
-          {/* Right cluster */}
-          <div className="flex items-center gap-5">
-            {/* Session badge */}
-            <div className="flex items-center gap-1.5">
-              <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#8c909f" strokeWidth="1.5">
-                <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-              </svg>
-              <span className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[#c2c6d6]">
-                Secure Terminal Session
-              </span>
-            </div>
-
-            <div className="w-px h-5 bg-[#424754]" />
-
-            {/* Student identity */}
-            <div className="flex items-center gap-2.5">
-              <div className="w-8 h-8 rounded-full bg-[#273647] border border-[#424754] flex items-center justify-center flex-shrink-0">
-                <span className="font-mono text-[10px] font-semibold text-[#adc6ff]">
-                  {initials}
-                </span>
-              </div>
-              <div>
-                <p className="text-[13px] font-semibold text-[#d4e4fa] leading-none m-0">
-                  {studentName}
-                </p>
-                <p className="font-mono text-[10px] text-[#8c909f] mt-0.5 m-0">
-                  {studentId}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
+      <AppHeader studentName={studentName} studentId={studentId} />
 
       {/* ── Main canvas ───────────────────────────────────────────── */}
       <main className="flex-grow flex items-center justify-center px-6 py-4 relative overflow-hidden">
