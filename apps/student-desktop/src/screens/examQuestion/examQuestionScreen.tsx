@@ -1,4 +1,5 @@
 import { useState } from 'react';
+import { useRouterLogic } from '../../router/routerLogic';
 import type {
   ExamQuestionScreenProps,
   QuestionMapItem,
@@ -53,7 +54,7 @@ const MOCK_CODING_QUESTION: CodingQuestion = {
 };
 
 const MOCK_MCQ_QUESTION: MCQQuestion = {
-  number: 3,
+  number: 20,
   totalQuestions: 20,
   type: 'multiple-choice',
   title: 'Question 3',
@@ -268,24 +269,30 @@ export function ExamQuestionScreen({
   onRunCode,
   onPrevious,
   onNext,
-  onFinalSubmit,
+  onSubmit,
 }: ExamQuestionScreenProps) {
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
   // Local MCQ selection state — will be lifted via onAnswerSelect when wired up
   const [localSelectedOption, setLocalSelectedOption] = useState<string | undefined>(
     question.type === 'multiple-choice' ? question.selectedOptionId : undefined
   );
-
+  
   const handleOptionSelect = (id: string) => {
     setLocalSelectedOption(id);
     onAnswerSelect?.(question.number, id);
   };
+
+  const handleOnSubmit = () => {
+    onSubmit?.();
+    navigateTo('examResult');
+  }
 
   const progressPct = Math.round((progressCurrent / progressTotal) * 100);
   const isCoding = question.type === 'coding';
   const isLastQuestion = question.number >= question.totalQuestions;
   const codingQ  = isCoding ? (question as CodingQuestion) : null;
   const mcqQ     = !isCoding ? (question as MCQQuestion) : null;
-
+  
   return (
     <div
       className="h-screen w-full flex flex-col text-[#d4e4fa] overflow-hidden"
@@ -511,7 +518,7 @@ export function ExamQuestionScreen({
         </div>
         {/* Merged Next/Submit button — Submit only appears on the last question */}
           <button
-            onClick={isLastQuestion ? onFinalSubmit : onNext}
+            onClick={isLastQuestion ? handleOnSubmit : onNext}
             className={
               isLastQuestion
                 ? 'flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02]'

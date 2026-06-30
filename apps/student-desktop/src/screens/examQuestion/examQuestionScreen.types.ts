@@ -70,5 +70,5 @@ export interface ExamQuestionScreenProps {
   onRunCode?: () => void;
   onPrevious?: () => void;
   onNext?: () => void;
-  onFinalSubmit?: () => void;
+  onSubmit?: () => void;
 }
