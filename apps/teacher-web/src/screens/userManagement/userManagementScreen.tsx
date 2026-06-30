@@ -1,7 +1,8 @@
-import { useState } from "react"; // tracks the search input text
-import type { ChangeEvent } from "react";
-import { UserPlus, Search, Shield, Bell, Pencil, Trash2 } from "lucide-react";
+import { useState } from "react";
+import { UserPlus, Pencil, Trash2 } from "lucide-react";
 import type { UserManagementScreenProps, UserDirectoryEntry } from "./userManagementScreen.types";
+import { AdminHeader } from "../../components/layouts/adminHeader";
+import { AdminSidebar } from "../../components/layouts/adminSidebar";
 
 // ---------------------------------------------------------------------------
 // Mock data — replace with real Supabase query when wiring up
@@ -12,10 +13,14 @@ const MOCK_USERS: UserDirectoryEntry[] = [
   { id: "3", name: "Sarah Kinsley", initials: "SK", systemId: "T-48295", email: "s.kinsley@contx.edu", role: "teacher", createdDate: "2023-11-30" },
 ];
 
-// badge colors per role, mapped to daisyui semantic classes from the theme
-const roleBadgeClass: Record<UserDirectoryEntry["role"], string> = {
-  teacher: "badge-primary",
-  student: "badge-info",
+const roleBadgeStyle: Record<UserDirectoryEntry["role"], string> = {
+  teacher: "bg-[var(--color-primary)]/20 text-[var(--color-primary-content)]",
+  student: "bg-[var(--color-info)]/10 text-[var(--color-info)]",
+};
+
+const roleAvatarStyle: Record<UserDirectoryEntry["role"], string> = {
+  teacher: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
+  student: "bg-[var(--color-info)] text-[var(--color-info-content)]",
 };
 
 export function UserManagementScreen({
@@ -24,12 +29,8 @@ export function UserManagementScreen({
   users = MOCK_USERS,
   onAddAccount,
 }: UserManagementScreenProps) {
-  // holds whatever the admin types into the filter box
+  // holds whatever the admin types into the header's search box
   const [searchQuery, setSearchQuery] = useState("");
-
-  function handleSearchChange(event: ChangeEvent<HTMLInputElement>) {
-    setSearchQuery(event.target.value);
-  }
 
   // narrows the user list down to whatever matches the search box
   const filteredUsers = users.filter((user) =>
@@ -39,82 +40,19 @@ export function UserManagementScreen({
   );
 
   return (
-    // flex layout: sidebar fixed-width, content fills the rest
-    <div className="flex h-screen bg-base-200">
+    <div className="flex h-screen bg-[var(--color-base-200)] text-[var(--color-base-content)]">
 
-      {/* ── Sidebar ── */}
-      <aside className="w-64 bg-primary flex flex-col shrink-0">
-        <div className="px-6 py-6">
-          <div className="flex items-center gap-2">
-            <Shield size={20} className="text-primary-content" />
-            <span className="text-primary-content font-bold text-lg">Cont/x</span>
-          </div>
-          <p className="text-primary-content/70 text-xs uppercase tracking-wide mt-1">
-            Secure Ecosystem
-          </p>
-        </div>
+      <AdminSidebar activeItem="userManagement" />
 
-        <nav className="px-4 flex flex-col gap-1">
-          <p className="text-primary-content/60 text-[10px] uppercase tracking-wider px-2 mb-1">
-            Main Menu
-          </p>
-          {/* active nav item — filled to match the screenshot's highlighted state */}
-          <button className="flex items-center gap-2.5 bg-primary-content/15 text-primary-content rounded-lg px-3 py-2 text-sm font-medium text-left">
-            User Management
-          </button>
-
-          <p className="text-primary-content/60 text-[10px] uppercase tracking-wider px-2 mt-4 mb-1">
-            Configuration
-          </p>
-          <button className="flex items-center gap-2.5 text-primary-content/80 hover:bg-primary-content/10 rounded-lg px-3 py-2 text-sm text-left">
-            Audit Logs
-          </button>
-        </nav>
-      </aside>
-
-      {/* ── Main content ── */}
       <div className="flex-1 flex flex-col overflow-hidden">
+        <AdminHeader searchValue={searchQuery} onSearchChange={setSearchQuery} />
 
-        {/* top bar: search + admin identity */}
-        <header className="bg-base-100 border-b border-base-300 px-8 py-3 flex items-center justify-between gap-4">
-          <label className="input input-bordered flex items-center gap-2 w-full max-w-md">
-            <Search size={15} className="opacity-50" />
-            <input
-              type="text"
-              placeholder="Search accounts, roles, IDs..."
-              className="grow"
-              value={searchQuery}
-              onChange={handleSearchChange}
-            />
-          </label>
-
-          <div className="flex items-center gap-4 shrink-0">
-            <button className="btn btn-ghost btn-circle btn-sm">
-              <Bell size={16} />
-            </button>
-            <div className="flex items-center gap-2">
-              <div className="text-right">
-                <p className="text-sm font-medium leading-tight">Admin Root</p>
-                <p className="text-xs opacity-60 leading-tight">Supervisor</p>
-              </div>
-              <div className="avatar placeholder">
-                <div className="bg-neutral text-neutral-content rounded-full w-8">
-                  <span className="text-xs">AR</span>
-                </div>
-              </div>
-            </div>
-          </div>
-        </header>
-
-        {/* scrollable body */}
         <main className="flex-1 overflow-y-auto px-8 py-6">
 
-          {/* breadcrumb */}
           <p className="text-xs opacity-60 mb-2">
             Core System &nbsp;&gt;&nbsp; Account Management
           </p>
 
-          {/* heading row */}
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-bold mb-1">User Directory</h1>
@@ -124,49 +62,49 @@ export function UserManagementScreen({
                 identities within the Cont/x network.
               </p>
             </div>
-            <button onClick={onAddAccount} className="btn btn-primary gap-2 shrink-0">
+            <button
+              onClick={onAddAccount}
+              className="flex items-center gap-2 bg-[var(--color-primary)] text-[var(--color-primary-content)] rounded-lg px-4 py-2.5 text-sm font-medium hover:opacity-90 shrink-0"
+            >
               <UserPlus size={16} />
               Add Account
             </button>
           </div>
 
-          {/* stat cards */}
           <div className="grid grid-cols-2 gap-4 mb-6 max-w-xl">
-            <div className="bg-base-100 border border-base-300 rounded-box p-4">
+            <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl p-4">
               <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Total Teachers</p>
               <p className="text-2xl font-bold">{totalTeachers}</p>
             </div>
-            <div className="bg-base-100 border border-base-300 rounded-box p-4">
+            <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl p-4">
               <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Total Students</p>
               <p className="text-2xl font-bold">{totalStudents}</p>
             </div>
           </div>
 
-          {/* table card */}
-          <div className="bg-base-100 border border-base-300 rounded-box overflow-hidden">
-            <table className="table">
+          <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl overflow-hidden">
+            <table className="w-full border-collapse">
               <thead>
-                <tr className="text-xs uppercase tracking-wide opacity-60">
-                  <th>User Identity</th>
-                  <th>Credential Endpoint</th>
-                  <th>Security Group</th>
-                  <th>Created</th>
-                  <th>Ops</th>
+                <tr className="text-xs uppercase tracking-wide opacity-60 bg-[var(--color-base-200)]">
+                  <th className="text-left py-3 px-5 font-medium">User Identity</th>
+                  <th className="text-left py-3 px-5 font-medium">Credential Endpoint</th>
+                  <th className="text-left py-3 px-5 font-medium">Security Group</th>
+                  <th className="text-left py-3 px-5 font-medium">Created</th>
+                  <th className="text-left py-3 px-5 font-medium">Ops</th>
                 </tr>
               </thead>
               <tbody>
-                {filteredUsers.map((user) => (
-                  <tr key={user.id} className="hover">
-                    <td>
+                {filteredUsers.map((user, index) => (
+                  <tr
+                    key={user.id}
+                    className={`hover:bg-[var(--color-base-200)] ${
+                      index < filteredUsers.length - 1 ? "border-b border-[var(--color-base-300)]" : ""
+                    }`}
+                  >
+                    <td className="py-3.5 px-5">
                       <div className="flex items-center gap-3">
-                        <div className="avatar placeholder">
-                          <div
-                            className={`rounded-lg w-8 ${
-                              user.role === "teacher" ? "bg-primary text-primary-content" : "bg-info text-info-content"
-                            }`}
-                          >
-                            <span className="text-xs">{user.initials}</span>
-                          </div>
+                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shrink-0 ${roleAvatarStyle[user.role]}`}>
+                          {user.initials}
                         </div>
                         <div>
                           <p className="font-medium text-sm">{user.name}</p>
@@ -174,19 +112,19 @@ export function UserManagementScreen({
                         </div>
                       </div>
                     </td>
-                    <td className="text-sm">{user.email}</td>
-                    <td>
-                      <span className={`badge ${roleBadgeClass[user.role]} badge-sm uppercase`}>
+                    <td className="py-3.5 px-5 text-sm">{user.email}</td>
+                    <td className="py-3.5 px-5">
+                      <span className={`text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full ${roleBadgeStyle[user.role]}`}>
                         {user.role}
                       </span>
                     </td>
-                    <td className="text-sm opacity-70">{user.createdDate}</td>
-                    <td>
+                    <td className="py-3.5 px-5 text-sm opacity-70">{user.createdDate}</td>
+                    <td className="py-3.5 px-5">
                       <div className="flex gap-1">
-                        <button className="btn btn-ghost btn-xs btn-circle">
+                        <button className="p-1.5 rounded-full hover:bg-[var(--color-base-200)]">
                           <Pencil size={13} />
                         </button>
-                        <button className="btn btn-ghost btn-xs btn-circle text-error">
+                        <button className="p-1.5 rounded-full hover:bg-[var(--color-error)]/10 text-[var(--color-error)]">
                           <Trash2 size={13} />
                         </button>
                       </div>
