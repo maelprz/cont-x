@@ -64,7 +64,10 @@ export function ExamConfirmationScreen({
   };
 
   // TODO: replace with real IPC call via useIpcBridge
-  const handleStart = () => onStartExam?.();
+  const handleStart = () => { 
+    onStartExam?.(); 
+    navigateTo('examQuestion');
+  };
 
   return (
     <div
