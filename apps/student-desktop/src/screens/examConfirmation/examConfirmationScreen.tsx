@@ -1,6 +1,8 @@
+import { useState } from 'react';
 import type { ExamConfirmationScreenProps, ExamDetail } from './examConfirmationScreen.types';
 import { useRouterLogic } from '../../router/routerLogic';
 import { AppHeader } from '../../components/layout/appHeader';
+import { SessionVerificationModal } from '../../components/modals/sessionVerificationModal';
 
 // ---------------------------------------------------------------------------
 // Mock data — replace with real store/hook values when wiring up
@@ -9,6 +11,7 @@ const MOCK_EXAM_TITLE = 'Advanced Algorithms';
 const MOCK_COURSE_CODE = 'CS302';
 const MOCK_STUDENT_NAME = 'Juan dela Cruz';
 const MOCK_STUDENT_ID = '2021-00123';
+const MOCK_VERIFICATION_CODE = '000000';
 
 const MOCK_EXAM_DETAILS: ExamDetail[] = [
   { label: 'Duration',        value: '120 Minutes',    subtext: 'Non-stop session'   },
@@ -51,16 +54,25 @@ export function ExamConfirmationScreen({
   onCancel,
 }: ExamConfirmationScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const [isVerificationOpen, setIsVerificationOpen] = useState(false);
 
   const handleCancel = () => {
     onCancel?.();
     navigateTo('dashboard');
   };
 
-  // TODO: replace with real IPC call via useIpcBridge
-  const handleStart = () => { 
-    onStartExam?.(); 
+  const handleStart = () => {
+    setIsVerificationOpen(true);
+  };
+
+  const handleVerificationConfirm = () => {
+    onStartExam?.();
+    setIsVerificationOpen(false);
     navigateTo('examQuestion');
+  };
+
+  const handleVerificationCancel = () => {
+    setIsVerificationOpen(false);
   };
 
   return (
@@ -74,6 +86,12 @@ export function ExamConfirmationScreen({
       }}
     >
       <AppHeader studentName={studentName} studentId={studentId} />
+      <SessionVerificationModal
+        isOpen={isVerificationOpen}
+        expectedCode={MOCK_VERIFICATION_CODE}
+        onConfirm={handleVerificationConfirm}
+        onCancel={handleVerificationCancel}
+      />
 
       {/* ── Main canvas ───────────────────────────────────────────── */}
       <main className="flex-grow flex items-center justify-center px-6 py-4 relative overflow-hidden">
