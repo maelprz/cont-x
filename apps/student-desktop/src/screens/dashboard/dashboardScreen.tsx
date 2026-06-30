@@ -3,19 +3,11 @@ import type { ChangeEvent } from "react"; // type of the event fired when the in
 import { ArrowRight, TrendingUp } from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
+import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 // no CSS import — the body below is Tailwind now; the header block keeps its own inline styles
 
 // Duplicated from ExamConfirmationScreen's own color object — kept as raw inline styles
 // to stay byte-for-byte consistent with that copy, since we chose NOT to share one header component.
-const C = {
-  surfaceContainer: "#122131",
-  surfaceContainerHighest: "#273647",
-  onSurface: "#d4e4fa",
-  onSurfaceVariant: "#c2c6d6",
-  outline: "#8c909f",
-  outlineVariant: "#424754",
-  primary: "#adc6ff",
-};
 
 // TEMPORARY mock identity — Login is skipped, so there's no real logged-in student yet.
 const mockStudentName = "Alex";
@@ -82,107 +74,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
     // flex flex-col: stacks header, hero, and content vertically
     <div className="flex flex-col">
       {/* Duplicated header bar — unchanged, kept as raw inline styles on purpose */}
-      <header
-        style={{
-          height: "56px",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 32px",
-          background: "rgba(18, 33, 49, 0.9)",
-          backdropFilter: "blur(12px)",
-          borderBottom: `1px solid ${C.outlineVariant}`,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            width: "100%",
-          }}
-        >
-          <span
-            style={{
-              color: C.primary,
-              fontSize: "18px",
-              fontWeight: 700,
-              letterSpacing: "4px",
-            }}
-          >
-            Cont/x
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <span
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: "10px",
-                fontWeight: 600,
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                color: C.onSurfaceVariant,
-              }}
-            >
-              Secure Terminal Session
-            </span>
-            <div
-              style={{
-                width: "1px",
-                height: "20px",
-                background: C.outlineVariant,
-              }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div
-                style={{
-                  width: "30px",
-                  height: "30px",
-                  borderRadius: "50%",
-                  background: C.surfaceContainerHighest,
-                  border: `1px solid ${C.outlineVariant}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: "10px",
-                    fontWeight: 600,
-                    color: C.primary,
-                  }}
-                >
-                  {initials}
-                </span>
-              </div>
-              <div>
-                <p
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: C.onSurface,
-                    margin: 0,
-                    lineHeight: 1,
-                  }}
-                >
-                  {mockStudentName}
-                </p>
-                <p
-                  style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: "10px",
-                    color: C.outline,
-                    margin: "3px 0 0 0",
-                  }}
-                >
-                  {mockStudentId}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
+      <AppHeader />
       {/* "Welcome back" hero — converted to Tailwind */}
       <div className="flex items-start justify-between gap-4 px-8 pt-8">
         <div>

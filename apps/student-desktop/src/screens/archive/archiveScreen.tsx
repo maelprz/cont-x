@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { ArchiveScreenProps } from "./archiveScreen.types";
+import { AppHeader } from "../../components/layout/appHeader";
 import {
   Code2,
   Sigma,
@@ -10,16 +11,6 @@ import {
   ChevronRight,
 } from "lucide-react";
 import type { LucideIcon } from "lucide-react";
-
-const C = {
-  surfaceContainer: "#122131",
-  surfaceContainerHighest: "#273647",
-  onSurface: "#d4e4fa",
-  onSurfaceVariant: "#c2c6d6",
-  outline: "#8c909f",
-  outlineVariant: "#424754",
-  primary: "#adc6ff",
-};
 
 const mockStudentName = "Alex";
 const mockStudentId = "2021-00001";
@@ -119,107 +110,7 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
 
   return (
     <div className="flex flex-col">
-      <header
-        style={{
-          height: "56px",
-          display: "flex",
-          alignItems: "center",
-          padding: "0 32px",
-          background: "rgba(18, 33, 49, 0.9)",
-          backdropFilter: "blur(12px)",
-          borderBottom: `1px solid ${C.outlineVariant}`,
-        }}
-      >
-        <div
-          style={{
-            display: "flex",
-            justifyContent: "space-between",
-            alignItems: "center",
-            width: "100%",
-          }}
-        >
-          <span
-            style={{
-              color: C.primary,
-              fontSize: "18px",
-              fontWeight: 700,
-              letterSpacing: "4px",
-            }}
-          >
-            Cont/x
-          </span>
-          <div style={{ display: "flex", alignItems: "center", gap: "16px" }}>
-            <span
-              style={{
-                fontFamily: "'JetBrains Mono', monospace",
-                fontSize: "10px",
-                fontWeight: 600,
-                letterSpacing: "0.18em",
-                textTransform: "uppercase",
-                color: C.onSurfaceVariant,
-              }}
-            >
-              Secure Terminal Session
-            </span>
-            <div
-              style={{
-                width: "1px",
-                height: "20px",
-                background: C.outlineVariant,
-              }}
-            />
-            <div style={{ display: "flex", alignItems: "center", gap: "10px" }}>
-              <div
-                style={{
-                  width: "30px",
-                  height: "30px",
-                  borderRadius: "50%",
-                  background: C.surfaceContainerHighest,
-                  border: `1px solid ${C.outlineVariant}`,
-                  display: "flex",
-                  alignItems: "center",
-                  justifyContent: "center",
-                }}
-              >
-                <span
-                  style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: "10px",
-                    fontWeight: 600,
-                    color: C.primary,
-                  }}
-                >
-                  {initials}
-                </span>
-              </div>
-              <div>
-                <p
-                  style={{
-                    fontSize: "13px",
-                    fontWeight: 600,
-                    color: C.onSurface,
-                    margin: 0,
-                    lineHeight: 1,
-                  }}
-                >
-                  {mockStudentName}
-                </p>
-                <p
-                  style={{
-                    fontFamily: "'JetBrains Mono', monospace",
-                    fontSize: "10px",
-                    color: C.outline,
-                    margin: "3px 0 0 0",
-                  }}
-                >
-                  {mockStudentId}
-                </p>
-              </div>
-            </div>
-          </div>
-        </div>
-      </header>
-
+      <AppHeader />
       <div className="flex items-start justify-between gap-4 px-8 pt-8">
         <div>
           <h1 className="font-[var(--font-headline)] text-[var(--text-primary)] text-2xl mb-2">
