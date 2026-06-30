@@ -14,13 +14,13 @@ const MOCK_USERS: UserDirectoryEntry[] = [
 ];
 
 const roleBadgeStyle: Record<UserDirectoryEntry["role"], string> = {
-  teacher: "bg-[var(--color-primary)]/20 text-[var(--color-primary-content)]",
-  student: "bg-[var(--color-info)]/10 text-[var(--color-info)]",
+  teacher: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
+  student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]",
 };
 
 const roleAvatarStyle: Record<UserDirectoryEntry["role"], string> = {
   teacher: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
-  student: "bg-[var(--color-info)] text-[var(--color-info-content)]",
+  student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]",
 };
 
 export function UserManagementScreen({
