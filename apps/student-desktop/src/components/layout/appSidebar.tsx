@@ -24,7 +24,7 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
   // TODO: wire this up once a real Login screen exists — Login is explicitly out of
   // scope right now, so this intentionally does nothing yet.
   function handleLogout() {
-    console.log("Logout clicked — Login screen not built yet, no-op for now.");
+    navigateTo("login"); // placeholder — just navigates to a non-existent login screen
   }
 
   // Shared classes every nav item gets, regardless of active state.

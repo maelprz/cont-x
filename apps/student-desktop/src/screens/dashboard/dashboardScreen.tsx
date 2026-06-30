@@ -115,7 +115,13 @@ export function DashboardScreen(_props: DashboardScreenProps) {
             <button
               type="button"
               onClick={handleVerifyExamCode}
-              className="flex items-center gap-1.5 bg-[var(--accent-blue)] text-white rounded-lg px-4.5 py-2.5 text-sm font-medium hover:opacity-90 whitespace-nowrap shadow-[0_4px_16px_rgba(59,130,246,0.35)]"
+              className="inline-flex items-center gap-2.5 px-7 py-3 rounded-lg border-none text-[14px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02]"
+              style={{
+                background: "linear-gradient(135deg, #4d8eff 0%, #adc6ff 100%)",
+                color: "#00285d",
+                fontFamily: "'Inter', sans-serif",
+                boxShadow: "0 0 24px rgba(173,198,255,0.3)",
+              }}
             >
               Verify Exam Code <ArrowRight size={16} />
             </button>
