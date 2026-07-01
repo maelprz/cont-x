@@ -4,8 +4,7 @@ import { ArrowRight, TrendingUp } from "lucide-react"; // pre-made icon componen
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
-
-const mockStudentName = "Alex";
+import { useAuthStore } from "../../stores/useAuthStore"; // store controlling the user's auth state
 
 // Shape of one row in the Previous Exams table.
 interface ExamHistoryEntry {
@@ -48,6 +47,7 @@ const examHistoryMock: ExamHistoryEntry[] = [
 export function DashboardScreen(_props: DashboardScreenProps) {
   const [examCodeInput, setExamCodeInput] = useState("");
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const user = useAuthStore((state) => state.user);
 
   function handleExamCodeChange(event: ChangeEvent<HTMLInputElement>) {
     setExamCodeInput(event.target.value);
@@ -64,7 +64,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
       <div className="flex items-start justify-between gap-4 px-8 pt-8">
         <div>
           <h1 className="font-[var(--font-headline)] text-[var(--text-primary)] text-2xl mb-2">
-            Welcome back, {mockStudentName}
+            Welcome back, {user?.firstName ?? "Student"}!
           </h1>
           <p className="text-sm text-[var(--text-secondary)] max-w-[420px]">
             Ready to continue your certification journey? Your dashboard keeps
