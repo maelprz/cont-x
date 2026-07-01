@@ -8,7 +8,10 @@
     --bg-footer: rgba(1,15,31,0.6);
     --accent-blue: #3b82f6;
     --accent-green: #22c55e;
-    
+
+    --icon-primary: rgba(173,198,255,0.3);
+    --icon-border: rgba(173,198,255,0.2);
+
     --text-primary: #f1f5f9;
     --text-secondary: #94a3b8;
     --text-fine-print: rgba(194,198,214,0.4);
@@ -30,6 +33,9 @@
     --button-gradient-text: #00285d;
 
     --shadow: 0 0 24px rgba(173,198,255,0.3);
+    --shadow-secondary: 0 10px 20px rgba(173,198,255,0.15);
+    
+    --blur-filter: blur(8px);
   }
 
   * {
