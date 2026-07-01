@@ -10,13 +10,6 @@ export function AppHeader({
   const studentName = user?.fullName ?? ""; // empty string if no session yet
   const studentId = user?.idNumber ?? "";
 
-  const initials = studentName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
   return (
     <header className="h-14 flex items-center px-8 bg-[var(--bg-sidebar)]">
       <div className="flex justify-between items-center w-full">

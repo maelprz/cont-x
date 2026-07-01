@@ -41,7 +41,7 @@ function EyeIcon({ visible }: { visible: boolean }) {
 function FieldLabel({ text, icon }: { text: string; icon: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between mb-2">
-      <label className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase" style={{ color: 'var(--color-base-content)' }}>
+      <label className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--color-base-content)]">
         {text}
       </label>
       {icon}
@@ -99,21 +99,14 @@ export function LoginScreen() {
         />
 
         {/* card */}
-        <div
-          className="relative z-10 w-full max-w-[400px] rounded-xl p-9"
-          style={{
-            backgroundColor: 'var(--color-base-100)',
-            borderTop: '4px solid var(--color-base)',
-            boxShadow: '0 20px 40px rgba(0,0,0,0.45)',
-          }}
-        >
+        <div className="relative z-10 w-full max-w-[400px] rounded-xl p-9 bg-[var(--color-base-100)] shadow-[0_20px_40px_rgba(0,0,0,0.45)]">
 
-          <h1 className="text-[26px] font-semibold leading-tight mb-1.5" style={{ color: 'var(--color-primary)' }}>
+          <h1 className="text-[26px] font-semibold leading-tight mb-1.5 text-[var(--color-primary)]">
             Teacher Portal
           </h1>
 
-          <p className="text-[13px] leading-relaxed mb-7" style={{ color: 'var(--color-base-content)' }}>
-            Enter your institutional credentials to begin the session.
+          <p className="text-[13px] leading-relaxed mb-7 text-[var(--color-base-content)]">
+            Enter your institutional credentials to continue.
           </p>
 
           {/* User ID field */}
@@ -122,13 +115,7 @@ export function LoginScreen() {
             <input
               type="text"
               placeholder="Enter User ID"
-              className="w-full border rounded-lg px-3.5 py-[11px] text-[13px] outline-none box-border"
-              style={{
-                fontFamily: "'Inter', sans-serif",
-                backgroundColor: 'var(--color-primary-content)',
-                borderColor: 'var(--color-base-content)',
-                color: 'var(--color-primary)',
-              }}
+              className="w-full border rounded-lg px-3.5 py-[11px] text-[13px] outline-none box-border font-['Inter', sans-serif] bg-[var(--color-primary-content)] border-[var(--color-base-content)] text-[var(--color-primary)]"
             />
           </div>
 
@@ -141,21 +128,14 @@ export function LoginScreen() {
               <input
                 type={showPassword ? 'text' : 'password'}
                 placeholder="Enter Password"
-                className="w-full border rounded-lg px-3.5 py-[11px] pr-10 text-[13px] outline-none box-border"
-                style={{
-                  fontFamily: "'Inter', sans-serif",
-                  backgroundColor: 'var(--color-primary-content)',
-                  borderColor: 'var(--color-base-content)',
-                  color: 'var(--color-primary)',
-                }}
+                className="w-full border rounded-lg px-3.5 py-[11px] text-[13px] outline-none box-border font-['Inter', sans-serif] bg-[var(--color-primary-content)] border-[var(--color-base-content)] text-[var(--color-primary)]"
               />
 
               {/* toggles password visibility */}
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer flex items-center p-0"
-                style={{ color: 'var(--color-base-300)' }}
+                className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer flex items-center p-0 text-[var(--color-base-content)]"
               >
                 <EyeIcon visible={showPassword} />
               </button>
@@ -166,26 +146,20 @@ export function LoginScreen() {
           <div className="flex justify-end mb-6">
             <button
               type="button"
-              className="bg-transparent border-none cursor-pointer font-mono text-[9px] font-semibold tracking-[0.15em] uppercase p-0"
-              style={{ color: 'var(--color-primary)' }}
+              className="bg-transparent border-none cursor-pointer font-mono text-[9px] font-semibold tracking-[0.15em] uppercase p-0 text-[var(--color-primary)]"
             >
               Request Password Reset
             </button>
           </div>
-
+          
           {/* divider above button */}
-          <div className="border-t mb-5" style={{ borderColor: 'var(--color-base-content)' }} />
+          <div className="border-t mb-5 border border-[var(--color-base-content)]" />
 
           {/* Log In button — navigates to dashboard */}
           <button
             type="button"
             onClick={() => navigateTo('userManagement')}
-            className="w-full inline-flex items-center justify-center gap-2.5 py-3 px-7 rounded-lg border-none text-[14px] font-bold cursor-pointer box-border"
-            style={{
-              background: 'var(--color-primary)',
-              color: 'var(--color-base-100)',
-              fontFamily: "'Inter', sans-serif",
-            }}
+            className="w-full inline-flex items-center justify-center gap-2.5 py-3 px-7 rounded-lg border-none text-[14px] font-bold cursor-pointer box-border bg-[var(--color-primary)] text-[var(--color-base-100)] font-['Inter', sans-serif]"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
               <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clipRule="evenodd" />
@@ -205,13 +179,7 @@ export function LoginScreen() {
       </main>
 
       {/* ── Footer: kept as-is ── */}
-      <footer
-        className="h-11 flex-shrink-0 flex items-center px-12 border-t backdrop-blur-sm"
-        style={{
-          backgroundColor: 'var(--color-primary)',
-          borderColor: 'var(--color-base-300)',
-        }}
-      >
+      <footer className="h-11 flex-shrink-0 flex items-center px-12 border-t backdrop-blur-sm bg-[var(--color-primary)] border-[var(--color-base-300)]">
         <div className="flex justify-end items-center w-full max-w-[1280px] mx-auto">
           <span className="font-mono text-[10px]" style={{ color: 'color-mix(in oklab, var(--color-base-200) 35%, transparent)' }}>
             SYSTEM VER: 4.2.0-ACADEMIC
