@@ -8,18 +8,13 @@ import { AdminSidebar } from "../../components/layouts/adminSidebar";
 // Mock data — replace with real Supabase query when wiring up
 // ---------------------------------------------------------------------------
 const MOCK_USERS: UserDirectoryEntry[] = [
-  { id: "1", name: "Dr. Aris Thorne", initials: "DA", systemId: "T-48293", email: "a.thorne@contx.edu", role: "teacher", createdDate: "2023-10-12" },
-  { id: "2", name: "Elias Miller", initials: "EM", systemId: "S-99218", email: "e.miller_24@student.contx.edu", role: "student", createdDate: "2024-01-05" },
-  { id: "3", name: "Sarah Kinsley", initials: "SK", systemId: "T-48295", email: "s.kinsley@contx.edu", role: "teacher", createdDate: "2023-11-30" },
+  { id: "1", name: "Dr. Aris Thorne", systemId: "T-48293", email: "a.thorne@contx.edu", role: "teacher", createdDate: "2023-10-12" },
+  { id: "2", name: "Elias Miller", systemId: "S-99218", email: "e.miller_24@student.contx.edu", role: "student", createdDate: "2024-01-05" },
+  { id: "3", name: "Sarah Kinsley", systemId: "T-48295", email: "s.kinsley@contx.edu", role: "teacher", createdDate: "2023-11-30" },
 ];
 
 const roleBadgeStyle: Record<UserDirectoryEntry["role"], string> = {
-  teacher: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
-  student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]",
-};
-
-const roleAvatarStyle: Record<UserDirectoryEntry["role"], string> = {
-  teacher: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
+  teacher: "bg-[var(--color-accent)] text-[var(--color-accent-content)]",
   student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]",
 };
 
@@ -103,9 +98,6 @@ export function UserManagementScreen({
                   >
                     <td className="py-3.5 px-5">
                       <div className="flex items-center gap-3">
-                        <div className={`w-8 h-8 rounded-lg flex items-center justify-center text-xs shrink-0 ${roleAvatarStyle[user.role]}`}>
-                          {user.initials}
-                        </div>
                         <div>
                           <p className="font-medium text-sm">{user.name}</p>
                           <p className="text-xs opacity-60">{user.systemId}</p>
