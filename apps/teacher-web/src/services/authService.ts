@@ -2,7 +2,8 @@ import { supabase } from "./supabaseClient";
 
 export interface AuthUser {
   id: string;
-  name: string;
+  firstName: string; // matches first_name column
+  lastName: string; // matches last_name column
   email: string;
   role: "student" | "teacher" | "admin";
   idNumber: string;
@@ -13,18 +14,15 @@ export async function login(
   password: string,
 ): Promise<AuthUser> {
   const { data: authData, error: authError } =
-    await supabase.auth.signInWithPassword({ email, password }); //Verifies is password matches
+    await supabase.auth.signInWithPassword({ email, password });
 
-  if (authError) {
-    throw new Error(authError.message);
-  }
+  if (authError) throw new Error(authError.message);
 
   const authUserId = authData.user.id;
 
-  //fetch data from the users table to get the role.
   const { data: userData, error: userError } = await supabase
     .from("users")
-    .select("id, name, email, role, id_number")
+    .select("id, first_name, last_name, email, role, id_number") // fixed columns
     .eq("id", authUserId)
     .single();
 
@@ -34,7 +32,8 @@ export async function login(
 
   return {
     id: userData.id,
-    name: userData.name,
+    firstName: userData.first_name, // mapped correctly
+    lastName: userData.last_name, // mapped correctly
     email: userData.email,
     role: userData.role as AuthUser["role"],
     idNumber: userData.id_number,
@@ -46,24 +45,24 @@ export async function logout(): Promise<void> {
   if (error) throw new Error(error.message);
 }
 
-//checks it theres already a session when the app first loads
 export async function getCurrentUser(): Promise<AuthUser | null> {
-  const { data: sessionData } = await supabase.auth.getSession(); //reads from localStorage
-  if (!sessionData.session) return null; //no active session, user needs to log in
+  const { data: sessionData } = await supabase.auth.getSession();
+  if (!sessionData.session) return null;
 
   const authUserId = sessionData.session.user.id;
 
   const { data: userData, error: userError } = await supabase
     .from("users")
-    .select("id, name, email, role, id_number")
+    .select("id, first_name, last_name, email, role, id_number") // fixed columns
     .eq("id", authUserId)
     .single();
 
-  if (userError || !userData) return null; // session exists but profile missing — treat as logged out
+  if (userError || !userData) return null;
 
   return {
     id: userData.id,
-    name: userData.name,
+    firstName: userData.first_name, // mapped correctly
+    lastName: userData.last_name, // mapped correctly
     email: userData.email,
     role: userData.role as AuthUser["role"],
     idNumber: userData.id_number,

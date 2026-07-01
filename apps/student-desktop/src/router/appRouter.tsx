@@ -1,8 +1,9 @@
-import { useEffect } from "react"; // runs the session check on mount
+import { useEffect } from "react";
 import type { ComponentType } from "react";
 import type { ScreenName } from "./route";
 import { useRouterLogic } from "./routerLogic";
-import { useAuth } from "../hooks/useAuth"; // session check + auth state
+import { useAuthStore } from "../stores/useAuthStore";
+import { logout } from "../services/authService";
 import { LoginScreen } from "../screens/login/loginScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamConfirmationScreen } from "../screens/examConfirmation/examConfirmationScreen";
@@ -11,6 +12,9 @@ import { ExamResultScreen } from "../screens/examResult/examResultScreen";
 import { ArchiveScreen } from "../screens/archive/archiveScreen";
 import { AppSidebar } from "../components/layout/appSidebar";
 import "./appRouter.css";
+
+// useAuth is no longer imported here — AppRouter owns the session check directly,
+// so there's only one place doing it, not two racing against each other.
 
 const screenComponents: Record<ScreenName, ComponentType> = {
   login: LoginScreen,
@@ -26,28 +30,42 @@ const screensWithSidebar: ScreenName[] = ["dashboard", "archive"];
 export function AppRouter() {
   const currentScreen = useRouterLogic((state) => state.currentScreen);
   const navigateTo = useRouterLogic((state) => state.navigateTo);
-  const { user, isLoading } = useAuth(); // checks for existing session on mount
+  const { user, isLoading, setUser, setIsLoading } = useAuthStore();
+
+  // Runs once on mount — checks if a session already exists
+  // (e.g. student reopens the app without logging out).
+  // This is the ONLY place the session check happens.
+  useEffect(() => {
+    async function checkSession() {
+      try {
+        logout();
+      } catch {
+        setUser(null);
+      } finally {
+        setIsLoading(false); // done — router can now decide which screen to show
+      }
+    }
+
+    checkSession();
+  }, []); // empty array — once on mount only
 
   // Runs whenever user or isLoading changes —
-  // redirects to the right screen based on auth state.
+  // this is what actually does the redirect after checkSession finishes.
   useEffect(() => {
-    if (isLoading) return; // still checking session — don't redirect yet
+    if (isLoading) return; // still checking — don't redirect yet
 
     if (user) {
-      // A real logged-in student exists — send them to Dashboard
-      // if they're still on the login screen (e.g. after a page refresh
-      // where the session was restored automatically).
+      // Session exists — if they're still on login, send them to Dashboard.
       if (currentScreen === "login") {
         navigateTo("dashboard");
       }
     } else {
       // No session — send them to login regardless of which screen they're on.
-      // This also catches the case where a session expires mid-use.
       navigateTo("login");
     }
-  }, [user, isLoading]); // re-runs when auth state changes
+  }, [user, isLoading]); // re-runs when auth state resolves
 
-  // Shows a blank screen while the session check is in flight —
+  // Blank loading screen while session check is in flight —
   // prevents a flash of the login screen before the session is confirmed.
   if (isLoading) {
     return (
@@ -57,7 +75,7 @@ export function AppRouter() {
           display: "flex",
           alignItems: "center",
           justifyContent: "center",
-          backgroundColor: "#051424", // matches the app's background color
+          backgroundColor: "#051424",
           color: "#adc6ff",
           fontFamily: "'JetBrains Mono', monospace",
           fontSize: "12px",

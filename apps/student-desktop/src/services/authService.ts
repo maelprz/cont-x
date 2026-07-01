@@ -32,7 +32,7 @@ export async function login(
 
   if (profileError || !profileData) {
     // Deliberately vague — don't reveal whether the ID exists
-    throw new Error("Invalid student ID or password.");
+    throw new Error("Teacher accounts are not allowed in this app.");
   }
 
   // Step 2 — authenticate with Supabase Auth using the email we found.
