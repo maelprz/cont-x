@@ -1,11 +1,6 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SessionVerificationModalProps, VerificationStatus } from './sessionVerificationModal.types';
 
-// ---------------------------------------------------------------------------
-// Session Verification Modal — shown after "Enter Exam" on the confirmation
-// screen, before the student is dropped into examQuestionScreen.
-// ---------------------------------------------------------------------------
-
 export function SessionVerificationModal({
   isOpen,
   codeLength = 6,
@@ -64,41 +59,22 @@ export function SessionVerificationModal({
   };
 
   return (
-    <div
-      className="fixed inset-0 z-50 flex items-center justify-center p-6"
-      style={{ background: 'rgba(5,20,36,0.6)', backdropFilter: 'blur(8px)' }}
-    >
+    <div className="fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-[8px] bg-[var(--bg-app)/2]">
       {/* ── Modal card ──────────────────────────────────────────────── */}
-      <div
-        className="w-full max-w-md rounded-xl overflow-hidden relative"
-        style={{
-          background: 'rgba(18,33,49,0.75)',
-          backdropFilter: 'blur(20px)',
-          border: '1px solid rgba(173,198,255,0.15)',
-          boxShadow: '0 20px 40px rgba(0,0,0,0.5)',
-        }}
-      >
-        {/* Technical header line */}
-        <div
-          className="h-1 w-full"
-          style={{ background: '#adc6ff', boxShadow: '0 0 15px rgba(173,198,255,0.4)' }}
-        />
+      <div className="w-full max-w-md rounded-xl overflow-hidden relative border-[1px] border-[var(--border-subtle)] bg-[var(--bg-sidebar)]">
 
         <div className="p-8 flex flex-col gap-7">
           {/* ── Header ────────────────────────────────────────────── */}
           <div className="text-center flex flex-col items-center gap-2">
-            <div
-              className="w-16 h-16 rounded-full flex items-center justify-center mb-1"
-              style={{ background: 'rgba(173,198,255,0.1)', border: '1px solid rgba(173,198,255,0.2)' }}
-            >
+            <div className="w-16 h-16 rounded-full flex items-center justify-center mb-1 bg-[var(--icon-primary)] border-[1px] border-[var(--icon-border)]">
               <svg width="28" height="28" viewBox="0 0 24 24" fill="#adc6ff">
                 <path d="M12 1.5c2.9 0 5.25 2.35 5.25 5.25v3a3 3 0 0 1 3 3v6.75a3 3 0 0 1-3 3H6.75a3 3 0 0 1-3-3v-6.75a3 3 0 0 1 3-3v-3C6.75 3.85 9.1 1.5 12 1.5Zm0 1.5a3.75 3.75 0 0 0-3.75 3.75v3h7.5v-3A3.75 3.75 0 0 0 12 3Zm0 11.25a1.5 1.5 0 0 0-.75 2.8v1.7a.75.75 0 0 0 1.5 0v-1.7a1.5 1.5 0 0 0-.75-2.8Z" />
               </svg>
             </div>
-            <h2 className="text-[26px] font-semibold text-[#d4e4fa] tracking-tight">
+            <h2 className="text-[26px] font-semibold text-[var(--text-primary)] tracking-tight">
               Session Verification
             </h2>
-            <p className="text-[14px] text-[#c2c6d6] opacity-80 leading-relaxed max-w-[340px]">
+            <p className="text-[14px] text-[var(--text-secondary)] opacity-80 leading-relaxed max-w-[340px]">
               Please enter the {codeLength}-digit access code provided by your invigilator to unlock the exam session.
             </p>
           </div>
@@ -144,8 +120,8 @@ export function SessionVerificationModal({
 
             <div className="flex items-center justify-between px-1">
               <span
-                className="font-mono text-[11px] font-semibold uppercase tracking-wide transition-opacity duration-300"
-                style={{ color: '#ffb4ab', opacity: status === 'error' ? 1 : 0 }}
+                className="font-mono text-[11px] font-semibold uppercase tracking-wide transition-opacity duration-300 text-[var(--warning-icon)]"
+                style={{ opacity: status === 'error' ? 1 : 0 }}
               >
                 Invalid Code. Please try again.
               </span>
@@ -157,13 +133,7 @@ export function SessionVerificationModal({
             <button
               onClick={handleConfirm}
               disabled={status === 'verifying'}
-              className="w-full py-3.5 rounded-lg font-bold text-[15px] transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0"
-              style={{
-                background: '#adc6ff',
-                color: '#002e6a',
-                boxShadow: '0 10px 20px rgba(173,198,255,0.15)',
-                fontFamily: "'Inter', sans-serif",
-              }}
+              className="w-full py-3.5 rounded-lg font-bold text-[15px] transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)] font-[var(--font-body)]"
             >
               {status === 'verifying' ? (
                 <span className="inline-flex items-center gap-2 justify-center">
@@ -179,22 +149,19 @@ export function SessionVerificationModal({
             </button>
             <button
               onClick={onCancel}
-              className="w-full py-3 rounded-lg font-mono text-[11px] font-semibold uppercase tracking-wide transition-colors duration-150"
-              style={{ border: '1px solid #424754', color: '#c2c6d6', background: 'transparent' }}
-              onMouseEnter={(e) => { e.currentTarget.style.background = '#273647'; }}
-              onMouseLeave={(e) => { e.currentTarget.style.background = 'transparent'; }}
+              className="px-6 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] text-[15px] font-semibold cursor-pointer transition-colors duration-200 hover:border-[var(--text-secondary)] hover:text-[var(--text-primary)] font-[var(--font-body)]"
             >
               Cancel Request
             </button>
           </div>
 
           {/* ── Status footer ─────────────────────────────────────── */}
-          <div className="pt-4 flex items-center justify-center gap-2 border-t border-[#424754]">
+          <div className="pt-4 flex items-center justify-center gap-2 border-t border-[var(--border-subtle)]">
             <span
-              className="w-2 h-2 rounded-full bg-[#4d8eff]"
+              className="w-2 h-2 rounded-full bg-[var(--accent-blue)]"
               style={{ animation: 'svm-pulse 2s infinite' }}
             />
-            <span className="font-mono text-[11px] uppercase tracking-widest text-[#c2c6d6]/60">
+            <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--text-fine-print)]">
               {status === 'verifying' ? 'Verifying Identity' : 'Awaiting Identity Verification'}
             </span>
           </div>
