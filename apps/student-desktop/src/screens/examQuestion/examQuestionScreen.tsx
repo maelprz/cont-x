@@ -162,11 +162,7 @@ function CodeEditor({
           </button>
           <button
             onClick={onRunCode}
-            className="px-3 py-1.5 rounded-lg border-none text-[12px] font-bold font-mono cursor-pointer transition-transform duration-150 hover:scale-[1.02]"
-            style={{
-              background: 'linear-gradient(135deg, #4d8eff 0%, #adc6ff 100%)',
-              color: '#00285d',
-            }}
+            className="px-3 py-1.5 rounded-lg border-none text-[12px] font-bold font-mono cursor-pointer transition-transform duration-150 hover:scale-[1.02] bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)]"
           >
             Run Code
           </button>
@@ -261,7 +257,7 @@ export function ExamQuestionScreen({
   progressCurrent  = 6,
   progressTotal    = 20,
   questionMap      = MOCK_QUESTION_MAP,
-  question         = MOCK_MCQ_QUESTION as Question,
+  question         = MOCK_CODING_QUESTION as Question,
   onNavigate,
   onFlag,
   onAnswerSelect,
@@ -295,45 +291,40 @@ export function ExamQuestionScreen({
   
   return (
     <div
-      className="h-screen w-full flex flex-col text-[#d4e4fa] overflow-hidden"
-      style={{
-        backgroundColor: '#051424',
-        backgroundImage: 'radial-gradient(circle at 2px 2px, rgba(255,255,255,0.03) 1px, transparent 0)',
-        backgroundSize: '32px 32px',
-        fontFamily: "'Inter', sans-serif",
-      }}
+      className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden bg-[var(--bg-app)] bg-[radial-gradient(circle_at_2px_2px,rgba(255,255,255,0.03)_1px,transparent_0)] bg-[length:32px_32px] font-sans"
     >
       {/* ── Top navigation bar ──────────────────────────────────────── */}
       <header
-        className="h-14 flex-shrink-0 flex items-center px-6 border-b border-[#424754] backdrop-blur-md z-10"
-        style={{ background: 'rgba(18,33,49,0.95)' }}
+        className="h-14 flex-shrink-0 flex items-center px-6 border-b border-[var(--border-primary)] backdrop-blur-md z-10 bg-[color:rgba(18,33,49,0.95)]"
       >
         <div className="flex items-center justify-between w-full gap-4">
           {/* Brand */}
-          <span className="text-[#adc6ff] text-lg font-bold tracking-tight flex-shrink-0">
-            Cont/x
-          </span>
-
+          <div className="flex flex-col gap-0.5 flex-shrink-0">
+            <span className="text-[#adc6ff] text-lg font-bold tracking-tight">
+              Cont/x
+            </span>
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+              {examTitle}
+            </span>
+          </div>
           {/* Progress */}
           <div className="flex flex-col items-center gap-1 flex-grow max-w-xs">
             <span className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[#8c909f]">
               Assessment Progress
             </span>
-            <div className="w-full h-1.5 bg-[#1c2b3c] rounded-full overflow-hidden">
-              <div
-                className="h-full rounded-full transition-all duration-500"
-                style={{
-                  width: `${progressPct}%`,
-                  background: 'linear-gradient(90deg, #4d8eff, #adc6ff)',
-                }}
-              />
+            <div className="w-full h-1.5 bg-[var(--bg-card)] rounded-full overflow-hidden grid grid-cols-[repeat(100,minmax(0,1fr))] gap-[1px] p-[1px]">
+              {Array.from({ length: 100 }, (_, index) => (
+                <span
+                  key={index}
+                  className={index < progressPct ? 'rounded-full bg-[#adc6ff]' : 'rounded-full bg-transparent'}
+                />
+              ))}
             </div>
           </div>
 
           {/* Timer — height capped to fit header row */}
           <div
-            className="flex items-center gap-2 px-3 rounded-lg border border-[#424754] flex-shrink-0 h-9"
-            style={{ background: 'rgba(18,33,49,0.9)' }}
+            className="flex items-center gap-2 px-3 rounded-lg border border-[var(--border-primary)] flex-shrink-0 h-9 bg-[color:rgba(18,33,49,0.9)]"
           >
             <div className="flex flex-col items-end justify-center leading-none">
               <span className="font-mono text-[8px] font-semibold tracking-[0.15em] uppercase text-[#8c909f]">
@@ -354,7 +345,7 @@ export function ExamQuestionScreen({
       <div className="flex flex-grow overflow-hidden">
 
         {/* ── Left sidebar: question map ─────────────────────────────── */}
-        <aside className="w-[220px] flex-shrink-0 flex flex-col border-r border-[#424754] bg-[#0d1c2d] overflow-y-auto">
+        <aside className="w-[220px] flex-shrink-0 flex flex-col border-r border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
           <div className="p-4 flex-grow">
             <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[#8c909f] mb-3">
               Question Map
@@ -369,12 +360,12 @@ export function ExamQuestionScreen({
           {/* Legend */}
           <div className="px-4 pb-4 flex flex-col gap-2 border-t border-[#424754] pt-3">
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-[#1c2b3c] border border-[#424754]" />
+              <span className="w-3 h-3 rounded-sm bg-[var(--bg-card)] border border-[var(--border-primary)]" />
               <span className="font-mono text-[10px] text-[#8c909f]">Answered</span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-transparent border border-dashed border-[#424754] relative">
-                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[#ffb4ab]" />
+              <span className="w-3 h-3 rounded-sm bg-transparent border border-dashed border-[var(--border-primary)] relative">
+                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[var(--warning-icon)]" />
               </span>
               <span className="font-mono text-[10px] text-[#8c909f]">Flagged</span>
             </div>
@@ -383,8 +374,7 @@ export function ExamQuestionScreen({
 
         {/* ── Centre: question pane ──────────────────────────────────── */}
         <section
-          className="flex flex-col overflow-y-auto border-r border-[#424754] min-w-0"
-          style={{ width: isCoding ? '420px' : '100%', flexShrink: 0 }}
+          className={`flex flex-col overflow-y-auto border-r border-[var(--border-primary)] min-w-0 ${isCoding ? 'w-[420px] flex-shrink-0' : 'w-full flex-shrink-0'}`}
         >
           {/* Question header */}
           <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
@@ -397,22 +387,18 @@ export function ExamQuestionScreen({
                 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer
                 transition-colors duration-150 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase
                 ${question.isFlagged
-                  ? 'border-[#ffb4ab] text-[#ffb4ab]'
-                  : 'border-[#424754] text-[#8c909f] hover:border-[#8c909f] hover:text-[#c2c6d6]'
+                  ? 'border-[var(--warning-icon)] text-[var(--warning-icon)] bg-[color:var(--warning-accent)]'
+                  : 'border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--text-secondary)] hover:text-[var(--text-fine-print)]'
                 }
               `}
-              style={{
-                background: question.isFlagged ? 'rgba(255,180,171,0.08)' : 'transparent',
-              }}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                stroke={question.isFlagged ? '#ffb4ab' : '#8c909f'} strokeWidth="1.5">
+                stroke={question.isFlagged ? 'var(--warning-icon)' : 'var(--text-secondary)'} strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
               </svg>
               Flag for Review
             </button>
           </div>
-
           {/* Question body */}
           <div className="px-6 pb-4 min-w-0">
             <p className="text-[15px] text-[#c2c6d6] leading-relaxed mb-5">
@@ -422,8 +408,7 @@ export function ExamQuestionScreen({
             {/* Coding: code snippet example */}
             {isCoding && codingQ?.codeSnippet && (
               <div
-                className="rounded-lg p-4 mb-5 font-mono text-[13px] leading-relaxed overflow-x-auto"
-                style={{ background: 'rgba(13,28,45,0.8)', border: '1px solid #424754' }}
+                className="rounded-lg p-4 mb-5 font-mono text-[13px] leading-relaxed overflow-x-auto bg-[color:rgba(13,28,45,0.8)] border border-[var(--border-primary)]"
               >
                 {codingQ.codeSnippet.split('\n').map((line, i) => {
                   const isComment = line.trim().startsWith('//');
@@ -446,13 +431,13 @@ export function ExamQuestionScreen({
             {/* Coding: constraints */}
             {isCoding && codingQ?.constraints && (
               <>
-                <p className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[#8c909f] mb-3">
+                <p className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-3">
                   Constraints
                 </p>
                 <ul className="flex flex-col gap-2">
                   {codingQ.constraints.map((c, i) => (
                     <li key={i} className="flex items-start gap-2 text-[13px] text-[#c2c6d6]">
-                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[#424754] flex-shrink-0" />
+                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--border-primary)] flex-shrink-0" />
                       {c}
                     </li>
                   ))}
@@ -473,7 +458,7 @@ export function ExamQuestionScreen({
 
         {/* ── Right pane: code editor (coding only) ─────────────────── */}
         {isCoding && codingQ && (
-          <section className="flex-grow flex flex-col overflow-hidden bg-[#051424] min-w-0">
+          <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
             <CodeEditor
               code={codingQ.starterCode ?? ''}
               filename={codingQ.filename ?? 'solution.js'}
@@ -486,15 +471,14 @@ export function ExamQuestionScreen({
 
       {/* ── Bottom action bar ───────────────────────────────────────── */}
       <footer
-        className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-t border-[#424754] backdrop-blur-sm"
-        style={{ background: 'rgba(12,28,45,0.95)' }}
+        className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-t border-[var(--border-primary)] backdrop-blur-sm bg-[color:rgba(12,28,45,0.95)]"
       >
         {/* Previous / Next-or-Submit */}
         <div className="flex items-center gap-3">
           <button
             onClick={onPrevious}
             disabled={question.number <= 1}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[#424754] bg-transparent text-[#c2c6d6] text-[13px] font-semibold cursor-pointer hover:border-[#8c909f] hover:text-[#d4e4fa] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-fine-print)] text-[13px] font-semibold cursor-pointer hover:border-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -507,12 +491,12 @@ export function ExamQuestionScreen({
         {/* Auto-save indicator */}
         <div className="flex flex-col items-end gap-0.5">
           <div className="flex items-center gap-1.5">
-            <span className="w-2 h-2 rounded-full bg-[#34d399]" />
+            <span className="w-2 h-2 rounded-full bg-[var(--accent-green)]" />
             <span className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[#8c909f]">
               Auto-Save Active
             </span>
           </div>
-          <span className="font-mono text-[10px] text-[#424754]">
+          <span className="font-mono text-[10px] text-[var(--border-primary)]">
             T-STAMP: {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
         </div>
@@ -521,18 +505,8 @@ export function ExamQuestionScreen({
             onClick={isLastQuestion ? handleOnSubmit : onNext}
             className={
               isLastQuestion
-                ? 'flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02]'
-                : 'flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[#424754] bg-transparent text-[#c2c6d6] text-[13px] font-semibold cursor-pointer hover:border-[#8c909f] hover:text-[#d4e4fa] transition-colors duration-150'
-            }
-            style={
-              isLastQuestion
-                ? {
-                    background: 'linear-gradient(135deg, #4d8eff 0%, #adc6ff 100%)',
-                    color: '#00285d',
-                    fontFamily: "'Inter', sans-serif",
-                    boxShadow: '0 0 20px rgba(173,198,255,0.25)',
-                  }
-                : undefined
+                ? 'flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]'
+                : 'flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-fine-print)] text-[13px] font-semibold cursor-pointer hover:border-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150'
             }
           >
             {isLastQuestion ? (
