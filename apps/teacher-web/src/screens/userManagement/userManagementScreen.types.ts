@@ -4,12 +4,13 @@
 export type UserRole = "teacher" | "student";
 
 export interface UserDirectoryEntry {
-  id: string;          // internal row id
-  name: string;        // full display name
-  systemId: string;    // e.g. "T-48293" or "S-99218"
+  id: string;
+  first_name: string;
+  last_name: string;
+  systemId: string;
   email: string;
   role: UserRole;
-  createdDate: string; // display string e.g. "2023-10-12"
+  createdDate: string;
 }
 
 export interface UserManagementScreenProps {
