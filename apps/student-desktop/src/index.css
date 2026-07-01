@@ -2,39 +2,50 @@
 
 @layer base {
   :root {
-    --bg-app: #0f172a;
-    --bg-sidebar: #122131;
-    --bg-card: #1e293b;
-    --bg-footer: rgba(1,15,31,0.6);
-    --accent-blue: #3b82f6;
-    --accent-green: #22c55e;
+    /* Backgrounds — sampled from the Cont/x screenshot */
+    --bg-app: #f5f5f4; /* light main content area */
+    --bg-sidebar: #101828; /* dark navy sidebar */
+    --bg-card: #f8f8f8; /* stat cards / table surface */
+    --bg-footer: rgba(16, 24, 40, 0.6); /* translucent sidebar navy */
 
-    --icon-primary: rgba(173,198,255,0.3);
-    --icon-border: rgba(173,198,255,0.2);
+    /* Accents — sampled from the badges/buttons in the screenshot */
+    --accent-blue: #101828; /* "Add Account" CTA navy */
+    --accent-green: #3c6200; /* STUDENT badge green */
 
-    --text-primary: #f1f5f9;
-    --text-secondary: #94a3b8;
-    --text-fine-print: rgba(194,198,214,0.4);
-    
-    --border-primary: #424754;
-    --border-subtle: #243047;
-    
+    /* Icons — tinted from sidebar navy */
+    --icon-primary: rgba(16, 24, 40, 0.3);
+    --icon-border: rgba(16, 24, 40, 0.2);
+
+    /* Text — sampled from headings/labels in the screenshot */
+    --text-primary: #101828; /* headings, e.g. "User Directory" */
+    --text-secondary: #5c5a58; /* descriptive/body gray text */
+    --text-fine-print: #bab9b9; /* faint labels, e.g. "Listing 3 of 3 records" */
+
+    /* Borders — light dividers between cards/table rows */
+    --border-primary: #e6e4e3;
+    --border-subtle: #f5f5f4;
+
+    /* Fonts unchanged */
     --font-headline: "Inter", sans-serif;
     --font-body: "Inter", sans-serif;
     --font-label: "JetBrains Mono", monospace;
-    
-    --warning-primary: rgba(147,0,10,0.18);
-    --warning-secondary: rgba(255,180,171,0.28);
-    --warning-text: rgba(255,218,214,0.8);
-    --warning-accent: rgba(255,180,171,0.12);
-    --warning-icon: #ffb4ab;
-    
-    --button-gradient: linear-gradient(135deg, #4d8eff 0%, #adc6ff 100%);
-    --button-gradient-text: #00285d;
 
-    --shadow: 0 0 24px rgba(173,198,255,0.3);
-    --shadow-secondary: 0 10px 20px rgba(173,198,255,0.15);
-    
+    /* Warning group — kept from teacher-web's error red (no warning state visible in screenshot) */
+    --warning-primary: rgba(248, 40, 52, 0.18);
+    --warning-secondary: rgba(248, 40, 52, 0.28);
+    --warning-text: rgba(248, 40, 52, 0.9);
+    --warning-accent: rgba(248, 40, 52, 0.12);
+    --warning-icon: #f82834;
+
+    /* Button gradient — navy CTA, subtle gradient using sidebar's active-item navy as 2nd stop */
+    --button-gradient: linear-gradient(135deg, #101828 0%, #333947 100%);
+    --button-gradient-text: #f8f8f8; /* white "Add Account" label */
+
+    /* Shadows — soft navy glow, consistent with icon tints */
+    --shadow: 0 0 24px rgba(16, 24, 40, 0.3);
+    --shadow-secondary: 0 10px 20px rgba(16, 24, 40, 0.15);
+
+    /* Blur unchanged (not a color) */
     --blur-filter: blur(8px);
   }
 
