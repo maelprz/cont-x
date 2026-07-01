@@ -3,7 +3,7 @@ import { UserPlus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { AdminHeader } from "../../components/layouts/adminHeader";
 import { AdminSidebar } from "../../components/layouts/adminSidebar";
 import { useUserManagement } from "../../hooks/useUserManagement";
-import type { CreateUserPayload } from "../../services/userManagementService";
+import type { CreateUserPayload, UpdateUserPayload } from "../../services/userManagementService";
 
 // badge color per role
 const roleBadgeStyle: Record<"teacher" | "student", string> = {
@@ -11,7 +11,7 @@ const roleBadgeStyle: Record<"teacher" | "student", string> = {
   student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]",
 };
 
-// formats a raw ISO timestamp into a readable date string, e.g. "2023-10-12"
+// formats a raw ISO timestamp into a readable date string e.g. "2023-10-12"
 function formatDate(isoString: string): string {
   return isoString.slice(0, 10);
 }
@@ -27,20 +27,21 @@ export function UserManagementScreen() {
 
   // holds the form field values when adding a new user
   const [newUser, setNewUser] = useState<CreateUserPayload>({
-    name: "",
+    first_name: "",
+    last_name: "",
     email: "",
     password: "",
     role: "student",
     id_number: "",
   });
 
-  // tracks which user row is currently being edited (null means none)
+  // tracks which user row is being edited and the current edit values
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
-  const [editingName, setEditingName] = useState("");
+  const [editingFields, setEditingFields] = useState<UpdateUserPayload>({});
 
   // narrows the list to rows matching the search query
   const filteredUsers = users.filter((user) =>
-    `${user.name} ${user.email} ${user.id_number}`
+    `${user.first_name} ${user.last_name} ${user.email} ${user.id_number}`
       .toLowerCase()
       .includes(searchQuery.toLowerCase())
   );
@@ -54,26 +55,27 @@ export function UserManagementScreen() {
     try {
       await createNewUser(newUser);
       setShowAddForm(false);
-      setNewUser({ name: "", email: "", password: "", role: "student", id_number: "" });
+      setNewUser({ first_name: "", last_name: "", email: "", password: "", role: "student", id_number: "" });
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to create user.");
     }
   }
 
-  // saves an inline name edit
+  // saves an inline edit
   async function handleSaveEdit(userId: string) {
     try {
-      await editUser(userId, { name: editingName });
+      await editUser(userId, editingFields);
       setEditingUserId(null);
+      setEditingFields({});
     } catch (err) {
       alert(err instanceof Error ? err.message : "Failed to update user.");
     }
   }
 
   // prompts before deleting so the admin cannot accidentally remove an account
-  async function handleDelete(userId: string, userName: string) {
+  async function handleDelete(userId: string, firstName: string, lastName: string) {
     const confirmed = window.confirm(
-      `Delete account for ${userName}? This cannot be undone.`
+      `Delete account for ${firstName} ${lastName}? This cannot be undone.`
     );
     if (!confirmed) return;
     try {
@@ -92,7 +94,7 @@ export function UserManagementScreen() {
 
         <main className="flex-1 overflow-y-auto px-8 py-6">
           <p className="text-xs opacity-60 mb-2">
-            Core System &nbsp;&gt;&nbsp; Account Management
+            Core System &gt; Account Management
           </p>
 
           <div className="flex items-start justify-between gap-4 mb-6">
@@ -113,17 +115,26 @@ export function UserManagementScreen() {
             </button>
           </div>
 
-          {/* add account form panel - only visible when showAddForm is true */}
+          {/* add account form panel */}
           {showAddForm && (
             <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl p-6 mb-6">
               <h2 className="text-base font-semibold mb-4">New Account</h2>
               <div className="grid grid-cols-2 gap-4">
                 <div className="flex flex-col gap-1">
-                  <label className="text-xs opacity-60 uppercase tracking-wide">Full Name</label>
+                  <label className="text-xs opacity-60 uppercase tracking-wide">First Name</label>
                   <input
                     type="text"
-                    value={newUser.name}
-                    onChange={(e) => setNewUser({ ...newUser, name: e.target.value })}
+                    value={newUser.first_name}
+                    onChange={(e) => setNewUser({ ...newUser, first_name: e.target.value })}
+                    className="border border-[var(--color-base-300)] rounded-lg px-3 py-2 text-sm outline-none bg-[var(--color-base-200)]"
+                  />
+                </div>
+                <div className="flex flex-col gap-1">
+                  <label className="text-xs opacity-60 uppercase tracking-wide">Last Name</label>
+                  <input
+                    type="text"
+                    value={newUser.last_name}
+                    onChange={(e) => setNewUser({ ...newUser, last_name: e.target.value })}
                     className="border border-[var(--color-base-300)] rounded-lg px-3 py-2 text-sm outline-none bg-[var(--color-base-200)]"
                   />
                 </div>
@@ -218,9 +229,10 @@ export function UserManagementScreen() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide opacity-60 bg-[var(--color-base-200)]">
-                    <th className="text-left py-3 px-5 font-medium">Name</th>
+                    <th className="text-left py-3 px-5 font-medium">First Name</th>
+                    <th className="text-left py-3 px-5 font-medium">Last Name</th>
                     <th className="text-left py-3 px-5 font-medium">ID</th>
-                    <th className="text-left py-3 px-5 font-medium">Credential Endpoint</th>
+                    <th className="text-left py-3 px-5 font-medium">Email</th>
                     <th className="text-left py-3 px-5 font-medium">Role</th>
                     <th className="text-left py-3 px-5 font-medium">Created</th>
                     <th className="text-left py-3 px-5 font-medium">Actions</th>
@@ -236,21 +248,39 @@ export function UserManagementScreen() {
                           : ""
                       }`}
                     >
-                      {/* name only, no avatar */}
+                      {/* first name, editable inline */}
                       <td className="py-3.5 px-5">
                         {editingUserId === user.id ? (
                           <input
                             type="text"
-                            value={editingName}
-                            onChange={(e) => setEditingName(e.target.value)}
-                            className="border border-[var(--color-base-300)] rounded px-2 py-0.5 text-sm outline-none bg-[var(--color-base-200)]"
+                            value={editingFields.first_name ?? user.first_name}
+                            onChange={(e) =>
+                              setEditingFields({ ...editingFields, first_name: e.target.value })
+                            }
+                            className="border border-[var(--color-base-300)] rounded px-2 py-0.5 text-sm outline-none bg-[var(--color-base-200)] w-full"
                           />
                         ) : (
-                          <p className="font-medium text-sm">{user.name}</p>
+                          <p className="font-medium text-sm">{user.first_name}</p>
                         )}
                       </td>
 
-                      {/* id number column */}
+                      {/* last name, editable inline */}
+                      <td className="py-3.5 px-5">
+                        {editingUserId === user.id ? (
+                          <input
+                            type="text"
+                            value={editingFields.last_name ?? user.last_name}
+                            onChange={(e) =>
+                              setEditingFields({ ...editingFields, last_name: e.target.value })
+                            }
+                            className="border border-[var(--color-base-300)] rounded px-2 py-0.5 text-sm outline-none bg-[var(--color-base-200)] w-full"
+                          />
+                        ) : (
+                          <p className="font-medium text-sm">{user.last_name}</p>
+                        )}
+                      </td>
+
+                      {/* id number */}
                       <td className="py-3.5 px-5 text-sm opacity-70">{user.id_number}</td>
 
                       {/* email */}
@@ -282,7 +312,10 @@ export function UserManagementScreen() {
                                 Save
                               </button>
                               <button
-                                onClick={() => setEditingUserId(null)}
+                                onClick={() => {
+                                  setEditingUserId(null);
+                                  setEditingFields({});
+                                }}
                                 className="px-2 py-1 text-xs rounded border border-[var(--color-base-300)]"
                               >
                                 Cancel
@@ -292,7 +325,10 @@ export function UserManagementScreen() {
                             <button
                               onClick={() => {
                                 setEditingUserId(user.id);
-                                setEditingName(user.name); // pre-fills the input with the current name
+                                setEditingFields({
+                                  first_name: user.first_name,
+                                  last_name: user.last_name,
+                                });
                               }}
                               className="p-1.5 rounded-full hover:bg-[var(--color-base-200)]"
                             >
@@ -300,7 +336,7 @@ export function UserManagementScreen() {
                             </button>
                           )}
                           <button
-                            onClick={() => handleDelete(user.id, user.name)}
+                            onClick={() => handleDelete(user.id, user.first_name, user.last_name)}
                             className="p-1.5 rounded-full hover:bg-[var(--color-error)]/10 text-[var(--color-error)]"
                           >
                             <Trash2 size={13} />
