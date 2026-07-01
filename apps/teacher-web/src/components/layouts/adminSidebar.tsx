@@ -1,8 +1,8 @@
-import { Shield, Users, FileClock } from "lucide-react"; // pre-made icon components
+import { Shield, Users, FileClock, LogOut } from "lucide-react"; // pre-made icon components
 import type { AdminSidebarProps } from "./adminSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 
-// Single shared sidebar — used across every admin screen.
+// Single shared sidebar -- used across every admin screen.
 export function AdminSidebar({ activeItem }: AdminSidebarProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
@@ -29,7 +29,7 @@ export function AdminSidebar({ activeItem }: AdminSidebarProps) {
           Main Menu
         </p>
 
-        {/* User Management nav item — navigates on click */}
+        {/* User Management nav item -- navigates on click */}
         <button
           onClick={() => navigateTo("userManagement")}
           className={`${navItemBase} ${
@@ -46,7 +46,7 @@ export function AdminSidebar({ activeItem }: AdminSidebarProps) {
           Configuration
         </p>
 
-        {/* Audit Logs nav item — navigates on click */}
+        {/* Audit Logs nav item -- navigates on click */}
         <button
           onClick={() => navigateTo("auditLogs")}
           className={`${navItemBase} ${
@@ -59,6 +59,18 @@ export function AdminSidebar({ activeItem }: AdminSidebarProps) {
           Audit Logs
         </button>
       </nav>
+
+      {/* mt-auto pushes logout to the very bottom of the sidebar */}
+      <div className="mt-auto border-t border-[var(--color-primary-content)]/20">
+        <button
+          type="button"
+          onClick={() => navigateTo("login")} // sends admin back to login screen
+          className="flex items-center gap-2.5 w-full px-6 py-4 text-sm font-medium text-[var(--color-primary-content)]/80 hover:bg-[var(--color-primary-content)]/10 hover:text-[var(--color-primary-content)] transition-colors duration-150"
+        >
+          <LogOut size={16} />
+          Log Out
+        </button>
+      </div>
     </aside>
   );
 }
