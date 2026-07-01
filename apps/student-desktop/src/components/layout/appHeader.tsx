@@ -1,11 +1,15 @@
 import type { AppHeaderProps } from "./appHeader.types";
+import { useAuthStore } from "../../stores/useAuthStore"; // store controlling the user's auth state
 
 // Single shared header bar — used by Dashboard, Archive, ExamConfirmation, and now Login.
 export function AppHeader({
-  studentName = "Alex",
-  studentId = "2021-00001",
   variant = "full", // defaults to the full version, so no existing screen needs to change
 }: AppHeaderProps) {
+  const user = useAuthStore((state) => state.user);
+
+  const studentName = user?.fullName ?? ""; // empty string if no session yet
+  const studentId = user?.idNumber ?? "";
+
   const initials = studentName
     .split(" ")
     .map((n) => n[0])
