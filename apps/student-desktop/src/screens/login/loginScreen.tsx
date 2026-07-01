@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { useAuth } from "../../hooks/useAuth"; // real auth, not just navigateTo
+import { AppHeader } from "../../components/layout/appHeader";
 
 // ── Icons — unchanged from your original ────────────────────
 
@@ -83,7 +84,7 @@ function EyeIcon({ visible }: { visible: boolean }) {
 function FieldLabel({ text, icon }: { text: string; icon: React.ReactNode }) {
   return (
     <div className="flex items-center justify-between mb-2">
-      <label className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[#8c909f]">
+      <label className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--text-secondary)]">
         {text}
       </label>
       {icon}
@@ -127,25 +128,9 @@ export function LoginScreen() {
   }
 
   return (
-    <div
-      className="h-screen w-full flex flex-col text-[#d4e4fa] overflow-hidden"
-      style={{
-        backgroundColor: "#051424",
-        backgroundImage:
-          "radial-gradient(circle at 2px 2px, rgba(255,255,255,0.03) 1px, transparent 0)",
-        backgroundSize: "32px 32px",
-        fontFamily: "'Inter', sans-serif",
-      }}
-    >
+    <div className="h-screen w-full flex flex-col overflow-hidden bg-[var(--bg-app)] text-[var(--text-primary)]">
       {/* ── Header ── */}
-      <header
-        className="h-14 flex-shrink-0 flex items-center px-12 border-b border-[#424754] backdrop-blur-md"
-        style={{ background: "rgba(18, 33, 49, 0.9)" }}
-      >
-        <span className="text-[#adc6ff] text-[20px] font-bold tracking-[5px]">
-          Cont/x
-        </span>
-      </header>
+      <AppHeader />
 
       {/* ── Main canvas ── */}
       <main className="flex-grow flex items-center justify-center px-6 py-4 relative overflow-hidden">
@@ -158,17 +143,11 @@ export function LoginScreen() {
           }}
         />
 
-        <div
-          className="relative z-10 w-full max-w-[400px] bg-[#122131] rounded-xl p-9"
-          style={{
-            borderTop: "4px solid #adc6ff",
-            boxShadow: "0 20px 40px rgba(0,0,0,0.45)",
-          }}
-        >
-          <h1 className="text-[26px] font-semibold text-[#d4e4fa] leading-tight mb-1.5">
+        <div className="relative z-10 w-full max-w-[400px] bg-[var(--bg-card)] rounded-xl p-9 shadow-[0_20px_40px_rgba(0,0,0,0.45)]">
+          <h1 className="text-[26px] font-semibold text-[var(--text-primary)] leading-tight mb-1.5">
             Access Portal
           </h1>
-          <p className="text-[#c2c6d6] text-[13px] leading-relaxed mb-7">
+          <p className="text-[var(--text-secondary)] text-[13px] leading-relaxed mb-7">
             Enter your institutional credentials to begin the session.
           </p>
 
@@ -179,14 +158,13 @@ export function LoginScreen() {
               type="text"
               value={idNumber}
               onChange={(e) => setIdNumber(e.target.value)} // updates state on every keystroke
-              placeholder="e.g. 2021-00123"
-              className="w-full bg-[#0d1c2d] border border-[#424754] rounded-lg px-3.5 py-[11px] text-[13px] text-[#d4e4fa] outline-none box-border"
-              style={{ fontFamily: "'Inter', sans-serif" }}
+              placeholder="e.g. 2021000123"
+              className="w-full bg-[var(--bg-card)] border border-[var(--bg-sidebar)] rounded-lg px-3.5 py-[11px] text-[13px] text-[var(--text-primary)] outline-none box-border font-[var(--font-body)]"
             />
           </div>
 
           {/* Password field — now controlled and wired to state */}
-          <div className="mb-3">
+          <div className="mb-3">  
             <FieldLabel text="Password" icon={<LockIcon />} />
             <div className="relative">
               <input
@@ -194,14 +172,13 @@ export function LoginScreen() {
                 value={password}
                 onChange={(e) => setPassword(e.target.value)}
                 onKeyDown={(e) => e.key === "Enter" && handleLogin()} // lets student press Enter to submit
-                placeholder=""
-                className="w-full bg-[#0d1c2d] border border-[#424754] rounded-lg px-3.5 py-[11px] pr-10 text-[13px] text-[#d4e4fa] outline-none box-border"
-                style={{ fontFamily: "'Inter', sans-serif" }}
+                placeholder="Enter Password"
+                className="w-full border rounded-lg px-3.5 py-[11px] text-[13px] outline-none box-border font-['Inter', sans-serif] bg-[var(--color-primary-content)] border-[var(--color-base-content)] text-[var(--color-primary)]"
               />
               <button
                 type="button"
                 onClick={() => setShowPassword(!showPassword)}
-                className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer text-[#8c909f] flex items-center p-0"
+                className="absolute right-3 top-1/2 -translate-y-1/2 bg-transparent border-none cursor-pointer text-[var(--text-secondary)] flex items-center p-0"
               >
                 <EyeIcon visible={showPassword} />
               </button>
@@ -211,7 +188,7 @@ export function LoginScreen() {
           <div className="flex justify-end mb-6">
             <button
               type="button"
-              className="bg-transparent border-none cursor-pointer font-mono text-[9px] font-semibold tracking-[0.15em] uppercase text-[#d4e4fa] p-0"
+              className="bg-transparent border-none cursor-pointer font-mono text-[9px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] p-0"
             >
               Request Password Reset
             </button>
@@ -224,20 +201,14 @@ export function LoginScreen() {
             </div>
           )}
 
-          <div className="border-t border-[#424754] mb-5" />
+          <div className="border-t border-[var(--text-primary)] mb-5" />
 
           {/* Login button — now calls handleLogin, disabled while submitting */}
           <button
             type="button"
             onClick={handleLogin}
             disabled={isSubmitting} // prevents double-submit
-            className="w-full inline-flex items-center justify-center gap-2.5 py-3 px-7 rounded-lg border-none text-[14px] font-bold cursor-pointer box-border disabled:opacity-50 disabled:cursor-not-allowed"
-            style={{
-              background: "linear-gradient(135deg, #4d8eff 0%, #adc6ff 100%)",
-              color: "#00285d",
-              fontFamily: "'Inter', sans-serif",
-              boxShadow: "0 0 24px rgba(173,198,255,0.3)",
-            }}
+            className="w-full inline-flex items-center justify-center gap-2.5 py-3 px-7 rounded-lg border-none text-[14px] font-bold cursor-pointer box-border disabled:opacity-50 disabled:cursor-not-allowed bg-[var(--bg-sidebar)] text-[var(--text-inverted)] font-[var(--font-body)] shadow-[var(--shadow)]"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
               <path
@@ -250,44 +221,16 @@ export function LoginScreen() {
             {/* label changes while request is in flight */}
           </button>
 
-          <p
-            className="text-center mt-4 font-mono text-[10px] font-semibold tracking-[0.14em] uppercase"
-            style={{ color: "rgba(194,198,214,0.4)" }}
-          >
+          <p className="text-center mt-4 font-mono text-[10px] font-semibold tracking-[0.14em] uppercase text-[var(--text-primary)]">
             Authorized personnel only
           </p>
         </div>
       </main>
 
       {/* ── Footer — unchanged ── */}
-      <footer
-        className="h-11 flex-shrink-0 flex items-center px-12 border-t border-[#424754] backdrop-blur-sm"
-        style={{ background: "rgba(1,15,31,0.6)" }}
-      >
-        <div className="flex justify-between items-center w-full max-w-[1280px] mx-auto">
-          <div className="flex items-center gap-1.5">
-            <svg
-              width="13"
-              height="13"
-              viewBox="0 0 24 24"
-              fill="none"
-              stroke="#c2c6d6"
-              strokeWidth="1.5"
-            >
-              <path
-                strokeLinecap="round"
-                strokeLinejoin="round"
-                d="M9 12.75 11.25 15 15 9.75m-3-7.036A10.451 10.451 0 0 1 12 4.5c4.756 0 8.773 3.162 10.065 7.498a10.522 10.522 0 0 1-4.293 5.774M6.228 6.228 3 3m3.228 3.228 3.65 3.65m7.894 7.894L21 21m-3.228-3.228-3.65-3.65m0 0a3 3 0 1 0-4.243-4.243m4.242 4.242L9.88 9.88"
-              />
-            </svg>
-            <span className="font-mono text-[10px] font-semibold tracking-[0.1em] text-[#c2c6d6]">
-              AUTH: RSA-2048 ENCRYPTED
-            </span>
-          </div>
-          <span
-            className="font-mono text-[10px]"
-            style={{ color: "rgba(194,198,214,0.35)" }}
-          >
+      <footer className="h-11 flex-shrink-0 flex items-center px-12 border-t border-[#424754] backdrop-blur-sm bg-[var(--bg-footer)]">
+        <div className="flex justify-end items-center w-full max-w-[1280px] mx-auto">
+          <span className="font-mono text-[10px] text-[var(--text-fine-print)]">
             SYSTEM VER: 4.2.0-ACADEMIC
           </span>
         </div>
