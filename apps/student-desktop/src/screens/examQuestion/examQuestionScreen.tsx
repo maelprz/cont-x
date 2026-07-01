@@ -49,7 +49,7 @@ const MOCK_CODING_QUESTION: CodingQuestion = {
     'Time complexity: O(n²) preferred',
   ],
   starterCode: `function longestPalindrome(s) {\n  // Write your code here\n  let result = "";\n\n  return result;\n}`,
-  filename: 'solution.js',
+  filename: 'solution.c',
   isFlagged: false,
 };
 
@@ -116,7 +116,7 @@ function QuestionMapGrid({
           {number}
           {status === 'flagged' && number !== currentNumber && (
             <span
-              className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[#ffb4ab]"
+              className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[var(--warning-icon)]"
             />
           )}
         </button>
@@ -142,27 +142,27 @@ function CodeEditor({
   return (
     <div className="flex flex-col h-full">
       {/* Editor toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[#424754] flex-shrink-0">
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-sidebar)] flex-shrink-0">
         <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[#c2c6d6]">
+          <span className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-inverted-secondary)]">
             {filename}
           </span>
           <div className="flex gap-1.5">
             {[0, 1, 2].map((i) => (
-              <span key={i} className="w-2 h-2 rounded-full bg-[#424754]" />
+              <span key={i} className="w-2 h-2 rounded-full bg-[var(--text-inverted-secondary)]" />
             ))}
           </div>
         </div>
         <div className="flex items-center gap-2">
           <button
             onClick={onRunTests}
-            className="px-3 py-1.5 rounded-lg border border-[#424754] bg-transparent text-[#c2c6d6] text-[12px] font-semibold font-mono cursor-pointer hover:border-[#8c909f] hover:text-[#d4e4fa] transition-colors duration-150"
+            className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-inverted-secondary)] text-[12px] font-semibold font-mono cursor-pointer hover:border-[var(--text-inverted)] hover:text-[var(--text-inverted)] transition-colors duration-150"
           >
             Run Tests
           </button>
           <button
             onClick={onRunCode}
-            className="px-3 py-1.5 rounded-lg border-none text-[12px] font-bold font-mono cursor-pointer transition-transform duration-150 hover:scale-[1.02] bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)]"
+            className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[12px] font-bold font-mono cursor-pointer transition-transform duration-150 hover:scale-[1.02] bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)]"
           >
             Run Code
           </button>
@@ -170,19 +170,19 @@ function CodeEditor({
       </div>
 
       {/* Code area */}
-      <div className="flex-grow overflow-auto bg-[#051424] p-4">
+      <div className="flex-grow overflow-auto bg-[var(--bg-app)] p-4">
         <table className="w-full border-collapse">
           <tbody>
             {lines.map((line, i) => (
               <tr key={i} className="leading-6">
-                <td className="pr-4 text-right text-[#424754] font-mono text-[13px] select-none w-8 align-top">
+                <td className="pr-4 text-right text-[var(--text-secondary)] font-mono text-[13px] select-none w-8 align-top">
                   {i + 1}
                 </td>
-                <td className="font-mono text-[13px] text-[#c2c6d6] whitespace-pre align-top">
+                <td className="font-mono text-[13px] text-[var(--text-primary)] whitespace-pre align-top">
                   {/* Very basic syntax highlight — function names in primary */}
                   {line.split(/(\bfunction\b|\breturn\b|\blet\b|\bconst\b|\bvar\b)/).map((part, j) =>
                     ['function', 'return', 'let', 'const', 'var'].includes(part)
-                      ? <span key={j} className="text-[#adc6ff]">{part}</span>
+                      ? <span key={j} className="text-[var(--warning-text)]">{part}</span>
                       : <span key={j}>{part}</span>
                   )}
                 </td>
@@ -217,8 +217,8 @@ function MCQOptions({
               flex items-start gap-4 w-full max-w-full text-left px-5 py-4 rounded-lg border
               cursor-pointer transition-all duration-150 box-border overflow-hidden
               ${isSelected
-                ? 'border-[#adc6ff] bg-[#adc6ff]/10'
-                : 'border-[#424754] bg-[#0d1c2d] hover:border-[#8c909f]'
+                ? 'border-[var(--text-primary)] bg-[var(--bg-app)]'
+                : 'border-[var(--border-subtle)] bg-[var(--bg-sidebar)]'
               }
             `}
           >
@@ -228,15 +228,15 @@ function MCQOptions({
                 flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center
                 font-mono text-[13px] font-bold border transition-colors duration-150
                 ${isSelected
-                  ? 'bg-[#adc6ff] text-[#00285d] border-[#adc6ff]'
-                  : 'bg-transparent text-[#8c909f] border-[#424754]'
+                  ? 'bg-[var(--bg-sidebar)] text-[var(--text-inverted)] border-[var(--text-subtle)]'
+                  : 'bg-[var(--bg-app)] text-[var(--text-primary)] border-[var(--border-primary)]'
                 }
               `}
             >
               {id}
             </span>
             <span
-              className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? 'text-[#d4e4fa]' : 'text-[#c2c6d6]'}`}
+              className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? 'text-[var(--text-primary)]' : 'text-[var(--text-inverted)]'}`}
             >
               {text}
             </span>
@@ -291,32 +291,32 @@ export function ExamQuestionScreen({
   
   return (
     <div
-      className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden bg-[var(--bg-app)] bg-[radial-gradient(circle_at_2px_2px,rgba(255,255,255,0.03)_1px,transparent_0)] bg-[length:32px_32px] font-sans"
+      className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden bg-[var(--bg-sidebar)]"
     >
       {/* ── Top navigation bar ──────────────────────────────────────── */}
       <header
-        className="h-14 flex-shrink-0 flex items-center px-6 border-b border-[var(--border-primary)] backdrop-blur-md z-10 bg-[color:rgba(18,33,49,0.95)]"
+        className="h-14 flex-shrink-0 flex items-center px-6 border-b border-[var(--border-primary)] backdrop-blur-md z-10 bg-[var(--bg-sidebar)]"
       >
         <div className="flex items-center justify-between w-full gap-4">
           {/* Brand */}
-          <div className="flex flex-col gap-0.5 flex-shrink-0">
-            <span className="text-[#adc6ff] text-lg font-bold tracking-tight">
+          <div className="flex flex-row items-center gap-5 flex-shrink-0">
+            <span className="text-[var(--text-inverted)] text-lg font-bold tracking-tight">
               Cont/x
             </span>
-            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-secondary)]">
+            <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-inverted-secondary)]">
               {examTitle}
             </span>
           </div>
           {/* Progress */}
           <div className="flex flex-col items-center gap-1 flex-grow max-w-xs">
-            <span className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[#8c909f]">
+            <span className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--text-inverted-secondary)]">
               Assessment Progress
             </span>
-            <div className="w-full h-1.5 bg-[var(--bg-card)] rounded-full overflow-hidden grid grid-cols-[repeat(100,minmax(0,1fr))] gap-[1px] p-[1px]">
+            <div className="w-full h-1.5 bg-[var(--bg-app)] rounded-full overflow-hidden grid grid-cols-[repeat(100,minmax(0,1fr))]">
               {Array.from({ length: 100 }, (_, index) => (
                 <span
                   key={index}
-                  className={index < progressPct ? 'rounded-full bg-[#adc6ff]' : 'rounded-full bg-transparent'}
+                  className={index < progressPct ? 'rounded-full bg-[var(--text-secondary)]' : 'rounded-full bg-transparent'}
                 />
               ))}
             </div>
@@ -324,13 +324,13 @@ export function ExamQuestionScreen({
 
           {/* Timer — height capped to fit header row */}
           <div
-            className="flex items-center gap-2 px-3 rounded-lg border border-[var(--border-primary)] flex-shrink-0 h-9 bg-[color:rgba(18,33,49,0.9)]"
+            className="flex items-center gap-2 px-3 rounded-lg border border-[var(--border-subtle)] flex-shrink-0 h-9"
           >
             <div className="flex flex-col items-end justify-center leading-none">
-              <span className="font-mono text-[8px] font-semibold tracking-[0.15em] uppercase text-[#8c909f]">
+              <span className="font-mono text-[8px] font-semibold tracking-[0.15em] uppercase text-[var(--text-inverted-secondary)]">
                 Time Left
               </span>
-              <span className="font-mono text-[15px] font-bold text-[#adc6ff] leading-tight tracking-tight">
+              <span className="font-mono text-[15px] font-bold text-[var(--text-inverted)] leading-tight tracking-tight">
                 {formatTime(timeLeftSeconds)}
               </span>
             </div>
@@ -344,71 +344,42 @@ export function ExamQuestionScreen({
       {/* ── Body: sidebar + content ──────────────────────────────────── */}
       <div className="flex flex-grow overflow-hidden">
 
-        {/* ── Left sidebar: question map ─────────────────────────────── */}
-        <aside className="w-[220px] flex-shrink-0 flex flex-col border-r border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
-          <div className="p-4 flex-grow">
-            <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[#8c909f] mb-3">
-              Question Map
-            </p>
-            <QuestionMapGrid
-              items={questionMap}
-              currentNumber={question.number}
-              onNavigate={onNavigate}
-            />
-          </div>
-
-          {/* Legend */}
-          <div className="px-4 pb-4 flex flex-col gap-2 border-t border-[#424754] pt-3">
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-[var(--bg-card)] border border-[var(--border-primary)]" />
-              <span className="font-mono text-[10px] text-[#8c909f]">Answered</span>
-            </div>
-            <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-transparent border border-dashed border-[var(--border-primary)] relative">
-                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[var(--warning-icon)]" />
-              </span>
-              <span className="font-mono text-[10px] text-[#8c909f]">Flagged</span>
-            </div>
-          </div>
-        </aside>
-
-        {/* ── Centre: question pane ──────────────────────────────────── */}
+        {/* ── Left Pane: question pane ──────────────────────────────────── */}
         <section
-          className={`flex flex-col overflow-y-auto border-r border-[var(--border-primary)] min-w-0 ${isCoding ? 'w-[420px] flex-shrink-0' : 'w-full flex-shrink-0'}`}
+          className={`flex flex-col overflow-y-auto bg-[var(--bg-app)] border-r border-[var(--border-primary)] min-w-0 ${isCoding ? 'w-[420px] flex-shrink-0' : 'flex-1'}`}
         >
           {/* Question header */}
           <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
-            <h2 className="text-[22px] font-semibold text-[#d4e4fa]">
+            <h2 className="text-[22px] font-semibold text-[var(--text-primary)] leading-tight">
               {question.title}
             </h2>
             <button
               onClick={() => onFlag?.(question.number)}
               className={`
                 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer
-                transition-colors duration-150 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase
+                transition-colors duration-150 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase bg-[var(--warning-primary)] hover:bg-[var(--warning-secondary)]
                 ${question.isFlagged
                   ? 'border-[var(--warning-icon)] text-[var(--warning-icon)] bg-[color:var(--warning-accent)]'
-                  : 'border-[var(--border-primary)] text-[var(--text-secondary)] hover:border-[var(--text-secondary)] hover:text-[var(--text-fine-print)]'
+                  : 'border-[var(--border-primary)] text-[var(--text-primary)] hover:border-[var(--text-secondary)] hover:text-[var(--text-secondary)]'
                 }
               `}
             >
               <svg width="13" height="13" viewBox="0 0 24 24" fill="none"
-                stroke={question.isFlagged ? 'var(--warning-icon)' : 'var(--text-secondary)'} strokeWidth="1.5">
+                stroke={question.isFlagged ? 'var(--warning-icon)' : 'var(--text-primary)'} strokeWidth="1.5">
                 <path strokeLinecap="round" strokeLinejoin="round" d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5" />
               </svg>
-              Flag for Review
             </button>
           </div>
           {/* Question body */}
           <div className="px-6 pb-4 min-w-0">
-            <p className="text-[15px] text-[#c2c6d6] leading-relaxed mb-5">
+            <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed mb-5">
               {question.body}
             </p>
 
             {/* Coding: code snippet example */}
             {isCoding && codingQ?.codeSnippet && (
               <div
-                className="rounded-lg p-4 mb-5 font-mono text-[13px] leading-relaxed overflow-x-auto bg-[color:rgba(13,28,45,0.8)] border border-[var(--border-primary)]"
+                className="rounded-lg p-4 mb-5 font-mono text-[13px] leading-relaxed overflow-x-auto bg-[var(--bg-sidebar)] border border-[var(--border-primary)]"
               >
                 {codingQ.codeSnippet.split('\n').map((line, i) => {
                   const isComment = line.trim().startsWith('//');
@@ -436,7 +407,7 @@ export function ExamQuestionScreen({
                 </p>
                 <ul className="flex flex-col gap-2">
                   {codingQ.constraints.map((c, i) => (
-                    <li key={i} className="flex items-start gap-2 text-[13px] text-[#c2c6d6]">
+                    <li key={i} className="flex items-start gap-2 text-[13px] text-[var(--text-secondary)]">
                       <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--border-primary)] flex-shrink-0" />
                       {c}
                     </li>
@@ -456,29 +427,56 @@ export function ExamQuestionScreen({
           </div>
         </section>
 
-        {/* ── Right pane: code editor (coding only) ─────────────────── */}
+        {/* ── Center Pane: Code editor (coding only) ─────────────────── */}
         {isCoding && codingQ && (
           <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
             <CodeEditor
               code={codingQ.starterCode ?? ''}
-              filename={codingQ.filename ?? 'solution.js'}
+              filename={codingQ.filename ?? 'solution.c'}
               onRunTests={onRunTests}
               onRunCode={onRunCode}
             />
           </section>
         )}
+        {/* ── Right sidebar: question map ─────────────────────────────── */}
+        <aside className="w-[220px] flex-shrink-0 flex flex-col border-l border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
+          <div className="p-4 flex-grow">
+            <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--text-inverted-secondary)] mb-3">
+              Question Map
+            </p>
+            <QuestionMapGrid
+              items={questionMap}
+              currentNumber={question.number}
+              onNavigate={onNavigate}
+            />
+          </div>
+
+          {/* Legend */}
+          <div className="px-4 pb-4 flex flex-col gap-2 border-t border-[var(--border-primary)] pt-3">
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-sm bg-[var(--bg-card)] border border-[var(--border-primary)]" />
+              <span className="font-mono text-[10px] text-[var(--text-inverted-secondary)]">Answered</span>
+            </div>
+            <div className="flex items-center gap-2">
+              <span className="w-3 h-3 rounded-sm bg-transparent border border-dashed border-[var(--border-primary)] relative">
+                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[var(--warning-icon)]" />
+              </span>
+              <span className="font-mono text-[10px] text-[var(--text-inverted-secondary)]">Flagged</span>
+            </div>
+          </div>
+        </aside>
       </div>
 
       {/* ── Bottom action bar ───────────────────────────────────────── */}
       <footer
-        className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-t border-[var(--border-primary)] backdrop-blur-sm bg-[color:rgba(12,28,45,0.95)]"
+        className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-t border-[var(--border-primary)] backdrop-blur-sm bg-[var(--bg-sidebar)]"
       >
-        {/* Previous / Next-or-Submit */}
+        {/* Previous */}
         <div className="flex items-center gap-3">
           <button
             onClick={onPrevious}
             disabled={question.number <= 1}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-fine-print)] text-[13px] font-semibold cursor-pointer hover:border-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2">
               <path strokeLinecap="round" strokeLinejoin="round" d="M15.75 19.5 8.25 12l7.5-7.5" />
@@ -489,7 +487,7 @@ export function ExamQuestionScreen({
         </div>
 
         {/* Auto-save indicator */}
-        <div className="flex flex-col items-end gap-0.5">
+        <div className="flex flex-col items-center gap-0.5">
           <div className="flex items-center gap-1.5">
             <span className="w-2 h-2 rounded-full bg-[var(--accent-green)]" />
             <span className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[#8c909f]">
@@ -506,7 +504,7 @@ export function ExamQuestionScreen({
             className={
               isLastQuestion
                 ? 'flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]'
-                : 'flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-fine-print)] text-[13px] font-semibold cursor-pointer hover:border-[var(--text-secondary)] hover:text-[var(--text-primary)] transition-colors duration-150'
+                : 'flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150'
             }
           >
             {isLastQuestion ? (

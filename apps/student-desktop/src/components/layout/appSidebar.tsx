@@ -94,7 +94,7 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
         type="button"
         onClick={handleLogout}
         aria-label="Log out"
-        className="mt-auto flex items-center gap-2.5 px-4 py-3 border-t border-[var(--border-primary)] text-[var(--text-inverted-secondary)] text-sm bg-transparent cursor-pointer hover:text-[var(--text-inverted)] w-full text-left border-none"
+        className="mt-auto flex items-center gap-2.5 px-4 py-3 border-none text-[var(--text-inverted-secondary)] text-sm bg-transparent cursor-pointer hover:text-[var(--text-inverted)]"
       >
         <LogOut size={16} />
         {!isCollapsed && <span>Log Out</span>}

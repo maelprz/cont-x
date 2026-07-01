@@ -13,9 +13,10 @@
     --accent-green: #3c6200; /* STUDENT badge green */
 
     /* Icons — tinted from sidebar navy */
-    --icon-primary: rgba(16, 24, 40, 0.3);
-    --icon-border: rgba(16, 24, 40, 0.2);
-
+    --icon-fill: #f8f8f8;;
+    --icon-primary: rgba(39, 71, 135, 0.3);
+    --icon-border: rgba(190, 195, 206, 0.2);
+    
     /* Text — sampled from headings/labels in the screenshot */
     --text-primary: #101828; /* headings, e.g. "User Directory" */
     --text-secondary: #5c5a58; /* descriptive/body gray text */
