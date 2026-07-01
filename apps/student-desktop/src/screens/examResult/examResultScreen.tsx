@@ -93,7 +93,7 @@ export function ExamResultScreen({
         </span>
       </div>
 
-      <main className="flex flex-col gap-8 px-8 pb-8 pt-6">
+      <main className="flex flex-col gap-8 px-8 pb-20 pt-20">
 
         {/* ── Score card ── */}
         <section className="bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-app)] border border-[var(--accent-blue)]/40 shadow-[0_8px_32px_rgba(0,0,0,0.35)] rounded-2xl p-7 flex flex-col gap-5">
@@ -138,7 +138,7 @@ export function ExamResultScreen({
           <button
             type="button"
             onClick={handleReturnToDashboard}
-            className="flex items-center gap-1.5 bg-[var(--bg-card)] border border-[var(--border-subtle)] text-[var(--text-primary)] rounded-lg px-5 py-2.5 text-sm font-medium hover:bg-white/[0.04] whitespace-nowrap"
+            className="flex items-center gap-1.5 bg-[var(--bg-sidebar)] border border-[var(--border-primary)] text-[var(--text-inverted)] rounded-lg px-5 py-2.5 text-sm font-medium hover:scale-[1.05] transition-colors duration-200"
           >
             <LayoutDashboard size={15} />
             Return to Dashboard
@@ -146,7 +146,7 @@ export function ExamResultScreen({
         </div>
       </main>
 
-      <footer className="px-8 py-4 border-t border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs text-center">
+      <footer className="mt-auto px-12 py-4 bg-[var(--bg-footer)] border-t border-[var(--border-primary)] text-[var(--text-fine-print)] text-xs items-center text-center">
         <span>Cont/x — Development Build</span>
       </footer>
     </div>
