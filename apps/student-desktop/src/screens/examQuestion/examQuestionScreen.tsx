@@ -37,7 +37,7 @@ const MOCK_QUESTION_MAP: QuestionMapItem[] = [
 ];
 
 const MOCK_CODING_QUESTION: CodingQuestion = {
-  number: 7,
+  number: 20,
   totalQuestions: 20,
   type: 'coding',
   title: 'Question 7',

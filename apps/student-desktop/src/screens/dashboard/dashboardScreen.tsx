@@ -4,14 +4,8 @@ import { ArrowRight, TrendingUp } from "lucide-react"; // pre-made icon componen
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
-// no CSS import — the body below is Tailwind now; the header block keeps its own inline styles
 
-// Duplicated from ExamConfirmationScreen's own color object — kept as raw inline styles
-// to stay byte-for-byte consistent with that copy, since we chose NOT to share one header component.
-
-// TEMPORARY mock identity — Login is skipped, so there's no real logged-in student yet.
 const mockStudentName = "Alex";
-const mockStudentId = "2021-00001";
 
 // Shape of one row in the Previous Exams table.
 interface ExamHistoryEntry {
@@ -63,17 +57,8 @@ export function DashboardScreen(_props: DashboardScreenProps) {
     navigateTo("examConfirmation");
   }
 
-  const initials = mockStudentName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
-
   return (
-    // flex flex-col: stacks header, hero, and content vertically
-    <div className="flex flex-col">
-      {/* Duplicated header bar — unchanged, kept as raw inline styles on purpose */}
+    <div className="flex flex-col h-screen overflow-y-auto bg-[var(--bg-app)] text-[var(--text-primary)]">
       <AppHeader />
       {/* "Welcome back" hero — converted to Tailwind */}
       <div className="flex items-start justify-between gap-4 px-8 pt-8">
@@ -86,13 +71,9 @@ export function DashboardScreen(_props: DashboardScreenProps) {
             track of upcoming and completed exams.
           </p>
         </div>
-        {/* TODO: swap for <LockdownStatusIndicator /> once that's built, in a later stage */}
-        <span className="font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] border border-[var(--border-subtle)] rounded-full px-3 py-1 whitespace-nowrap">
-          No Active Session
-        </span>
       </div>
 
-      <main className="flex flex-col gap-10 px-8 pb-8 pt-6">
+      <main className="flex flex-col gap-10 px-8 pb-12 pt-6">
         {/* Card where the student enters their exam code */}
         <section className="bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-app)] border border-[var(--accent-blue)]/40 shadow-[0_8px_32px_rgba(0,0,0,0.35)] rounded-2xl p-7 flex items-center justify-between gap-6 flex-wrap">
           <div>
@@ -110,7 +91,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
               placeholder="Exam Code (e.g. CS101-42)"
               value={examCodeInput}
               onChange={handleExamCodeChange}
-              className="bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-lg px-3.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-w-[200px]"
+              className="bg-[var(--bg-app)] border border-[var(--border-primary)] rounded-lg px-2.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-w-[200px]"
             />
             <button
               type="button"
@@ -218,7 +199,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
         </section>
       </main>
 
-      <footer className="px-8 py-4 border-t border-[var(--border-subtle)] text-[var(--text-secondary)] text-xs text-center">
+      <footer className="mt-auto px-12 py-4 bg-[var(--bg-footer)] border-t border-[var(--border-primary)] text-[var(--text-fine-print)] text-xs items-center text-center">
         <span>Cont/x — Development Build</span>
       </footer>
     </div>

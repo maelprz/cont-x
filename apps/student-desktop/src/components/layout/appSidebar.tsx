@@ -32,25 +32,22 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
     "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm cursor-pointer";
   // Extra classes only the currently-active nav item gets.
   const navItemActiveClasses =
-    "bg-[var(--accent-blue)]/15 text-[var(--accent-blue)]";
+    "bg-[var(--bg-sidebar)] text-[var(--text-inverted)] font-semibold";
   // Extra classes every OTHER (inactive) nav item gets.
-  const navItemInactiveClasses = "text-[var(--text-secondary)]";
+  const navItemInactiveClasses = "text-[var(--text-inverted-secondary)]";
 
   return (
     <aside
       // bug fix: this used to be wrapped in single quotes, so ${...} never actually
       // interpolated — it was literal text. Backticks are required for that syntax to work.
-      className={`flex flex-col shrink-0 transition-[width] duration-200 bg-[var(--bg-sidebar)] border-r border-[var(--border-subtle)] ${
+      className={`flex flex-col shrink-0 transition-[width] duration-200 bg-[var(--bg-sidebar)] border-r border-[var(--border-primary)] ${
         isCollapsed ? "w-16" : "w-70"
       }`}
     >
-      <div className="flex items-center justify-between px-4 h-14 border-b border-[var(--border-subtle)]">
+      <div className="flex items-center justify-between px-4 h-14">
         {!isCollapsed && ( // only render the brand text when there's room to show it
           <div className="flex flex-col">
-            <span className="text-[var(--text-primary)] font-bold text-lg">
-              Cont/x
-            </span>
-            <span className="text-[var(--text-secondary)] text-[10px] uppercase tracking-wide mt-0.5">
+            <span className="text-[var(--text-inverted)] text-[10px] uppercase tracking-wide mt-0.5">
               Exam Control · Secure Environment
             </span>
           </div>
@@ -59,7 +56,7 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
           type="button" // not a form-submit button
           onClick={handleToggleCollapse}
           aria-label={isCollapsed ? "Expand sidebar" : "Collapse sidebar"} // screen-reader label, since this button has no visible text
-          className="bg-transparent border border-[var(--border-subtle)] rounded-md text-[var(--text-secondary)] cursor-pointer p-1 flex items-center"
+          className="bg-transparent border hover:border-[var(--border-primary)] rounded-md text-[var(--text-inverted)] cursor-pointer p-1 flex items-center"
         >
           {isCollapsed ? <ChevronRight size={16} /> : <ChevronLeft size={16} />}
         </button>
@@ -92,28 +89,12 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
           {!isCollapsed && <span>Archive</span>}
         </div>
       </nav>
-      {/* mt-auto pushes this footer block to the bottom of the sidebar, regardless of nav item count */}
-      <div className="mt-auto flex items-center gap-2.5 p-4 border-t border-[var(--border-subtle)]">
-        <div className="w-8 h-8 rounded-full bg-[var(--accent-blue)]/15 text-[var(--accent-blue)] flex items-center justify-center font-semibold shrink-0">
-          G {/* "G" for Guest — replace once real auth exists */}
-        </div>
-        {!isCollapsed && (
-          <div className="flex flex-col overflow-hidden">
-            <span className="text-[var(--text-primary)] text-[13px] font-medium">
-              Guest Student
-            </span>
-            <span className="text-[var(--text-secondary)] text-[11px]">
-              No active session
-            </span>
-          </div>
-        )}
-      </div>
 
       <button
         type="button"
         onClick={handleLogout}
         aria-label="Log out"
-        className="flex items-center gap-2.5 px-4 py-3 border-t border-[var(--border-subtle)] text-[var(--text-secondary)] text-sm bg-transparent cursor-pointer hover:text-[var(--text-primary)] w-full text-left"
+        className="mt-auto flex items-center gap-2.5 px-4 py-3 border-t border-[var(--border-primary)] text-[var(--text-inverted-secondary)] text-sm bg-transparent cursor-pointer hover:text-[var(--text-inverted)] w-full text-left border-none"
       >
         <LogOut size={16} />
         {!isCollapsed && <span>Log Out</span>}

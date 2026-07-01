@@ -14,9 +14,9 @@ export function AppHeader({
     .toUpperCase();
 
   return (
-    <header className="h-14 flex items-center px-8 bg-[var(--bg-sidebar)]/90 backdrop-blur-md border-b border-[#424754]">
+    <header className="h-14 flex items-center px-8 bg-[var(--bg-sidebar)]">
       <div className="flex justify-between items-center w-full">
-        <span className="text-[#adc6ff] text-lg font-bold tracking-[4px]">
+        <span className="text-[var(--text-inverted)] text-lg font-bold tracking-[4px]">
           Cont/x
         </span>
 
@@ -29,7 +29,7 @@ export function AppHeader({
                 height="14"
                 viewBox="0 0 24 24"
                 fill="none"
-                stroke="var(--text-secondary)"
+                stroke="var(--text-inverted)"
                 strokeWidth="1.5"
               >
                 <path
@@ -38,7 +38,7 @@ export function AppHeader({
                   d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z"
                 />
               </svg>
-              <span className="font-[var(--font-label)] text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--text-secondary)]">
+              <span className="font-[var(--font-label)] text-[10px] font-mono tracking-[0.18em] uppercase text-[var(--text-inverted)]">
                 Secure Terminal Session
               </span>
             </div>
@@ -46,16 +46,11 @@ export function AppHeader({
             <div className="w-px h-5 bg-[#424754]" />
 
             <div className="flex items-center gap-2.5">
-              <div className="w-[30px] h-[30px] rounded-full bg-[#273647] border border-[#424754] flex items-center justify-center">
-                <span className="font-[var(--font-label)] text-[10px] font-semibold text-[#adc6ff]">
-                  {initials}
-                </span>
-              </div>
               <div>
-                <p className="text-[13px] font-semibold text-[var(--text-primary)] leading-none m-0">
+                <p className="text-[13px] font-semibold text-[var(--text-inverted)] leading-none m-0">
                   {studentName}
                 </p>
-                <p className="font-[var(--font-label)] text-[10px] text-[var(--text-secondary)] mt-0.5 m-0">
+                <p className="font-[var(--font-label)] text-[10px] text-[var(--text-inverted-secondary)] mt-0.5 m-0">
                   {studentId}
                 </p>
               </div>
