@@ -6,7 +6,6 @@ export type UserRole = "teacher" | "student";
 export interface UserDirectoryEntry {
   id: string;          // internal row id
   name: string;        // full display name
-  initials: string;    // for the avatar badge, e.g. "DA"
   systemId: string;    // e.g. "T-48293" or "S-99218"
   email: string;
   role: UserRole;

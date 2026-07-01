@@ -140,7 +140,7 @@ export function LoginScreen() {
             <div className="relative">
               <input
                 type={showPassword ? 'text' : 'password'}
-                placeholder="Enter User Password"
+                placeholder="Enter Password"
                 className="w-full border rounded-lg px-3.5 py-[11px] pr-10 text-[13px] outline-none box-border"
                 style={{
                   fontFamily: "'Inter', sans-serif",
@@ -212,15 +212,7 @@ export function LoginScreen() {
           borderColor: 'var(--color-base-300)',
         }}
       >
-        <div className="flex justify-between items-center w-full max-w-[1280px] mx-auto">
-          <div className="flex items-center gap-1.5">
-            <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="var(--color-base-200)" strokeWidth="1.5">
-              <path strokeLinecap="round" strokeLinejoin="round" d="M9 12.75 11.25 15 15 9.75m-3-7.036A11.959 11.959 0 0 1 3.598 6 11.99 11.99 0 0 0 3 9.749c0 5.592 3.824 10.29 9 11.623 5.176-1.332 9-6.03 9-11.622 0-1.31-.21-2.571-.598-3.751h-.152c-3.196 0-6.1-1.248-8.25-3.285Z" />
-            </svg>
-            <span className="font-mono text-[10px] font-semibold tracking-[0.1em]" style={{ color: 'var(--color-base-200)' }}>
-              AUTH: RSA-2048 ENCRYPTED
-            </span>
-          </div>
+        <div className="flex justify-end items-center w-full max-w-[1280px] mx-auto">
           <span className="font-mono text-[10px]" style={{ color: 'color-mix(in oklab, var(--color-base-200) 35%, transparent)' }}>
             SYSTEM VER: 4.2.0-ACADEMIC
           </span>
