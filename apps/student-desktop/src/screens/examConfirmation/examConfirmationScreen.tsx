@@ -26,14 +26,14 @@ const MOCK_EXAM_DETAILS: ExamDetail[] = [
 
 function DetailCard({ label, value, subtext }: ExamDetail) {
   return (
-    <div className="bg-[#0d1c2d] border border-[#424754] rounded-lg p-4">
-      <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[#8c909f] mb-2">
+    <div className="bg-[var(--side-bar)] border border-[var(--border-primary)] rounded-lg p-4">
+      <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--text-inverted-secondary)] mb-2">
         {label}
       </p>
-      <p className="text-[#d4e4fa] text-[20px] font-semibold leading-tight">
+      <p className="text-[var(--text-inverted)] text-[20px] font-semibold leading-tight">
         {value}
       </p>
-      <p className="text-[#c2c6d6] text-xs mt-1">
+      <p className="text-[var(--text-inverted-secondary)] text-xs mt-1">
         {subtext}
       </p>
     </div>
@@ -76,7 +76,7 @@ export function ExamConfirmationScreen({
   };
 
   return (
-    <div className="h-screen w-full flex flex-col text-[#d4e4fa] overflow-hidden">
+    <div className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden">
       <AppHeader studentName={studentName} studentId={studentId} />
       <SessionVerificationModal
         isOpen={isVerificationOpen}
@@ -86,24 +86,22 @@ export function ExamConfirmationScreen({
       />
 
       {/* ── Main canvas ───────────────────────────────────────────── */}
-      <main className="flex-grow flex items-center justify-center px-6 py-4 relative overflow-hidden">
+      <main className="flex-grow flex items-center justify-center px-6 py-4 relative overflow-hidden bg-[var(--bg-app)]">
         {/* Atmospheric glow */}
         <div className="absolute top-1/2 left-1/2 w-[600px] h-[600px] rounded-full pointer-events-none"/>
 
         <div className="relative z-10 w-full max-w-[860px]">
           {/* ── Card ──────────────────────────────────────────────── */}
-          <div
-            className="bg-[#122131] rounded-xl p-10 overflow-hidden"
-          >
+          <div className="bg-[var(--bg-sidebar)] rounded-xl p-10 overflow-hidden ">
             {/* ── Card header ───────────────────────────────────── */}
             <div className="mb-6">
-              <h1 className="text-[28px] font-bold text-[var(--text-primary)] leading-tight mb-1">
+              <h1 className="text-[28px] font-bold text-[var(--text-inverted)] leading-tight mb-1">
                 {examTitle}
               </h1>
-              <p className="font-mono text-[11px] font-semibold text-[var(--text-secondary)] uppercase tracking-[0.15em] mb-3">
+              <p className="font-mono text-[11px] font-semibold text-[var(--text-inverted-secondary)] uppercase tracking-[0.15em] mb-3">
                 {courseCode} Module
               </p>
-              <p className="text-[var(--text-secondary)] text-[14px] leading-relaxed max-w-[580px]">
+              <p className="text-[var(--text-inverted-secondary)] text-[14px] leading-relaxed max-w-[580px]">
                 Please confirm the details below. Once you start, the system will enter a restricted
                 state to ensure academic integrity. Make sure your environment is quiet and free of
                 unauthorized materials.
@@ -137,11 +135,11 @@ export function ExamConfirmationScreen({
             </div>
 
             {/* ── Action row ────────────────────────────────────── */}
-            <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-[#424754]">
+            <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-[var(--border-primary)]">
               {/* Cancel */}
               <button
                 onClick={handleCancel}
-                className="px-6 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--text-secondary)] text-[14px] font-semibold cursor-pointer transition-colors duration-200 hover:border-[var(--text-secondary)] hover:text-[var(--text-primary)] font-[var(--font-body)]"
+                className="px-6 py-2.5 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-primary)] text-[var(--text-inverted)] text-[14px] font-semibold cursor-pointer transition-colors duration-200 hover:text-[var(--text-inverted-secondary)] font-[var(--font-body)]"
               >
                 Cancel &amp; Return to Dashboard
               </button>
@@ -149,7 +147,7 @@ export function ExamConfirmationScreen({
               {/* Primary CTA */}
               <button
                 onClick={handleStart}
-                className="inline-flex items-center gap-2.5 px-7 py-3 rounded-lg border-none text-[14px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)] font-[var(--font-body)] shadow-[var(--shadow)]"
+                className="inline-flex items-center gap-2.5 px-7 py-3 rounded-lg border border-[var(--border-subtle)] text-[14px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)] font-[var(--font-body)] shadow-[var(--shadow)]"
               >
                 <svg width="16" height="16" viewBox="0 0 24 24" fill="currentColor">
                   <path fillRule="evenodd" d="M12 1.5a5.25 5.25 0 0 0-5.25 5.25v3a3 3 0 0 0-3 3v6.75a3 3 0 0 0 3 3h10.5a3 3 0 0 0 3-3v-6.75a3 3 0 0 0-3-3v-3c0-2.9-2.35-5.25-5.25-5.25Zm3.75 8.25v-3a3.75 3.75 0 1 0-7.5 0v3h7.5Z" clipRule="evenodd" />
