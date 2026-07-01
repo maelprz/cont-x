@@ -1,7 +1,7 @@
 import { useState } from "react";
 import { UserPlus, Pencil, Trash2, Loader2 } from "lucide-react";
-import { AdminHeader } from "../../components/layouts/adminHeader";
-import { AdminSidebar } from "../../components/layouts/adminSidebar";
+import { AdminHeader } from "../../components/layoutAdmin/adminHeader";
+import { AdminSidebar } from "../../components/layoutAdmin/adminSidebar";
 import { useUserManagement } from "../../hooks/useUserManagement";
 import type { CreateUserPayload, UpdateUserPayload } from "../../services/userManagementService";
 

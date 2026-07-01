@@ -158,7 +158,7 @@ export function LoginScreen() {
           {/* Log In button — navigates to dashboard */}
           <button
             type="button"
-            onClick={() => navigateTo('userManagement')}
+            onClick={() => navigateTo('dashboard')}
             className="w-full inline-flex items-center justify-center gap-2.5 py-3 px-7 rounded-lg border-none text-[14px] font-bold cursor-pointer box-border bg-[var(--color-primary)] text-[var(--color-base-100)] font-['Inter', sans-serif]"
           >
             <svg width="15" height="15" viewBox="0 0 24 24" fill="currentColor">
