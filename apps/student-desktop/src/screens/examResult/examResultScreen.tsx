@@ -66,7 +66,7 @@ export function ExamResultScreen({
 
   return (
     // flex flex-col: stacks header, summary heading, and cards vertically
-    <div className="flex flex-col">
+    <div className="flex flex-col h-screen overflow-y-auto bg-[var(--bg-app)] text-[var(--text-primary)]">
       <AppHeader />
 
       {/* "Exam Summary" hero with pass/fail badge */}
