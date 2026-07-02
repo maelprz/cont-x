@@ -7,6 +7,7 @@ import { useRouterLogic } from "./routerLogic";
 import { LoginScreen } from "../screens/login/loginScreen";
 import { UserManagementScreen } from "../screens/userManagement/userManagementScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
+import { ExamLibraryScreen } from "../screens/examLibrary/examLibraryScreen";
 
 const screenComponents: Record<ScreenName, ComponentType> = {
   login: LoginScreen,
@@ -14,6 +15,7 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   auditLogs: UserManagementScreen, // TEMP placeholder until auditLogs screen exists
   dashboard: DashboardScreen,
   exams: DashboardScreen, // TEMP placeholder until exams screen is built
+  examLibrary: ExamLibraryScreen,
   examBuilder: DashboardScreen, // TEMP placeholder until examBuilder screen is built
 };
 

@@ -49,7 +49,6 @@ const MOCK_CODING_QUESTION: CodingQuestion = {
     'Time complexity: O(n²) preferred',
   ],
   starterCode: `function longestPalindrome(s) {\n  // Write your code here\n  let result = "";\n\n  return result;\n}`,
-  filename: 'solution.c',
   isFlagged: false,
 };
 
@@ -129,12 +128,10 @@ function QuestionMapGrid({
 // (swap for MonacoEditorPane when wiring up real editor)
 function CodeEditor({
   code,
-  filename,
   onRunTests,
   onRunCode,
 }: {
   code: string;
-  filename: string;
   onRunTests?: () => void;
   onRunCode?: () => void;
 }) {
@@ -142,21 +139,11 @@ function CodeEditor({
   return (
     <div className="flex flex-col h-full">
       {/* Editor toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-sidebar)] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <span className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-inverted-secondary)]">
-            {filename}
-          </span>
-          <div className="flex gap-1.5">
-            {[0, 1, 2].map((i) => (
-              <span key={i} className="w-2 h-2 rounded-full bg-[var(--text-inverted-secondary)]" />
-            ))}
-          </div>
-        </div>
+      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-app)] flex-shrink-0">
         <div className="flex items-center gap-2">
           <button
             onClick={onRunTests}
-            className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-inverted-secondary)] text-[12px] font-semibold font-mono cursor-pointer hover:border-[var(--text-inverted)] hover:text-[var(--text-inverted)] transition-colors duration-150"
+            className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-secondary)] text-[12px] font-semibold font-mono cursor-pointer hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-colors duration-150"
           >
             Run Tests
           </button>
@@ -432,7 +419,6 @@ export function ExamQuestionScreen({
           <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
             <CodeEditor
               code={codingQ.starterCode ?? ''}
-              filename={codingQ.filename ?? 'solution.c'}
               onRunTests={onRunTests}
               onRunCode={onRunCode}
             />
