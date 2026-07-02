@@ -9,12 +9,14 @@ import {
 } from "lucide-react"; // pre-made icon components
 import type { AppSidebarProps } from "./appSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic"; // this component's expected props
-// no CSS import — every style now lives as Tailwind classes below
+import { useAuthStore } from "../../stores/useAuthStore"; // for logging out
+import { logout } from "../../services/authService"; // for logging out
 
 export function AppSidebar({ activeItem }: AppSidebarProps) {
   // Tracks whether the sidebar shows full labels or just icons. Local only.
   const [isCollapsed, setIsCollapsed] = useState(false);
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const setUser = useAuthStore((state) => state.setUser); // for logging out
 
   // Runs when the student clicks the collapse/expand arrow button.
   function handleToggleCollapse() {
@@ -23,8 +25,14 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
 
   // TODO: wire this up once a real Login screen exists — Login is explicitly out of
   // scope right now, so this intentionally does nothing yet.
-  function handleLogout() {
-    navigateTo("login"); // placeholder — just navigates to a non-existent login screen
+  async function handleLogout() {
+    try {
+      await logout(); // calls the authService logout function
+    } catch {
+    } finally {
+      setUser(null); // clears the user from the store, which will redirect to login
+      navigateTo("login"); // redirect to login screen after logout
+    }
   }
 
   // Shared classes every nav item gets, regardless of active state.
