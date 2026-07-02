@@ -8,6 +8,7 @@ import { LoginScreen } from "../screens/login/loginScreen";
 import { UserManagementScreen } from "../screens/userManagement/userManagementScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamLibraryScreen } from "../screens/examLibrary/examLibraryScreen";
+import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 
 const screenComponents: Record<ScreenName, ComponentType> = {
   login: LoginScreen,
@@ -16,7 +17,7 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   dashboard: DashboardScreen,
   exams: DashboardScreen, // TEMP placeholder until exams screen is built
   examLibrary: ExamLibraryScreen,
-  examBuilder: DashboardScreen, // TEMP placeholder until examBuilder screen is built
+  examBuilder: ExamBuilderScreen, // TEMP placeholder until examBuilder screen is built
 };
 
 export function AppRouter() {
