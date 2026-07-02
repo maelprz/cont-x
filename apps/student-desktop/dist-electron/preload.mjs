@@ -16,6 +16,7 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
 	invoke(...args) {
 		const [channel, ...omit] = args;
 		return electron.ipcRenderer.invoke(channel, ...omit);
-	}
+	},
+	exitApp: () => electron.ipcRenderer.send("exit-app")
 });
 //#endregion
