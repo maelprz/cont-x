@@ -1,11 +1,7 @@
-import { useState } from "react";
 import {
   LayoutDashboard,
-  Radio,
   BookOpen,
   LogOut,
-  ChevronLeft,
-  ChevronRight,
   Shield,
 } from "lucide-react";
 import type { TeacherSidebarProps } from "./teacherSidebar.types";
@@ -13,14 +9,8 @@ import { useRouterLogic } from "../../router/routerLogic";
 
 // Single shared sidebar for all teacher web screens.
 export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
-  // tracks whether the sidebar is collapsed to icons only
-  const [isCollapsed, setIsCollapsed] = useState(false);
 
   const navigateTo = useRouterLogic((state) => state.navigateTo);
-
-  function handleToggleCollapse() {
-    setIsCollapsed((current) => !current); // flips collapsed state
-  }
 
   // shared base classes every nav item gets
   const navItemBase =
@@ -60,27 +50,17 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
           }`}
         >
           <LayoutDashboard size={16} />
-          {!isCollapsed && <span>Dashboard</span>}
+          {<span>Dashboard</span>}
         </button>
 
         <button
-          onClick={() => navigateTo("exams")}
+          onClick={() => navigateTo("examLibrary")}
           className={`${navItemBase} ${
-            activeItem === "exams" ? navItemActive : navItemInactive
-          }`}
-        >
-          <Radio size={16} />
-          {!isCollapsed && <span>Exams</span>}
-        </button>
-
-        <button
-          onClick={() => navigateTo("examBuilder")}
-          className={`${navItemBase} ${
-            activeItem === "examBuilder" ? navItemActive : navItemInactive
+            activeItem === "examLibrary" ? navItemActive : navItemInactive
           }`}
         >
           <BookOpen size={16} />
-          {!isCollapsed && <span>Exam Builder</span>}
+          {<span>Exam Library</span>}
         </button>
       </nav>
 
@@ -93,7 +73,7 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
           style={{ color: "rgba(248,248,248,0.7)" }}
         >
           <LogOut size={16} />
-          {!isCollapsed && <span>Log Out</span>}
+          {<span>Log Out</span>}
         </button>
       </div>
     </aside>
