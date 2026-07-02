@@ -1,116 +1,57 @@
 import { useState } from "react";
-import { ArchiveScreenProps } from "./archiveScreen.types";
+import type { ArchiveScreenProps } from "./archiveScreen.types";
 import { AppHeader } from "../../components/layout/appHeader";
-import {
-  Code2,
-  Sigma,
-  Cpu,
-  Brain,
-  ShieldCheck,
-  ChevronLeft,
-  ChevronRight,
-} from "lucide-react";
-import type { LucideIcon } from "lucide-react";
+import { useAllExamHistory } from "../../hooks/useAllExamHistory"; // real data hook
+import { ChevronLeft, ChevronRight } from "lucide-react";
 
-const mockStudentName = "Alex";
-const mockStudentId = "2021-00001";
-
-interface ArchiveExamEntry {
-  id: string;
-  examName: string;
-  courseCode: string;
-  date: string;
-  time: string;
-  score: string;
-  status: "graded" | "pending";
-  icon: LucideIcon;
-}
-
-const archiveMock: ArchiveExamEntry[] = [
-  {
-    id: "1",
-    examName: "Operating Systems Final Exam",
-    courseCode: "CS-380-SEC4",
-    date: "Oct 14, 2025",
-    time: "14:30 EST",
-    score: "92/100",
-    status: "graded",
-    icon: Code2,
-  },
-  {
-    id: "2",
-    examName: "Advanced Mathematics Midterm",
-    courseCode: "MTH-301-ADV",
-    date: "Oct 08, 2025",
-    time: "09:00 EST",
-    score: "78/100",
-    status: "graded",
-    icon: Sigma,
-  },
-  {
-    id: "3",
-    examName: "Operating Systems Lab Exam",
-    courseCode: "CS-441-OSBE",
-    date: "Sep 29, 2025",
-    time: "16:15 EST",
-    score: "100/100",
-    status: "graded",
-    icon: Cpu,
-  },
-  {
-    id: "4",
-    examName: "Data Structures and Algorithms Final Exam",
-    courseCode: "DAT-505-GRAD",
-    date: "Sep 22, 2025",
-    time: "13:00 EST",
-    score: "Calculating...",
-    status: "pending",
-    icon: Brain,
-  },
-  {
-    id: "5",
-    examName: "Cybersecurity Principles Final Exam",
-    courseCode: "CYB-301-SEC",
-    date: "Sep 15, 2025",
-    time: "10:30 EST",
-    score: "85/100",
-    status: "graded",
-    icon: ShieldCheck,
-  },
-];
-
-const totalExamCount = archiveMock.length;
+const ROWS_PER_PAGE = 5; // how many exams to show per page
 
 export function ArchiveScreen(_props: ArchiveScreenProps) {
-  const [statusFilter, setStatusFilter] = useState<
-    "all" | "graded" | "pending"
-  >("all");
+  const { examHistory, isLoading, error } = useAllExamHistory(); // fetches all exams from Supabase
 
+  const [statusFilter, setStatusFilter] = useState<"all" | "passed" | "failed">(
+    "all",
+  );
   const [sortOrder, setSortOrder] = useState<"asc" | "desc">("desc");
+  const [currentPage, setCurrentPage] = useState(1); // tracks which page the student is on
 
-  const visibleEntries = archiveMock
-    .filter((entry) => statusFilter === "all" || entry.status === statusFilter)
-    .sort((a, b) => {
-      const aTime = new Date(a.date).getTime();
-      const bTime = new Date(b.date).getTime();
-      return sortOrder === "desc" ? bTime - aTime : aTime - bTime;
-    });
+  // filters by pass/fail status
+  const filtered = examHistory.filter((entry) => {
+    if (statusFilter === "all") return true;
+    if (statusFilter === "passed") return entry.passed;
+    if (statusFilter === "failed") return !entry.passed;
+    return true;
+  });
 
-  function handleReviewExam(entry: ArchiveExamEntry) {
-    // Placeholder for review exam logic
-    console.log(`Reviewing exam: ${entry.courseCode}`);
+  // sorts by submitted date
+  const sorted = [...filtered].sort((a, b) => {
+    const aTime = new Date(a.submittedAt).getTime();
+    const bTime = new Date(b.submittedAt).getTime();
+    return sortOrder === "desc" ? bTime - aTime : aTime - bTime;
+  });
+
+  // slices the sorted list into pages
+  const totalPages = Math.max(1, Math.ceil(sorted.length / ROWS_PER_PAGE));
+  const paginated = sorted.slice(
+    (currentPage - 1) * ROWS_PER_PAGE,
+    currentPage * ROWS_PER_PAGE,
+  );
+
+  // resets to page 1 when filter or sort changes
+  function handleStatusFilterChange(value: "all" | "passed" | "failed") {
+    setStatusFilter(value);
+    setCurrentPage(1); // go back to first page when filter changes
   }
 
-  const initials = mockStudentName
-    .split(" ")
-    .map((n) => n[0])
-    .join("")
-    .slice(0, 2)
-    .toUpperCase();
+  function handleSortOrderChange(value: "asc" | "desc") {
+    setSortOrder(value);
+    setCurrentPage(1); // go back to first page when sort changes
+  }
 
   return (
-    <div className="flex flex-col">
+    <div className="flex flex-col h-screen overflow-y-auto bg-[var(--bg-app)]">
       <AppHeader />
+
       <div className="flex items-start justify-between gap-4 px-8 pt-8">
         <div>
           <h1 className="font-[var(--font-headline)] text-[var(--text-primary)] text-2xl mb-2">
@@ -121,36 +62,40 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
             examinations.
           </p>
         </div>
+
+        {/* total exam count card */}
         <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl px-5 py-3 text-center shrink-0">
           <span className="block font-[var(--font-label)] text-[10px] uppercase tracking-wide text-[var(--text-secondary)] mb-1">
             Total Exams
           </span>
           <span className="block text-[var(--text-primary)] text-xl font-semibold">
-            {totalExamCount}
+            {isLoading ? "..." : examHistory.length}
           </span>
         </div>
       </div>
 
       <main className="px-8 py-6 flex flex-col gap-4">
+        {/* filter and sort controls */}
         <div className="flex gap-3">
           <select
             value={statusFilter}
-            onChange={(event) =>
-              setStatusFilter(
-                event.target.value as "all" | "graded" | "pending",
+            onChange={(e) =>
+              handleStatusFilterChange(
+                e.target.value as "all" | "passed" | "failed",
               )
-            } // updates which rows show
+            }
             className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)]"
           >
             <option value="all">Status: All</option>
-            <option value="graded">Status: Graded</option>
-            <option value="pending">Status: Pending</option>
+            <option value="passed">Status: Passed</option>
+            <option value="failed">Status: Failed</option>
           </select>
+
           <select
             value={sortOrder}
-            onChange={(event) =>
-              setSortOrder(event.target.value as "desc" | "asc")
-            } // updates row order
+            onChange={(e) =>
+              handleSortOrderChange(e.target.value as "asc" | "desc")
+            }
             className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)]"
           >
             <option value="desc">Sort: Date (Newest First)</option>
@@ -158,113 +103,151 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
           </select>
         </div>
 
-        <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden">
-          <table className="w-full border-collapse">
-            <thead>
-              <tr className="bg-white/[0.02]">
-                <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
-                  Exam Name
-                </th>
-                <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
-                  Date
-                </th>
-                <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
-                  Score
-                </th>
-                <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
-                  Action
-                </th>
-              </tr>
-            </thead>
-            <tbody>
-              {/* Renders one row per entry that survives the current filter/sort */}
-              {visibleEntries.map((entry, index) => {
-                const ExamIcon = entry.icon; // grabs the icon component for this specific row
-                const isLastRow = index === visibleEntries.length - 1;
-                return (
-                  <tr key={entry.id} className="hover:bg-white/[0.02]">
-                    <td
-                      className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
-                    >
-                      <div className="flex items-center gap-3">
-                        <div className="w-8 h-8 rounded-lg bg-[var(--accent-blue)]/15 text-[var(--accent-blue)] flex items-center justify-center shrink-0">
-                          <ExamIcon size={16} />
-                        </div>
-                        <div>
+        {/* loading state */}
+        {isLoading && (
+          <div className="text-[var(--text-secondary)] text-sm py-8 text-center">
+            Loading exam history...
+          </div>
+        )}
+
+        {/* error state */}
+        {error && (
+          <div className="text-red-400 text-sm py-8 text-center">{error}</div>
+        )}
+
+        {/* empty state */}
+        {!isLoading && !error && examHistory.length === 0 && (
+          <div className="text-[var(--text-secondary)] text-sm py-8 text-center">
+            No completed exams found.
+          </div>
+        )}
+
+        {/* table — only renders when data is ready */}
+        {!isLoading && !error && examHistory.length > 0 && (
+          <>
+            <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="bg-white/[0.02]">
+                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                      Exam Name
+                    </th>
+                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                      Date
+                    </th>
+                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                      Score
+                    </th>
+                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                      Status
+                    </th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {paginated.map((entry, index) => {
+                    const isLastRow = index === paginated.length - 1;
+                    return (
+                      <tr key={entry.id} className="hover:bg-white/[0.02]">
+                        {/* exam name + code */}
+                        <td
+                          className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
+                        >
                           <span className="block text-[var(--text-primary)] text-sm font-medium">
-                            {entry.examName}
+                            {entry.examTitle}
                           </span>
                           <span className="block font-[var(--font-label)] text-xs text-[var(--text-secondary)] mt-0.5">
-                            {entry.courseCode}
+                            {entry.examCode}
                           </span>
-                        </div>
-                      </div>
-                    </td>
-                    <td
-                      className={`py-4 px-5 text-sm ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
-                    >
-                      <span className="block text-[var(--text-primary)]">
-                        {entry.date}
-                      </span>
-                      <span className="block text-[var(--text-secondary)] text-xs mt-0.5">
-                        {entry.time}
-                      </span>
-                    </td>
-                    <td
-                      className={`py-4 px-5 text-sm text-[var(--text-primary)] font-medium ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
-                    >
-                      {entry.score}
-                    </td>
-                    <td
-                      className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
-                    >
-                      <button
-                        type="button"
-                        onClick={() => handleReviewExam(entry)}
-                        className="border border-[var(--accent-blue)]/40 text-[var(--accent-blue)] text-xs font-medium rounded-md px-3 py-1.5 hover:bg-[var(--accent-blue)]/10"
-                      >
-                        Review Exam
-                      </button>
-                    </td>
-                  </tr>
-                );
-              })}
-            </tbody>
-          </table>
-        </div>
+                        </td>
 
-        <div className="flex items-center justify-between mt-5">
-          <span className="text-[var(--text-secondary)] text-xs">
-            Showing 1 to {visibleEntries.length} of {totalExamCount} assessments
-          </span>
-          <div className="flex items-center gap-1">
-            <button
-              type="button"
-              className="text-[var(--text-secondary)] p-1.5 rounded-md hover:bg-white/5"
-            >
-              <ChevronLeft size={14} />
-            </button>
-            {[1, 2, 3, 4].map((pageNumber) => (
-              <button
-                key={pageNumber}
-                type="button"
-                className={`text-xs w-7 h-7 rounded-md ${
-                  pageNumber === 1
-                    ? "bg-[var(--accent-blue)] text-white" // page 1 always shown as "active" — no real pagination yet
-                    : "text-[var(--text-secondary)] hover:bg-white/5"
-                }`}
-              >
-                {pageNumber}
-              </button>
-            ))}
-            <button
-              type="button"
-              className="text-[var(--text-secondary)] p-1.5 rounded-md hover:bg-white/5"
-            >
-              <ChevronRight size={14} />
-            </button>
-          </div>
-        </div>
+                        {/* submitted date */}
+                        <td
+                          className={`py-4 px-5 text-sm text-[var(--text-primary)] ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
+                        >
+                          {entry.submittedAt}
+                        </td>
+
+                        {/* score out of max */}
+                        <td
+                          className={`py-4 px-5 text-sm text-[var(--text-primary)] font-medium ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
+                        >
+                          {entry.totalScore}/{entry.maxScore}
+                        </td>
+
+                        {/* pass/fail badge */}
+                        <td
+                          className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
+                        >
+                          <span
+                            className={`font-[var(--font-label)] text-xs px-2.5 py-1 rounded-full ${
+                              entry.passed
+                                ? "bg-[var(--accent-green)]/15 text-[var(--accent-green)]"
+                                : "bg-[rgba(239,68,68,0.15)] text-[#ef4444]"
+                            }`}
+                          >
+                            {entry.passed ? "Pass" : "Fail"}
+                          </span>
+                        </td>
+                      </tr>
+                    );
+                  })}
+                </tbody>
+              </table>
+            </div>
+
+            {/* pagination controls */}
+            <div className="flex items-center justify-between mt-2">
+              <span className="text-[var(--text-secondary)] text-xs">
+                Showing{" "}
+                {Math.min((currentPage - 1) * ROWS_PER_PAGE + 1, sorted.length)}
+                –{Math.min(currentPage * ROWS_PER_PAGE, sorted.length)} of{" "}
+                {sorted.length} assessments
+              </span>
+
+              <div className="flex items-center gap-1">
+                {/* previous page button */}
+                <button
+                  type="button"
+                  onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  disabled={currentPage === 1} // grayed out on first page
+                  className="text-[var(--text-secondary)] p-1.5 rounded-md hover:bg-white/5 disabled:opacity-30"
+                >
+                  <ChevronLeft size={14} />
+                </button>
+
+                {/* page number buttons */}
+                {Array.from({ length: totalPages }, (_, i) => i + 1).map(
+                  (pageNumber) => (
+                    <button
+                      key={pageNumber}
+                      type="button"
+                      onClick={() => setCurrentPage(pageNumber)} // jumps to that page
+                      className={`text-xs w-7 h-7 rounded-md ${
+                        pageNumber === currentPage
+                          ? "bg-[var(--accent-blue)] text-white"
+                          : "text-[var(--text-secondary)] hover:bg-white/5"
+                      }`}
+                    >
+                      {pageNumber}
+                    </button>
+                  ),
+                )}
+
+                {/* next page button */}
+                <button
+                  type="button"
+                  onClick={() =>
+                    setCurrentPage((p) => Math.min(totalPages, p + 1))
+                  }
+                  disabled={currentPage === totalPages} // grayed out on last page
+                  className="text-[var(--text-secondary)] p-1.5 rounded-md hover:bg-white/5 disabled:opacity-30"
+                >
+                  <ChevronRight size={14} />
+                </button>
+              </div>
+            </div>
+          </>
+        )}
       </main>
     </div>
   );
