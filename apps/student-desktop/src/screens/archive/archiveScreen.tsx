@@ -131,7 +131,7 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
         </div>
       </div>
 
-      <main>
+      <main className="px-8 py-6 flex flex-col gap-4">
         <div className="flex gap-3">
           <select
             value={statusFilter}
@@ -233,7 +233,7 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
           </table>
         </div>
 
-        <div className="flex items-center justify-between">
+        <div className="flex items-center justify-between mt-5">
           <span className="text-[var(--text-secondary)] text-xs">
             Showing 1 to {visibleEntries.length} of {totalExamCount} assessments
           </span>

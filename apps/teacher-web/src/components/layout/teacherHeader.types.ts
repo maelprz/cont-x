@@ -1,6 +1,3 @@
-// Props contract for the shared teacher web header bar.
+// TeacherHeader reads from the auth store directly, so no props are needed.
 
-export interface TeacherHeaderProps {
-  teacherName?: string;
-  teacherId?: string;
-}
+export interface TeacherHeaderProps {}

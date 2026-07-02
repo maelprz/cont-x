@@ -7,7 +7,5 @@ export interface ExamSummaryCard {
 }
 
 export interface DashboardScreenProps {
-  teacherName?: string;
-  teacherId?: string;
   summaryCards?: ExamSummaryCard[];
 }
