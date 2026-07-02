@@ -6,6 +6,7 @@ import { useAuthStore } from "../store/useAuthStore";
 import { useRouterLogic } from "./routerLogic";
 import { LoginScreen } from "../screens/login/loginScreen";
 import { UserManagementScreen } from "../screens/userManagement/userManagementScreen";
+import { AuditLogsScreen } from "../screens/auditLogs/auditLogsScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamLibraryScreen } from "../screens/examLibrary/examLibraryScreen";
 import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
@@ -13,7 +14,7 @@ import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 const screenComponents: Record<ScreenName, ComponentType> = {
   login: LoginScreen,
   userManagement: UserManagementScreen,
-  auditLogs: UserManagementScreen, // TEMP placeholder until auditLogs screen exists
+  auditLogs: AuditLogsScreen,
   dashboard: DashboardScreen,
   exams: DashboardScreen, // TEMP placeholder until exams screen is built
   examLibrary: ExamLibraryScreen,
