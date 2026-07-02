@@ -11,6 +11,7 @@ import type { AppSidebarProps } from "./appSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic"; // this component's expected props
 import { useAuthStore } from "../../stores/useAuthStore"; // for logging out
 import { logout } from "../../services/authService"; // for logging out
+import { ipcRenderer } from "electron"; // for sending messages to the main process
 
 export function AppSidebar({ activeItem }: AppSidebarProps) {
   // Tracks whether the sidebar shows full labels or just icons. Local only.
@@ -31,7 +32,8 @@ export function AppSidebar({ activeItem }: AppSidebarProps) {
     } catch {
     } finally {
       setUser(null); // clears the user from the store, which will redirect to login
-      navigateTo("login"); // redirect to login screen after logout
+      navigateTo("login");
+      window.ipcRenderer.exitApp(); // redirect to login screen after logout
     }
   }
 
