@@ -5,49 +5,14 @@ import { useRouterLogic } from "../../router/routerLogic"; // store controlling 
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 import { useAuthStore } from "../../stores/useAuthStore"; // store controlling the user's auth state
-
-// Shape of one row in the Previous Exams table.
-interface ExamHistoryEntry {
-  id: string;
-  moduleName: string;
-  moduleCode: string;
-  date: string;
-  resultPercent: number;
-  passed: boolean;
-}
-
-// TEMPORARY mock data — stands in for a real call to Supabase/IPC, which doesn't exist yet.
-const examHistoryMock: ExamHistoryEntry[] = [
-  {
-    id: "1",
-    moduleName: "Data Structures & Algorithms",
-    moduleCode: "DSA-402",
-    date: "Oct 24, 2025",
-    resultPercent: 98,
-    passed: true,
-  },
-  {
-    id: "2",
-    moduleName: "Full Stack Integration",
-    moduleCode: "FS-109",
-    date: "Sep 12, 2025",
-    resultPercent: 92,
-    passed: true,
-  },
-  {
-    id: "3",
-    moduleName: "Database Schema Design",
-    moduleCode: "DB-221",
-    date: "Aug 28, 2025",
-    resultPercent: 89,
-    passed: true,
-  },
-];
+import { useExamHistory } from "../../hooks/useExamHistory"; // custom hook for fetching exam history
 
 export function DashboardScreen(_props: DashboardScreenProps) {
   const [examCodeInput, setExamCodeInput] = useState("");
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const user = useAuthStore((state) => state.user);
+
+  const { examHistory, isLoading, error } = useExamHistory(); // fetch exam history using the custom hook
 
   function handleExamCodeChange(event: ChangeEvent<HTMLInputElement>) {
     setExamCodeInput(event.target.value);
@@ -137,34 +102,34 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                 </tr>
               </thead>
               <tbody>
-                {examHistoryMock.map((entry, index) => (
+                {examHistory.map((entry, index) => (
                   <tr key={entry.id} className="hover:bg-white/[0.02]">
                     <td
                       className={`py-4 px-5 text-[var(--text-primary)] text-sm ${
-                        index < examHistoryMock.length - 1
+                        index < examHistory.length - 1
                           ? "border-b border-[var(--border-subtle)]"
                           : ""
                       }`}
                     >
                       <span className="block font-medium">
-                        {entry.moduleName}
+                        {entry.examTitle}
                       </span>
                       <span className="block font-[var(--font-label)] text-xs text-[var(--text-secondary)] mt-0.5">
-                        Module {entry.moduleCode}
+                        Module {entry.examCode}
                       </span>
                     </td>
                     <td
                       className={`py-4 px-5 text-[var(--text-primary)] text-sm ${
-                        index < examHistoryMock.length - 1
+                        index < examHistory.length - 1
                           ? "border-b border-[var(--border-subtle)]"
                           : ""
                       }`}
                     >
-                      {entry.date}
+                      {entry.submittedAt}
                     </td>
                     <td
                       className={`py-4 px-5 text-sm ${
-                        index < examHistoryMock.length - 1
+                        index < examHistory.length - 1
                           ? "border-b border-[var(--border-subtle)]"
                           : ""
                       }`}
@@ -176,12 +141,12 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                             : "bg-[rgba(239,68,68,0.15)] text-[#ef4444]"
                         }`}
                       >
-                        {entry.resultPercent}% {entry.passed ? "Pass" : "Fail"}
+                        {entry.totalScore}% {entry.passed ? "Pass" : "Fail"}
                       </span>
                     </td>
                     <td
                       className={`py-4 px-5 ${
-                        index < examHistoryMock.length - 1
+                        index < examHistory.length - 1
                           ? "border-b border-[var(--border-subtle)]"
                           : ""
                       }`}
