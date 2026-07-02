@@ -3,13 +3,11 @@ import type { DashboardScreenProps, ExamSummaryCard } from "./dashboardScreen.ty
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useRouterLogic } from "../../router/routerLogic";
+import { useAuthStore } from "../../store/useAuthStore";
 
 // ---------------------------------------------------------------------------
 // Mock data -- replace with real Supabase query when wiring up
 // ---------------------------------------------------------------------------
-const MOCK_TEACHER_NAME = "DLKG";
-const MOCK_TEACHER_ID = "T-00421";
-
 const MOCK_SUMMARY_CARDS: ExamSummaryCard[] = [
   { label: "Active Exams", value: "3", subtext: "Currently running" },
   { label: "Total Students", value: "128", subtext: "Enrolled across all exams" },
@@ -50,11 +48,13 @@ function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
 }
 
 export function DashboardScreen({
-  teacherName = MOCK_TEACHER_NAME,
-  teacherId = MOCK_TEACHER_ID,
   summaryCards = MOCK_SUMMARY_CARDS,
 }: DashboardScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+
+  // pulls the logged in user's name directly from the auth store
+  const user = useAuthStore((state) => state.user);
+  const firstName = user?.fullName?.split(" ")[0] ?? "Teacher";
 
   return (
     <div
@@ -64,7 +64,8 @@ export function DashboardScreen({
       <TeacherSidebar activeItem="dashboard" />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <TeacherHeader teacherName={teacherName} teacherId={teacherId} />
+        {/* no props needed, TeacherHeader reads from auth store itself */}
+        <TeacherHeader />
 
         <main
           className="flex-1 overflow-y-auto px-8 py-6"
@@ -78,7 +79,7 @@ export function DashboardScreen({
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
               <h1 className="text-2xl font-bold mb-1">
-                Welcome back, {teacherName.split(" ")[0]}
+                Welcome back, {firstName}
               </h1>
               <p className="text-sm opacity-70 max-w-xl">
                 Manage your exams, monitor live sessions, and review student
@@ -130,7 +131,6 @@ export function DashboardScreen({
                   style={{
                     backgroundColor: "var(--color-base-200)",
                     color: "var(--color-base-content)",
-                    opacity: 1,
                   }}
                 >
                   <th className="text-left py-3 px-5 font-medium opacity-60">Exam Title</th>
@@ -172,13 +172,9 @@ export function DashboardScreen({
                   <tr
                     key={exam.id}
                     className={`hover:opacity-80 ${
-                      index < arr.length - 1
-                        ? "border-b"
-                        : ""
+                      index < arr.length - 1 ? "border-b" : ""
                     }`}
-                    style={{
-                      borderColor: "var(--color-base-300)",
-                    }}
+                    style={{ borderColor: "var(--color-base-300)" }}
                   >
                     <td className="py-3.5 px-5 text-sm font-medium">{exam.title}</td>
                     <td className="py-3.5 px-5 text-sm font-mono opacity-70">{exam.code}</td>
