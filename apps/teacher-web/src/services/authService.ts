@@ -2,40 +2,71 @@ import { supabase } from "./supabaseClient";
 
 export interface AuthUser {
   id: string;
-  firstName: string; // matches first_name column
-  lastName: string; // matches last_name column
+  firstName: string;
+  lastName: string;
+  fullName: string;
   email: string;
-  role: "student" | "teacher" | "admin";
+  role: "teacher" | "admin";
   idNumber: string;
 }
 
 export async function login(
-  email: string,
+  idNumber: string,
   password: string,
 ): Promise<AuthUser> {
+  // Step 1 — find email by id_number.
+  // Unauthenticated query — allowed by the RLS policy:
+  // "public can look up email by id_number"
+  const { data: profileData, error: profileError } = await supabase
+    .from("users")
+    .select("email")
+    .eq("id_number", idNumber)
+    .in("role", ["teacher", "admin"]) // only teachers and admins use the web portal
+    .single();
+
+  if (profileError || !profileData) {
+    throw new Error("Invalid ID number or password."); // vague on purpose
+  }
+
+  // Step 2 — authenticate with Supabase Auth using the email we found.
   const { data: authData, error: authError } =
-    await supabase.auth.signInWithPassword({ email, password });
+    await supabase.auth.signInWithPassword({
+      email: profileData.email,
+      password,
+    });
 
-  if (authError) throw new Error(authError.message);
+  if (authError) {
+    throw new Error("Invalid ID number or password."); // same vague message
+  }
 
-  const authUserId = authData.user.id;
-
+  // Step 3 — fetch full profile now that we're authenticated.
   const { data: userData, error: userError } = await supabase
     .from("users")
-    .select("id, first_name, last_name, email, role, id_number") // fixed columns
-    .eq("id", authUserId)
+    .select("id, first_name, last_name, email, role, id_number")
+    .eq("id", authData.user.id)
     .single();
 
   if (userError || !userData) {
-    throw new Error("Account authenticated but no user profile found.");
+    throw new Error(
+      "Account authenticated but no user profile found. Contact your administrator.",
+    );
+  }
+
+  // Step 4 — block students from logging in via the web portal.
+  if (userData.role === "student") {
+    await supabase.auth.signOut();
+    throw new Error(
+      "Students should use the desktop application, not this web portal.",
+    );
   }
 
   return {
     id: userData.id,
-    firstName: userData.first_name, // mapped correctly
-    lastName: userData.last_name, // mapped correctly
+    firstName: userData.first_name,
+    lastName: userData.last_name,
+    fullName: `${userData.first_name} ${userData.last_name}`,
     email: userData.email,
-    role: userData.role as AuthUser["role"],
+    role: userData.role as "teacher" | "admin",
     idNumber: userData.id_number,
   };
 }
@@ -49,22 +80,21 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
   const { data: sessionData } = await supabase.auth.getSession();
   if (!sessionData.session) return null;
 
-  const authUserId = sessionData.session.user.id;
-
-  const { data: userData, error: userError } = await supabase
+  const { data: userData, error } = await supabase
     .from("users")
-    .select("id, first_name, last_name, email, role, id_number") // fixed columns
-    .eq("id", authUserId)
+    .select("id, first_name, last_name, email, role, id_number")
+    .eq("id", sessionData.session.user.id)
     .single();
 
-  if (userError || !userData) return null;
+  if (error || !userData || userData.role === "student") return null;
 
   return {
     id: userData.id,
-    firstName: userData.first_name, // mapped correctly
-    lastName: userData.last_name, // mapped correctly
+    firstName: userData.first_name,
+    lastName: userData.last_name,
+    fullName: `${userData.first_name} ${userData.last_name}`,
     email: userData.email,
-    role: userData.role as AuthUser["role"],
+    role: userData.role as "teacher" | "admin",
     idNumber: userData.id_number,
   };
 }
