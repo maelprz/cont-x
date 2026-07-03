@@ -10,6 +10,8 @@ import { ExamCardTile } from "../../components/examLibrary/examCardTile";
 import { CreateNewCard } from "../../components/examLibrary/createNewCard";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamLibrary } from "../../hooks/useExamLibrary";
+import { useCreateExam } from "../../hooks/useCreateExam";
+import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 // ---------------------------------------------------------------------------
 // Mock data — replace with real Supabase query when wiring up
 // ---------------------------------------------------------------------------
@@ -33,6 +35,9 @@ export function ExamLibraryScreen({
 
   const { exams: fetchedExams, isLoading, error } = useExamLibrary();
   const exams = examsProp ?? fetchedExams;
+
+  const { createExam } = useCreateExam();
+  const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
 
   const handleSearch = (q: string) => {
     setLocalSearch(q);
@@ -122,9 +127,13 @@ export function ExamLibraryScreen({
           <div className="grid grid-cols-3 gap-5">
             {/* "Create New" card — navigates to exam builder */}
             <CreateNewCard
-              onClick={() => {
-                onCreateNewAssessment?.();
-                navigateTo("examBuilder");
+              onClick={async () => {
+                const newExamId = await createExam();
+                if (newExamId) {
+                  setCurrentExamId(newExamId);
+                  onCreateNewAssessment?.();
+                  navigateTo("examBuilder");
+                }
               }}
             />
 

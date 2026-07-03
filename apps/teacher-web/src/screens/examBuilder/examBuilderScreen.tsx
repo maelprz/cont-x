@@ -42,6 +42,9 @@ const MOCK_QUESTIONS: BuilderQuestion[] = [
     starterCode: "def fibonacci(n):\n    # Your code here\n    pass",
     filename: "main.py",
     testCases: [{ id: "t1", input: "5", expectedOutput: "5", isHidden: false }],
+    programType: "cProgram", // default to full program mode
+    mainCode: "", // no teacher main code yet
+    deductionPerAttempt: 0, // no penalty set yet
   },
   {
     id: "q3",
@@ -53,6 +56,9 @@ const MOCK_QUESTIONS: BuilderQuestion[] = [
     starterCode: "def is_balanced(s):\n    pass",
     filename: "main.py",
     testCases: [],
+    programType: "cProgram", // default to full program mode
+    mainCode: "", // no teacher main code yet
+    deductionPerAttempt: 0, // no penalty set yet
   },
 ];
 
@@ -108,7 +114,7 @@ export function ExamBuilderScreen({
     const converted: BuilderQuestion =
       tab === "multiple-choice"
         ? { ...base, type: "multiple-choice", options: [{ id: "o1", text: "", isCorrect: true }, { id: "o2", text: "", isCorrect: false }] }
-        : { ...base, type: "coding", starterCode: "", filename: "main.py", testCases: [] };
+        : { ...base, type: "coding", starterCode: "", filename: "main.py", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 };
 
     setQuestions((prev) => prev.map((q) => (q.id === converted.id ? converted : q)));
   };
@@ -204,7 +210,7 @@ export function ExamBuilderScreen({
                     question={
                       activeQuestion.type === "coding"
                         ? (activeQuestion as CodingBuilderQuestion)
-                        : { ...activeQuestion, type: "coding", starterCode: "", filename: "main.py", testCases: [] } as CodingBuilderQuestion
+                        : { ...activeQuestion, type: "coding", starterCode: "", filename: "main.py", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 } as CodingBuilderQuestion
                     }
                     onChange={handleQuestionChange}
                     onPreviewRendered={onPreviewRendered}
