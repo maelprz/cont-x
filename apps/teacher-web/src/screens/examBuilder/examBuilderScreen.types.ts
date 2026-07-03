@@ -28,11 +28,16 @@ export interface MCQBuilderQuestion extends BaseBuilderQuestion {
   options: MCQOption[];
 }
 
+export type CodingProgramType = "cProgram" | "cFunction";
+
 export interface CodingBuilderQuestion extends BaseBuilderQuestion {
   type: "coding";
   starterCode: string;
   filename: string;    // e.g. "main.py"
   testCases: TestCase[];
+  programType: CodingProgramType;
+  mainCode: string;
+  deductionPerAttempt: number;
 }
 
 export type BuilderQuestion = MCQBuilderQuestion | CodingBuilderQuestion;
