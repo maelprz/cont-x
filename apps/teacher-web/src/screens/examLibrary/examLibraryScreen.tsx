@@ -1,77 +1,25 @@
 import { useState } from "react";
 import { Filter, LayoutGrid } from "lucide-react";
-import type { ExamCard, ExamLibraryScreenProps } from "./examLibraryScreen.types";
+import type {
+  ExamCard,
+  ExamLibraryScreenProps,
+} from "./examLibraryScreen.types";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { ExamCardTile } from "../../components/examLibrary/examCardTile";
 import { CreateNewCard } from "../../components/examLibrary/createNewCard";
 import { useRouterLogic } from "../../router/routerLogic";
-
+import { useExamLibrary } from "../../hooks/useExamLibrary";
 // ---------------------------------------------------------------------------
 // Mock data — replace with real Supabase query when wiring up
 // ---------------------------------------------------------------------------
-const MOCK_EXAMS: ExamCard[] = [
-  {
-    id: "1",
-    code: "CS101",
-    title: "CS101: Data Structures",
-    description: "Fundamental course examining arrays, trees, and hash tables.",
-    status: "published",
-    questionCount: 24,
-    createdAt: "Oct 12, 2023",
-    studentCount: 142,
-    ctaLabel: "Edit Exam",
-  },
-  {
-    id: "2",
-    code: "ALG202",
-    title: "ALG202: Advanced Sorting",
-    description: "In-depth analysis of O(n log n) algorithms and spatial complexity.",
-    status: "draft",
-    questionCount: 12,
-    createdAt: "Nov 04, 2023",
-    lastEditedLabel: "Last edited 2h ago",
-    ctaLabel: "Continue Building",
-  },
-  {
-    id: "3",
-    code: "SYS301",
-    title: "SYS301: OS Kernels",
-    description: "Practical coding exam on thread scheduling and memory management.",
-    status: "published",
-    questionCount: 8,
-    createdAt: "Sep 28, 2023",
-    footerMeta: "Quality Audited",
-    ctaLabel: "View Results",
-  },
-  {
-    id: "4",
-    code: "WEB105",
-    title: "WEB105: React Context API",
-    description: "Frontend challenge focusing on state management and hook patterns.",
-    status: "draft",
-    questionCount: 15,
-    createdAt: "Nov 15, 2023",
-    ctaLabel: "Continue Building",
-  },
-  {
-    id: "5",
-    code: "DB404",
-    title: "DB404: SQL Query Opt",
-    description: "Advanced database exam on execution plans and indexing strategies.",
-    status: "published",
-    questionCount: 32,
-    createdAt: "Aug 02, 2023",
-    ctaLabel: "View Results",
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Main screen — named export (not default)
 // ---------------------------------------------------------------------------
 
 export function ExamLibraryScreen({
-  exams = MOCK_EXAMS,
+  exams: examsProp,
   searchQuery: externalSearch,
   onSearchChange,
   onFilter,
@@ -83,6 +31,9 @@ export function ExamLibraryScreen({
 
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
+  const { exams: fetchedExams, isLoading, error } = useExamLibrary();
+  const exams = examsProp ?? fetchedExams;
+
   const handleSearch = (q: string) => {
     setLocalSearch(q);
     onSearchChange?.(q);
@@ -91,7 +42,7 @@ export function ExamLibraryScreen({
   const filtered = exams.filter(
     (e) =>
       e.title.toLowerCase().includes(search.toLowerCase()) ||
-      e.code.toLowerCase().includes(search.toLowerCase())
+      e.code.toLowerCase().includes(search.toLowerCase()),
   );
 
   return (
@@ -133,7 +84,11 @@ export function ExamLibraryScreen({
                   strokeWidth="1.75"
                   style={{ opacity: 0.5, flexShrink: 0 }}
                 >
-                  <path strokeLinecap="round" strokeLinejoin="round" d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z" />
+                  <path
+                    strokeLinecap="round"
+                    strokeLinejoin="round"
+                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
+                  />
                 </svg>
                 <input
                   type="text"

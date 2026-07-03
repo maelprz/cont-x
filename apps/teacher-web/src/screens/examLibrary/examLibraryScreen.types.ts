@@ -1,17 +1,17 @@
-export type ExamStatus = 'published' | 'draft' | 'ended';
+export type ExamStatus = "published" | "draft" | "ended";
 
 export interface ExamCard {
   id: string;
   code: string;
   title: string;
   description: string;
-  status: ExamStatus;
+  status: "draft" | "active" | "ended"; // matches the db check constraint exactly
   questionCount: number;
-  createdAt: string;           // display string e.g. "Oct 12, 2023"
-  studentCount?: number;       // only on published exams
-  lastEditedLabel?: string;    // e.g. "Last edited 2h ago" — shown on drafts
-  footerMeta?: string;         // e.g. "Quality Audited" — shown on some published
-  ctaLabel?: string;           // override CTA text, e.g. "Continue Building"
+  createdAt: string; // display string e.g. "Oct 12, 2023"
+  studentCount?: number; // only on published exams
+  lastEditedLabel?: string; // e.g. "Last edited 2h ago" — shown on drafts
+  footerMeta?: string; // e.g. "Quality Audited" — shown on some published
+  ctaLabel?: string; // override CTA text, e.g. "Continue Building"
   onCta?: () => void;
   onMenuOpen?: () => void;
 }
