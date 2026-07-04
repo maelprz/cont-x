@@ -5,7 +5,7 @@ export interface ExamCard {
   code: string;
   title: string;
   description: string;
-  status: "draft" | "active" | "ended"; // matches the db check constraint exactly
+  status: "draft" | "published" | "ended"; // matches the db check constraint exactly
   questionCount: number;
   createdAt: string; // display string e.g. "Oct 12, 2023"
   studentCount?: number; // only on published exams

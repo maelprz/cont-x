@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { Filter, LayoutGrid } from "lucide-react";
-import type {
-  ExamCard,
-  ExamLibraryScreenProps,
-} from "./examLibraryScreen.types";
+import type { ExamLibraryScreenProps } from "./examLibraryScreen.types";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { ExamCardTile } from "../../components/examLibrary/examCardTile";
@@ -41,6 +38,11 @@ export function ExamLibraryScreen({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { createExam, isCreating, error: createError } = useCreateExam();
   const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
+
+  const openExamBuilder = (examId: string) => {
+    setCurrentExamId(examId);
+    navigateTo("examBuilder");
+  };
 
   // called when teacher confirms the title in the modal
   const handleCreateExam = async (title: string) => {
@@ -142,7 +144,14 @@ export function ExamLibraryScreen({
             {/* "Create New" card — navigates to exam builder */}
             <CreateNewCard onClick={() => setIsCreateModalOpen(true)} />
             {filtered.map((exam) => (
-              <ExamCardTile key={exam.id} exam={exam} />
+              <ExamCardTile
+                key={exam.id}
+                exam={{
+                  ...exam,
+                  onCta: () => openExamBuilder(exam.id),
+                }}
+                onClick={() => openExamBuilder(exam.id)}
+              />
             ))}
             <CreateExamModal
               isOpen={isCreateModalOpen}
