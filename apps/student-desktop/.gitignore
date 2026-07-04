@@ -26,3 +26,4 @@ dist-ssr
 *.sw?
 
 electron/native/keyboard-hook/build/
+electron/native/mingw/
