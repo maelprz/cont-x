@@ -19,7 +19,14 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 
 // safely load the C++ keyboard hook addon
 // if it fails, the app still opens — lockdown just won't be active
-let keyboardHook: { startHook: () => void; stopHook: () => void } | null = null;
+let keyboardHook: {
+  startHook: () => void;
+  stopHook: () => void;
+  setTaskManagerDisabled: (disable: boolean) => void;
+  setLockWorkstationDisabled: (disable: boolean) => void;
+  setChangePasswordDisabled: (disable: boolean) => void;
+  setFastUserSwitchingDisabled: (disable: boolean) => void;
+} | null = null;
 
 try {
   keyboardHook = require(
@@ -35,10 +42,28 @@ try {
 
 let win: BrowserWindow | null;
 
+// clears any leftover Ctrl+Alt+Del restrictions from a crashed previous session
+function cleanupStaleLockdownState() {
+  try {
+    keyboardHook?.setTaskManagerDisabled(false);
+    keyboardHook?.setLockWorkstationDisabled(false);
+    keyboardHook?.setChangePasswordDisabled(false);
+    keyboardHook?.setFastUserSwitchingDisabled(false);
+    console.log("[lockdown] cleared any leftover state from last run");
+  } catch (err) {
+    console.error("[lockdown] cleanup failed:", err);
+  }
+}
+
 // installs the WH_KEYBOARD_LL hook — blocks restricted keys system-wide
 function registerLockdown() {
   try {
     keyboardHook?.startHook();
+    // restrict what's reachable from the Ctrl+Alt+Del screen
+    keyboardHook?.setTaskManagerDisabled(true);
+    keyboardHook?.setLockWorkstationDisabled(true);
+    keyboardHook?.setChangePasswordDisabled(true);
+    keyboardHook?.setFastUserSwitchingDisabled(true);
     console.log("[lockdown] hook registered");
   } catch (err) {
     console.error("[lockdown] failed to register hook:", err);
@@ -49,6 +74,11 @@ function registerLockdown() {
 function unregisterLockdown() {
   try {
     keyboardHook?.stopHook();
+    // give normal Windows options back once the exam session ends
+    keyboardHook?.setTaskManagerDisabled(false);
+    keyboardHook?.setLockWorkstationDisabled(false);
+    keyboardHook?.setChangePasswordDisabled(false);
+    keyboardHook?.setFastUserSwitchingDisabled(false);
     console.log("[lockdown] hook unregistered");
   } catch (err) {
     console.error("[lockdown] failed to unregister hook:", err);
@@ -113,6 +143,7 @@ app.on("activate", () => {
 });
 
 app.whenReady().then(() => {
+  cleanupStaleLockdownState(); // undo any restrictions left by a crash
   createWindow();
   registerLockdown(); // lockdown starts the moment the app is ready
 });
