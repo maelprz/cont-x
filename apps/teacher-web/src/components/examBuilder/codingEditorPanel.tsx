@@ -30,8 +30,8 @@ export function CodingEditorPanel({
     onChange({ ...question, testCases: question.testCases.filter((t) => t.id !== id) });
 
   const addTestCase = () =>
-    onChange({ ...question, testCases: [...question.testCases, { id: `t${Date.now()}`, input: "", expectedOutput: "", isHidden: false }] });
-
+    onChange({ ...question, testCases: [...question.testCases, { id: crypto.randomUUID(), input: "", expectedOutput: "", isHidden: false }] });
+  
   // True when teacher wants students to implement just one function.
   const isFunctionMode = question.programType === "cFunction";
 

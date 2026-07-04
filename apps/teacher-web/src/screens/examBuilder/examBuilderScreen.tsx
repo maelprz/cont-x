@@ -8,6 +8,7 @@ import type {
   QuestionType,
 } from "./examBuilderScreen.types";
 import { useExamBuilder } from "../../hooks/useExamBuilder";
+import { useSaveQuestion } from "../../hooks/useSaveQuestion";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
@@ -72,10 +73,19 @@ export function ExamBuilderScreen({
 
     const converted: BuilderQuestion =
       tab === "multiple-choice"
-        ? { ...base, type: "multiple-choice", options: [{ id: "o1", text: "", isCorrect: true }, { id: "o2", text: "", isCorrect: false }] }
+        ? { ...base, type: "multiple-choice", options: [{ id: crypto.randomUUID(), text: "", isCorrect: true }, { id: crypto.randomUUID(), text: "", isCorrect: false }] }
         : { ...base, type: "coding", starterCode: "", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 };
 
     setQuestions((prev) => prev.map((q) => (q.id === converted.id ? converted : q)));
+  };
+
+  const { saveQuestion, isSaving, error: saveError } = useSaveQuestion();
+
+  // saves the active question, then runs whatever the parent wants on continue
+  const handleSaveAndContinue = async () => {
+    if (!activeQuestion) return; // nothing selected, nothing to save
+    const didSave = await saveQuestion(activeQuestion);
+    if (didSave) onSaveAndContinue?.();
   };
 
   const isMCQ = editorTab === "multiple-choice";
@@ -127,7 +137,7 @@ export function ExamBuilderScreen({
                   className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-90 border-none"
                   style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
                 >
-                  Save Question
+                  Save Exam
                 </button>
               </div>
             </div>
@@ -191,6 +201,13 @@ export function ExamBuilderScreen({
                 )}
                 </>
               )}
+              {/* shows errors in saving the question, if any */}
+              {saveError && (
+                <p className="text-[13px] mb-2" style={{ color: "var(--color-error)" }}>
+                  {saveError}
+                </p>
+              )}
+
               {/* Bottom action row */}
               <div
                 className="flex items-center justify-between mt-8 pt-5 border-t"
@@ -213,11 +230,12 @@ export function ExamBuilderScreen({
                     Discard
                   </button>
                   <button
-                    onClick={onSaveAndContinue}
+                    onClick={handleSaveAndContinue}
+                    disabled={isSaving}
                     className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
+                    style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)", opacity: isSaving ? 0.6 : 1 }}
                   >
-                    Save &amp; Continue
+                    {isSaving ? "Saving..." : "Save & Continue"}
                   </button>
                 </div>
               </div>

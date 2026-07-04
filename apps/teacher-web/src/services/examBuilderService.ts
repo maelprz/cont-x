@@ -1,5 +1,5 @@
 import {supabase} from "./supabaseClient";
-import type { BuilderQuestion, MCQBuilderQuestion, CodingBuilderQuestion, CodingProgramType } from "../screens/examBuilder/examBuilderScreen.types";
+import type { BuilderQuestion, MCQBuilderQuestion, CodingBuilderQuestion, CodingProgramType, MCQOption, TestCase } from "../screens/examBuilder/examBuilderScreen.types";
 
 // one row of mc_options exactly as stored in the database
 type MCOptionRow = {
@@ -149,4 +149,99 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
       .map(mapQuestionRow)
       .filter((q): q is BuilderQuestion => q !== null), // drop unsupported/bad rows
   };
+}
+
+// deletes mc_options no longer in the current list, then upserts the rest
+async function syncMcOptions(questionId: string, options: MCQOption[]): Promise<void> {
+  const { data: existingRows, error: fetchError } = await supabase
+    .from("mc_options")
+    .select("id") // only need ids to compare against
+    .eq("mcq_question_id", questionId);
+  if (fetchError) throw fetchError;
+
+  const existingIds = new Set((existingRows ?? []).map((r) => r.id));
+  const currentIds = new Set(options.map((o) => o.id));
+  const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id)); // removed by teacher
+
+  if (idsToDelete.length > 0) {
+    const { error: deleteError } = await supabase.from("mc_options").delete().in("id", idsToDelete);
+    if (deleteError) throw deleteError;
+  }
+
+  if (options.length > 0) {
+    const { error: upsertError } = await supabase.from("mc_options").upsert(
+      options.map((o) => ({
+        id: o.id, // real uuid, insert or update depending on if it exists
+        mcq_question_id: questionId,
+        option_text: o.text,
+        is_correct: o.isCorrect,
+      })),
+    );
+    if (upsertError) throw upsertError;
+  }
+}
+
+// deletes test_cases no longer in the current list, then upserts the rest
+async function syncTestCases(questionId: string, testCases: TestCase[]): Promise<void> {
+  const { data: existingRows, error: fetchError } = await supabase
+    .from("test_cases")
+    .select("id") // only need ids to compare against
+    .eq("coding_question_id", questionId);
+  if (fetchError) throw fetchError;
+
+  const existingIds = new Set((existingRows ?? []).map((r) => r.id));
+  const currentIds = new Set(testCases.map((t) => t.id));
+  const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id)); // removed by teacher
+
+  if (idsToDelete.length > 0) {
+    const { error: deleteError } = await supabase.from("test_cases").delete().in("id", idsToDelete);
+    if (deleteError) throw deleteError;
+  }
+
+  if (testCases.length > 0) {
+    const { error: upsertError } = await supabase.from("test_cases").upsert(
+      testCases.map((t) => ({
+        id: t.id, // real uuid, insert or update depending on if it exists
+        coding_question_id: questionId,
+        input: t.input,
+        expected_output: t.expectedOutput,
+        is_hidden: t.isHidden,
+      })),
+    );
+    if (upsertError) throw upsertError;
+  }
+}
+
+// saves one question (and its type-specific child rows) to the database
+export async function saveQuestion(examId: string, question: BuilderQuestion): Promise<void> {
+  const dbType = question.type === "multiple-choice" ? "mcq" : "coding"; // matches db's check constraint
+
+  const { error: questionError } = await supabase.from("questions").upsert({
+    id: question.id, // real uuid, insert or update depending on if it exists
+    exam_id: examId,
+    title: question.title,
+    type: dbType,
+    prompt: question.description,
+    order_index: question.number - 1, // ui numbering is 1-based, db is 0-based
+    max_points: question.points,
+  });
+  if (questionError) throw questionError;
+
+  if (question.type === "multiple-choice") {
+    const { error: mcqError } = await supabase.from("mcq_question").upsert({ question_id: question.id });
+    if (mcqError) throw mcqError;
+
+    await syncMcOptions(question.id, question.options);
+  } else {
+    const { error: codingError } = await supabase.from("coding_question").upsert({
+      question_id: question.id,
+      starter_code: question.starterCode,
+      program_type: question.programType,
+      main_code: question.mainCode,
+      check_penalty_per_attempt: question.deductionPerAttempt,
+    });
+    if (codingError) throw codingError;
+
+    await syncTestCases(question.id, question.testCases);
+  }
 }
