@@ -86,17 +86,6 @@ export function DashboardScreen({
                 activity from one place.
               </p>
             </div>
-            <button
-              onClick={() => navigateTo("examBuilder")}
-              className="flex items-center gap-2 rounded-lg px-4 py-2.5 text-sm font-medium hover:opacity-90 shrink-0 border-none cursor-pointer"
-              style={{
-                backgroundColor: "var(--color-primary)",
-                color: "var(--color-primary-content)",
-              }}
-            >
-              <Plus size={16} />
-              New Exam
-            </button>
           </div>
 
           {/* summary stat cards */}

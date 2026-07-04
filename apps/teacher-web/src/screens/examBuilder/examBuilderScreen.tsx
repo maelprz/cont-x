@@ -1,4 +1,4 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import type {
   ExamBuilderScreenProps,
@@ -7,60 +7,13 @@ import type {
   CodingBuilderQuestion,
   QuestionType,
 } from "./examBuilderScreen.types";
+import { useExamBuilder } from "../../hooks/useExamBuilder";
+import { useSaveQuestion } from "../../hooks/useSaveQuestion";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
 import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
-
-// ---------------------------------------------------------------------------
-// Mock data — replace with real Supabase query when wiring up
-// ---------------------------------------------------------------------------
-const MOCK_QUESTIONS: BuilderQuestion[] = [
-  {
-    id: "q1",
-    number: 1,
-    title: "Data Types in Python",
-    type: "multiple-choice",
-    points: 5,
-    description: "Which of the following data types in Python is **immutable**?",
-    options: [
-      { id: "o1", text: "Tuple",      isCorrect: true  },
-      { id: "o2", text: "List",       isCorrect: false },
-      { id: "o3", text: "Dictionary", isCorrect: false },
-      { id: "o4", text: "Set",        isCorrect: false },
-    ],
-  },
-  {
-    id: "q2",
-    number: 2,
-    title: "Fibonacci Sequence Generator",
-    type: "coding",
-    points: 20,
-    description:
-      "Write a function `fibonacci(n)` that returns the n-th number in the Fibonacci sequence.\n\nConstraints:\n- 0 ≤ n ≤ 30\n- Sequence starts with 0, 1, 1, 2, 3...",
-    starterCode: "def fibonacci(n):\n    # Your code here\n    pass",
-    filename: "main.py",
-    testCases: [{ id: "t1", input: "5", expectedOutput: "5", isHidden: false }],
-    programType: "cProgram", // default to full program mode
-    mainCode: "", // no teacher main code yet
-    deductionPerAttempt: 0, // no penalty set yet
-  },
-  {
-    id: "q3",
-    number: 3,
-    title: "Balanced Brackets Parser",
-    type: "coding",
-    points: 15,
-    description: "Write a function that checks if brackets are balanced.",
-    starterCode: "def is_balanced(s):\n    pass",
-    filename: "main.py",
-    testCases: [],
-    programType: "cProgram", // default to full program mode
-    mainCode: "", // no teacher main code yet
-    deductionPerAttempt: 0, // no penalty set yet
-  },
-];
 
 // ---------------------------------------------------------------------------
 // Main screen — named export (not default)
@@ -79,12 +32,19 @@ export function ExamBuilderScreen({
   onPreviewRendered,
   onSaveAndContinue,
 }: ExamBuilderScreenProps) {
-  const [questions, setQuestions] = useState<BuilderQuestion[]>(
-    externalQuestions ?? MOCK_QUESTIONS
-  );
-  const [activeId, setActiveId] = useState<string>(
-    externalActiveId ?? MOCK_QUESTIONS[0].id
-  );
+  const { examData, isLoading, error } = useExamBuilder();
+
+  const [questions, setQuestions] = useState<BuilderQuestion[]>(externalQuestions ?? []);
+  const [activeId, setActiveId] = useState<string>(externalActiveId ?? "");
+
+  // fills the builder with real questions once the exam finishes loading
+  useEffect(() => {
+    if (externalQuestions) return; // parent controls questions directly, skip
+    if (!examData) return; // still loading, or no exam selected
+
+    setQuestions(examData.questions);
+    setActiveId(examData.questions[0]?.id ?? "");
+  }, [examData, externalQuestions]);
 
   const activeQuestion = questions.find((q) => q.id === activeId) ?? questions[0];
   const [editorTab, setEditorTab] = useState<QuestionType>(activeQuestion?.type ?? "multiple-choice");
@@ -113,10 +73,19 @@ export function ExamBuilderScreen({
 
     const converted: BuilderQuestion =
       tab === "multiple-choice"
-        ? { ...base, type: "multiple-choice", options: [{ id: "o1", text: "", isCorrect: true }, { id: "o2", text: "", isCorrect: false }] }
-        : { ...base, type: "coding", starterCode: "", filename: "main.py", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 };
+        ? { ...base, type: "multiple-choice", options: [{ id: crypto.randomUUID(), text: "", isCorrect: true }, { id: crypto.randomUUID(), text: "", isCorrect: false }] }
+        : { ...base, type: "coding", starterCode: "", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 };
 
     setQuestions((prev) => prev.map((q) => (q.id === converted.id ? converted : q)));
+  };
+
+  const { saveQuestion, isSaving, error: saveError } = useSaveQuestion();
+
+  // saves the active question, then runs whatever the parent wants on continue
+  const handleSaveAndContinue = async () => {
+    if (!activeQuestion) return; // nothing selected, nothing to save
+    const didSave = await saveQuestion(activeQuestion);
+    if (didSave) onSaveAndContinue?.();
   };
 
   const isMCQ = editorTab === "multiple-choice";
@@ -168,54 +137,75 @@ export function ExamBuilderScreen({
                   className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-90 border-none"
                   style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
                 >
-                  Save Question
+                  Save Exam
                 </button>
               </div>
             </div>
 
             {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto px-7 py-5">
-              {/* Type toggle */}
-              <div className="inline-flex rounded-lg p-0.5 mb-6" style={{ backgroundColor: "var(--color-base-300)" }}>
-                {(["multiple-choice", "coding"] as QuestionType[]).map((tab) => (
-                  <button
-                    key={tab}
-                    onClick={() => handleTabSwitch(tab)}
-                    className="px-4 py-1.5 rounded-md text-[13px] font-mono font-semibold cursor-pointer border-none transition-colors duration-150"
-                    style={{
-                      backgroundColor: editorTab === tab ? "var(--color-base-100)" : "transparent",
-                      color: editorTab === tab ? "var(--color-secondary)" : "var(--color-base-content)",
-                      opacity: editorTab === tab ? 1 : 0.6,
-                    }}
-                  >
-                    {tab === "multiple-choice" ? "Multiple Choice" : "Coding Question"}
-                  </button>
-                ))}
-              </div>
+              {isLoading && (
+                <p className="text-[13px]" style={{ color: "var(--color-base-content)", opacity: 0.6 }}>
+                  Loading exam...
+                </p>
+              )}
+              {error && (
+                <p className="text-[13px]" style={{ color: "var(--color-error)" }}>
+                  {error}
+                </p>
+              )}
 
-              {/* Editor panel */}
-              {activeQuestion && (
-                isMCQ ? (
-                  <MCQEditorPanel
-                    question={
-                      activeQuestion.type === "multiple-choice"
-                        ? (activeQuestion as MCQBuilderQuestion)
-                        : { ...activeQuestion, type: "multiple-choice", options: [] } as MCQBuilderQuestion
-                    }
-                    onChange={handleQuestionChange}
-                    onPreviewRendered={onPreviewRendered}
-                  />
-                ) : (
-                  <CodingEditorPanel
-                    question={
-                      activeQuestion.type === "coding"
-                        ? (activeQuestion as CodingBuilderQuestion)
-                        : { ...activeQuestion, type: "coding", starterCode: "", filename: "main.py", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 } as CodingBuilderQuestion
-                    }
-                    onChange={handleQuestionChange}
-                    onPreviewRendered={onPreviewRendered}
-                  />
-                )
+              {!isLoading && !error && (
+                <>
+                {/* Type toggle */}
+                <div className="inline-flex rounded-lg p-0.5 mb-6" style={{ backgroundColor: "var(--color-base-300)" }}>
+                  {(["multiple-choice", "coding"] as QuestionType[]).map((tab) => (
+                    <button
+                      key={tab}
+                      onClick={() => handleTabSwitch(tab)}
+                      className="px-4 py-1.5 rounded-md text-[13px] font-mono font-semibold cursor-pointer border-none transition-colors duration-150"
+                      style={{
+                        backgroundColor: editorTab === tab ? "var(--color-base-100)" : "transparent",
+                        color: editorTab === tab ? "var(--color-secondary)" : "var(--color-base-content)",
+                        opacity: editorTab === tab ? 1 : 0.6,
+                      }}
+                    >
+                      {tab === "multiple-choice" ? "Multiple Choice" : "Coding Question"}
+                    </button>
+                  ))}
+                </div>
+
+                {/* Editor panel */}
+                {activeQuestion && (
+                  isMCQ ? (
+                    <MCQEditorPanel
+                      question={
+                        activeQuestion.type === "multiple-choice"
+                          ? (activeQuestion as MCQBuilderQuestion)
+                          : { ...activeQuestion, type: "multiple-choice", options: [] } as MCQBuilderQuestion
+                      }
+                      onChange={handleQuestionChange}
+                      onPreviewRendered={onPreviewRendered}
+                    />
+                  ) : (
+                    <CodingEditorPanel
+                      question={
+                        activeQuestion.type === "coding"
+                          ? (activeQuestion as CodingBuilderQuestion)
+                          : { ...activeQuestion, type: "coding", starterCode: "", filename: "main.py", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 } as CodingBuilderQuestion
+                      }
+                      onChange={handleQuestionChange}
+                      onPreviewRendered={onPreviewRendered}
+                    />
+                  )
+                )}
+                </>
+              )}
+              {/* shows errors in saving the question, if any */}
+              {saveError && (
+                <p className="text-[13px] mb-2" style={{ color: "var(--color-error)" }}>
+                  {saveError}
+                </p>
               )}
 
               {/* Bottom action row */}
@@ -240,11 +230,12 @@ export function ExamBuilderScreen({
                     Discard
                   </button>
                   <button
-                    onClick={onSaveAndContinue}
+                    onClick={handleSaveAndContinue}
+                    disabled={isSaving}
                     className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
+                    style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)", opacity: isSaving ? 0.6 : 1 }}
                   >
-                    Save &amp; Continue
+                    {isSaving ? "Saving..." : "Save & Continue"}
                   </button>
                 </div>
               </div>

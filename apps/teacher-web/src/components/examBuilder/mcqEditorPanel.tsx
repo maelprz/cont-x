@@ -23,8 +23,8 @@ export function MCQEditorPanel({
     onChange({ ...question, options: question.options.filter((o) => o.id !== id) });
 
   const addOption = () =>
-    onChange({ ...question, options: [...question.options, { id: `o${Date.now()}`, text: "", isCorrect: false }] });
-
+    onChange({ ...question, options: [...question.options, { id: crypto.randomUUID(), text: "", isCorrect: false }] });
+  
   return (
     <div className="flex flex-col gap-6">
       {/* Points */}
