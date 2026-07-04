@@ -1,6 +1,7 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
+import { registerCompilerHandlers } from './ipc/compilerHandlers';
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
@@ -146,4 +147,5 @@ app.whenReady().then(() => {
   cleanupStaleLockdownState(); // undo any restrictions left by a crash
   createWindow();
   registerLockdown(); // lockdown starts the moment the app is ready
+  registerCompilerHandlers(); // sets up the run-test-cases IPC channel
 });
