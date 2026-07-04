@@ -8,14 +8,14 @@ export function useCreateExam() {
 
   const teacherId = useAuthStore((state) => state.user?.id);
 
-  // creates a new draft exam and gives back its id, or null on failure
-  async function createExam(): Promise<string | null> {
+  // creates a new draft exam with the given title, gives back its id or null
+  async function createExam(title: string): Promise<string | null> {
     if (!teacherId) return null; // no logged-in teacher, nothing to do
 
     setIsCreating(true);
     setError(null);
     try {
-      const newExamId = await createDraftExam(teacherId);
+      const newExamId = await createDraftExam(teacherId, title);
       return newExamId;
     } catch (err) {
       setError("Could not create exam. Try again.");

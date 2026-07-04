@@ -12,6 +12,8 @@ import { useRouterLogic } from "../../router/routerLogic";
 import { useExamLibrary } from "../../hooks/useExamLibrary";
 import { useCreateExam } from "../../hooks/useCreateExam";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
+import { CreateExamModal } from "../../components/examLibrary/createExamModal";
+
 // ---------------------------------------------------------------------------
 // Mock data — replace with real Supabase query when wiring up
 // ---------------------------------------------------------------------------
@@ -33,11 +35,23 @@ export function ExamLibraryScreen({
 
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  const { exams: fetchedExams, isLoading, error } = useExamLibrary();
+  const { exams: fetchedExams} = useExamLibrary();
   const exams = examsProp ?? fetchedExams;
 
-  const { createExam } = useCreateExam();
+  const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
+  const { createExam, isCreating, error: createError } = useCreateExam();
   const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
+
+  // called when teacher confirms the title in the modal
+  const handleCreateExam = async (title: string) => {
+    const newExamId = await createExam(title);
+    if (newExamId) {
+      setCurrentExamId(newExamId); // tells ExamBuilder which exam to load
+      setIsCreateModalOpen(false);
+      onCreateNewAssessment?.();
+      navigateTo("examBuilder");
+    }
+  };
 
   const handleSearch = (q: string) => {
     setLocalSearch(q);
@@ -126,20 +140,17 @@ export function ExamLibraryScreen({
           {/* Card grid */}
           <div className="grid grid-cols-3 gap-5">
             {/* "Create New" card — navigates to exam builder */}
-            <CreateNewCard
-              onClick={async () => {
-                const newExamId = await createExam();
-                if (newExamId) {
-                  setCurrentExamId(newExamId);
-                  onCreateNewAssessment?.();
-                  navigateTo("examBuilder");
-                }
-              }}
-            />
-
+            <CreateNewCard onClick={() => setIsCreateModalOpen(true)} />
             {filtered.map((exam) => (
               <ExamCardTile key={exam.id} exam={exam} />
             ))}
+            <CreateExamModal
+              isOpen={isCreateModalOpen}
+              onClose={() => setIsCreateModalOpen(false)}
+              onSubmit={handleCreateExam}
+              isSubmitting={isCreating}
+              error={createError}
+            />
           </div>
         </main>
       </div>

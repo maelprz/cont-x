@@ -1,6 +1,10 @@
 import {supabase} from "./supabaseClient";
 import type { BuilderQuestion, MCQBuilderQuestion, CodingBuilderQuestion, CodingProgramType, MCQOption, TestCase } from "../screens/examBuilder/examBuilderScreen.types";
 
+function generateExamCode(): string {
+  return `EX-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
+}
+
 // one row of mc_options exactly as stored in the database
 type MCOptionRow = {
   id: string;
@@ -42,6 +46,25 @@ type ExamBuilderRow = {
   status: "draft" | "active" | "ended";
   questions: QuestionRow[];
 };
+
+// creates a blank draft exam row with the teacher's chosen title, returns its new id
+export async function createDraftExam(teacherId: string, title: string): Promise<string> {
+  const { data, error } = await supabase
+    .from("exams")
+    .insert({
+      teacher_id: teacherId, // links exam to the teacher who made it
+      title, // teacher-provided title from the create modal
+      description: "",
+      status: "draft", // new exams always start as draft
+      exam_code: generateExamCode(), // required unique code, students use to join later
+    })
+    .select("id")
+    .single();
+
+  if (error || !data) throw error ?? new Error("Could not create exam.");
+
+  return data.id;
+}
 
 // the shape the builder screen actually needs to render
 export interface ExamBuilderData {
