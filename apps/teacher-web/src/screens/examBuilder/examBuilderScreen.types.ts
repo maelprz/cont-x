@@ -33,7 +33,6 @@ export type CodingProgramType = "cProgram" | "cFunction";
 export interface CodingBuilderQuestion extends BaseBuilderQuestion {
   type: "coding";
   starterCode: string;
-  filename: string;    // e.g. "main.py"
   testCases: TestCase[];
   programType: CodingProgramType;
   mainCode: string;

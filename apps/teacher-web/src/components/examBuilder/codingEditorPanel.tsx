@@ -137,12 +137,9 @@ export function CodingEditorPanel({
         </label>
         <div className="rounded-xl overflow-hidden border" style={{ borderColor: "var(--color-base-300)" }}>
           <div
-            className="flex items-center justify-between px-4 py-2 border-b"
+            className="flex flex-col items-end justify-between px-4 py-2 border-b"
             style={{ backgroundColor: "var(--color-base-200)", borderColor: "var(--color-base-300)" }}
           >
-            <span className="font-mono text-[12px]" style={{ color: "var(--color-base-content)", opacity: 0.7 }}>
-              {question.filename}
-            </span>
             <button className="cursor-pointer border-none bg-transparent transition-opacity hover:opacity-60" style={{ color: "var(--color-base-content)", opacity: 0.5 }}>
               <Settings size={14} />
             </button>
