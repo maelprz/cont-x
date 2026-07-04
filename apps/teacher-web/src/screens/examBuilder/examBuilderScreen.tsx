@@ -20,6 +20,8 @@ import { SaveExamOverlay } from "../../components/examBuilder/saveExamOverlay";
 import {
   createBlankMCQuestion,
   createBlankCodingQuestion,
+  starterCodeFor,
+  mainCodeFor,
 } from "../../components/examBuilder/createBlankQuestion";
 
 export function ExamBuilderScreen({
@@ -148,6 +150,9 @@ export function ExamBuilderScreen({
       description: activeQuestion.description,
     };
 
+    // default coding format used when switching from MCQ into coding
+    const defaultProgramType = "cProgram" as const;
+
     const converted: BuilderQuestion =
       tab === "multiple-choice"
         ? {
@@ -161,10 +166,10 @@ export function ExamBuilderScreen({
         : {
             ...base,
             type: "coding",
-            starterCode: "",
+            starterCode: starterCodeFor(defaultProgramType),
             testCases: [],
-            programType: "cProgram",
-            mainCode: "",
+            programType: defaultProgramType,
+            mainCode: mainCodeFor(defaultProgramType),
             deductionPerAttempt: 0,
           };
 
@@ -355,11 +360,11 @@ export function ExamBuilderScreen({
                             : ({
                                 ...activeQuestion,
                                 type: "coding",
-                                starterCode: "",
+                                starterCode: starterCodeFor("cProgram"),
                                 filename: "main.py",
                                 testCases: [],
                                 programType: "cProgram",
-                                mainCode: "",
+                                mainCode: mainCodeFor("cProgram"),
                                 deductionPerAttempt: 0,
                               } as CodingBuilderQuestion)
                         }

@@ -1,4 +1,4 @@
-import type { MCQBuilderQuestion, CodingBuilderQuestion } from "../../screens/examBuilder/examBuilderScreen.types";
+import type { MCQBuilderQuestion, CodingBuilderQuestion, CodingProgramType } from "../../screens/examBuilder/examBuilderScreen.types";
 
 // blank starting point for a brand new multiple-choice question
 export function createBlankMCQuestion(id: string, number: number): MCQBuilderQuestion {
@@ -16,8 +16,52 @@ export function createBlankMCQuestion(id: string, number: number): MCQBuilderQue
   };
 }
 
+// default starter code shown when a question is set to C Program format
+const DEFAULT_PROGRAM_STARTER_CODE = `#include <stdio.h>
+
+int main() {
+    // Write your code here
+
+    return 0;
+}
+`;
+
+// default starter code shown when a question is set to C Function format
+const DEFAULT_FUNCTION_STARTER_CODE = `// Write your function here
+int solve() {
+
+    return 0;
+}
+`;
+
+// default hidden main code that calls the student's function
+const DEFAULT_FUNCTION_MAIN_CODE = `#include <stdio.h>
+
+int main() {
+    // Calls the student's function and prints the result
+    printf("%d", solve());
+    return 0;
+}
+`;
+
+// returns the right starter code template for the given format
+export function starterCodeFor(programType: CodingProgramType): string {
+  return programType === "cFunction"
+    ? DEFAULT_FUNCTION_STARTER_CODE
+    : DEFAULT_PROGRAM_STARTER_CODE;
+}
+
+// returns the right hidden main code template for the given format
+export function mainCodeFor(programType: CodingProgramType): string {
+  return programType === "cFunction" ? DEFAULT_FUNCTION_MAIN_CODE : "";
+}
+
 // blank starting point for a brand new coding question
-export function createBlankCodingQuestion(id: string, number: number): CodingBuilderQuestion {
+export function createBlankCodingQuestion(
+  id: string,
+  number: number,
+  programType: CodingProgramType = "cProgram"
+): CodingBuilderQuestion {
   return {
     id,
     number,
@@ -25,10 +69,10 @@ export function createBlankCodingQuestion(id: string, number: number): CodingBui
     type: "coding",
     points: 1,
     description: "Description of the question goes here.",
-    starterCode: "",
+    starterCode: starterCodeFor(programType),
     testCases: [],
-    programType: "cProgram",
-    mainCode: "",
+    programType,
+    mainCode: mainCodeFor(programType),
     deductionPerAttempt: 0,
   };
 }
