@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient";
+import type { ExamStatus } from "../screens/examLibrary/examLibraryScreen.types";
 import type { ExamCard } from "../screens/examLibrary/examLibraryScreen.types";
 
 // shape of one row coming straight back from supabase
@@ -7,7 +8,7 @@ type ExamRow = {
   exam_code: string;
   title: string;
   description: string | null;
-  status: "draft" | "active" | "ended"; // matches the db check constraint exactly
+  status: ExamStatus; // matches the db check constraint exactly
   created_at: string;
   questions: { count: number }[]; // embedded count from questions table
   exam_sessions: { count: number }[]; // embedded count from exam_sessions table
@@ -18,6 +19,8 @@ function getCtaLabel(status: ExamRow["status"]): string {
   switch (status) {
     case "draft":
       return "Continue Building"; // still being built, not published
+    case "saved":
+      return "Continue Building"; // saved but not yet published, same as draft
     case "active":
       return "Edit Exam"; // published and students can join
     case "ended":
@@ -68,4 +71,40 @@ export async function getExamsByTeacherId(
   if (error) throw error; // let the hook decide how to show this error
 
   return (data as unknown as ExamRow[]).map(mapExamRowToCard);
+}
+
+export async function publishExam(examId: string): Promise<void> {
+  const { error } = await supabase
+    .from("exams")
+    .update({ status: "active" })
+    .eq("id", examId);
+  if (error) throw error;
+}
+
+export async function endExam(examId: string): Promise<void> {
+  const { error } = await supabase
+    .from("exams")
+    .update({ status: "ended" })
+    .eq("id", examId);
+  if (error) throw error;
+}
+
+export async function deleteExam(examId: string): Promise<void> {
+  const { data, error: fetchError } = await supabase
+    .from("exams")
+    .select("status")
+    .eq("id", examId)
+    .single(); // get the current status of the exam
+
+  if (fetchError || !data) throw fetchError || new Error("Exam not found");
+
+  if (data.status !== "draft" && data.status !== "saved") {
+    throw new Error("Only exams in draft or saved status can be deleted");
+  }
+
+  const { error: deleteError } = await supabase
+    .from("exams")
+    .delete()
+    .eq("id", examId);
+  if (deleteError) throw deleteError;
 }

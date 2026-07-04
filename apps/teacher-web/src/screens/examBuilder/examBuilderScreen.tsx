@@ -10,12 +10,17 @@ import type {
 import { useExamBuilder } from "../../hooks/useExamBuilder";
 import { useSaveQuestion } from "../../hooks/useSaveQuestion";
 import { useDeleteQuestion } from "../../hooks/useDeleteQuestion";
+import { useUpdateExamStatus } from "../../hooks/useUpdateExamStatus";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
 import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
-import {createBlankMCQuestion, createBlankCodingQuestion} from "../../components/examBuilder/createBlankQuestion";
+import { SaveExamOverlay } from "../../components/examBuilder/saveExamOverlay";
+import {
+  createBlankMCQuestion,
+  createBlankCodingQuestion,
+} from "../../components/examBuilder/createBlankQuestion";
 
 export function ExamBuilderScreen({
   questions: externalQuestions,
@@ -32,11 +37,15 @@ export function ExamBuilderScreen({
 }: ExamBuilderScreenProps) {
   const { examData, isLoading, error } = useExamBuilder();
 
-  const [questions, setQuestions] = useState<BuilderQuestion[]>(externalQuestions ?? []);
+  const [questions, setQuestions] = useState<BuilderQuestion[]>(
+    externalQuestions ?? [],
+  );
   const [activeId, setActiveId] = useState<string>(externalActiveId ?? "");
 
   // mirrors what's actually persisted, so Discard has something to revert to
-  const [savedQuestions, setSavedQuestions] = useState<BuilderQuestion[]>(externalQuestions ?? []);
+  const [savedQuestions, setSavedQuestions] = useState<BuilderQuestion[]>(
+    externalQuestions ?? [],
+  );
 
   // fills the builder with real questions once the exam finishes loading
   // replace the load effect to also capture the saved snapshot:
@@ -51,12 +60,18 @@ export function ExamBuilderScreen({
     setEditorTab(firstQuestion?.type ?? "multiple-choice");
   }, [examData, externalQuestions]);
 
-  const activeQuestion = questions.find((q) => q.id === activeId) ?? questions[0];
-  const [editorTab, setEditorTab] = useState<QuestionType>(activeQuestion?.type ?? "multiple-choice");
+  const activeQuestion =
+    questions.find((q) => q.id === activeId) ?? questions[0];
+  const [editorTab, setEditorTab] = useState<QuestionType>(
+    activeQuestion?.type ?? "multiple-choice",
+  );
 
   const handleAddQuestion = () => {
     // creates a new blank question and makes it the active one
-    const newQuestion = createBlankMCQuestion(crypto.randomUUID(), questions.length + 1);
+    const newQuestion = createBlankMCQuestion(
+      crypto.randomUUID(),
+      questions.length + 1,
+    );
 
     setQuestions((prev) => [...prev, newQuestion]);
     setActiveId(newQuestion.id);
@@ -77,12 +92,18 @@ export function ExamBuilderScreen({
         ? createBlankMCQuestion(activeQuestion.id, activeQuestion.number)
         : createBlankCodingQuestion(activeQuestion.id, activeQuestion.number));
 
-    setQuestions((prev) => prev.map((q) => (q.id === revertedQuestion.id ? revertedQuestion : q)));
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === revertedQuestion.id ? revertedQuestion : q)),
+    );
     setEditorTab(revertedQuestion.type); // matches the reverted question's actual type
     onDiscardQuestion?.();
   };
 
-  const { deleteQuestion, isDeleting, error: deleteError } = useDeleteQuestion();
+  const {
+    deleteQuestion,
+    isDeleting,
+    error: deleteError,
+  } = useDeleteQuestion();
 
   const handleDeleteQuestion = async (id: string) => {
     if (!id) return; // nothing selected, nothing to delete
@@ -102,7 +123,7 @@ export function ExamBuilderScreen({
 
     onDeleteQuestion?.(id);
   };
-  
+
   const handleSelectQuestion = (id: string) => {
     setActiveId(id);
     const q = questions.find((q) => q.id === id);
@@ -111,7 +132,9 @@ export function ExamBuilderScreen({
   };
 
   const handleQuestionChange = (updated: BuilderQuestion) =>
-    setQuestions((prev) => prev.map((q) => (q.id === updated.id ? updated : q)));
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === updated.id ? updated : q)),
+    );
 
   const handleTabSwitch = (tab: QuestionType) => {
     setEditorTab(tab);
@@ -127,10 +150,27 @@ export function ExamBuilderScreen({
 
     const converted: BuilderQuestion =
       tab === "multiple-choice"
-        ? { ...base, type: "multiple-choice", options: [{ id: crypto.randomUUID(), text: "", isCorrect: true }, { id: crypto.randomUUID(), text: "", isCorrect: false }] }
-        : { ...base, type: "coding", starterCode: "", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 };
+        ? {
+            ...base,
+            type: "multiple-choice",
+            options: [
+              { id: crypto.randomUUID(), text: "", isCorrect: true },
+              { id: crypto.randomUUID(), text: "", isCorrect: false },
+            ],
+          }
+        : {
+            ...base,
+            type: "coding",
+            starterCode: "",
+            testCases: [],
+            programType: "cProgram",
+            mainCode: "",
+            deductionPerAttempt: 0,
+          };
 
-    setQuestions((prev) => prev.map((q) => (q.id === converted.id ? converted : q)));
+    setQuestions((prev) =>
+      prev.map((q) => (q.id === converted.id ? converted : q)),
+    );
   };
 
   const { saveQuestion, isSaving, error: saveError } = useSaveQuestion();
@@ -150,10 +190,32 @@ export function ExamBuilderScreen({
     }
   };
 
+  const {
+    changeStatus,
+    isUpdating,
+    error: statusError,
+  } = useUpdateExamStatus();
+  const [showSaveOverlay, setShowSaveOverlay] = useState(false);
+
+  // marks the exam as saved but not yet visible to students
+  const handleSaveOnly = async (): Promise<boolean> => {
+    if (!examData?.id) return false; // no exam loaded, nothing to update
+    return changeStatus(examData.id, "saved");
+  };
+
+  // makes the exam live so students can join with the exam code
+  const handlePublish = async (): Promise<boolean> => {
+    if (!examData?.id) return false; // no exam loaded, nothing to update
+    return changeStatus(examData.id, "active");
+  };
+
   const isMCQ = editorTab === "multiple-choice";
 
   return (
-    <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "var(--color-base-200)" }}>
+    <div
+      className="flex h-screen overflow-hidden"
+      style={{ backgroundColor: "var(--color-base-200)" }}
+    >
       <TeacherSidebar activeItem="examBuilder" />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
@@ -177,10 +239,16 @@ export function ExamBuilderScreen({
               style={{ borderColor: "var(--color-base-300)" }}
             >
               <div>
-                <h1 className="text-[24px] font-bold leading-tight mb-0.5" style={{ color: "var(--color-base-content)" }}>
+                <h1
+                  className="text-[24px] font-bold leading-tight mb-0.5"
+                  style={{ color: "var(--color-base-content)" }}
+                >
                   Edit Question
                 </h1>
-                <p className="text-[13px]" style={{ color: "var(--color-base-content)", opacity: 0.6 }}>
+                <p
+                  className="text-[13px]"
+                  style={{ color: "var(--color-base-content)", opacity: 0.6 }}
+                >
                   {isMCQ
                     ? "Configure your multiple choice question and correct options."
                     : "Configure your coding challenge requirements and test cases."}
@@ -190,14 +258,21 @@ export function ExamBuilderScreen({
                 <button
                   onClick={onPreviewExam}
                   className="px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
-                  style={{ borderColor: "var(--color-base-300)", color: "var(--color-base-content)", backgroundColor: "var(--color-base-100)" }}
+                  style={{
+                    borderColor: "var(--color-base-300)",
+                    color: "var(--color-base-content)",
+                    backgroundColor: "var(--color-base-100)",
+                  }}
                 >
                   Preview Exam
                 </button>
                 <button
-                  onClick={onSaveExam}
+                  onClick={() => setShowSaveOverlay(true)}
                   className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-90 border-none"
-                  style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
+                  style={{
+                    backgroundColor: "var(--color-primary)",
+                    color: "var(--color-primary-content)",
+                  }}
                 >
                   Save Exam
                 </button>
@@ -207,75 +282,112 @@ export function ExamBuilderScreen({
             {/* Scrollable body */}
             <div className="flex-1 overflow-y-auto px-7 py-5">
               {isLoading && (
-                <p className="text-[13px]" style={{ color: "var(--color-base-content)", opacity: 0.6 }}>
+                <p
+                  className="text-[13px]"
+                  style={{ color: "var(--color-base-content)", opacity: 0.6 }}
+                >
                   Loading exam...
                 </p>
               )}
               {error && (
-                <p className="text-[13px]" style={{ color: "var(--color-error)" }}>
+                <p
+                  className="text-[13px]"
+                  style={{ color: "var(--color-error)" }}
+                >
                   {error}
                 </p>
               )}
 
               {!isLoading && !error && (
                 <>
-                {/* Type toggle */}
-                <div className="inline-flex rounded-lg p-0.5 mb-6" style={{ backgroundColor: "var(--color-base-300)" }}>
-                  {(["multiple-choice", "coding"] as QuestionType[]).map((tab) => (
-                    <button
-                      key={tab}
-                      onClick={() => handleTabSwitch(tab)}
-                      className="px-4 py-1.5 rounded-md text-[13px] font-mono font-semibold cursor-pointer border-none transition-colors duration-150"
-                      style={{
-                        backgroundColor: editorTab === tab ? "var(--color-base-100)" : "transparent",
-                        color: editorTab === tab ? "var(--color-secondary)" : "var(--color-base-content)",
-                        opacity: editorTab === tab ? 1 : 0.6,
-                      }}
-                    >
-                      {tab === "multiple-choice" ? "Multiple Choice" : "Coding Question"}
-                    </button>
-                  ))}
-                </div>
+                  {/* Type toggle */}
+                  <div
+                    className="inline-flex rounded-lg p-0.5 mb-6"
+                    style={{ backgroundColor: "var(--color-base-300)" }}
+                  >
+                    {(["multiple-choice", "coding"] as QuestionType[]).map(
+                      (tab) => (
+                        <button
+                          key={tab}
+                          onClick={() => handleTabSwitch(tab)}
+                          className="px-4 py-1.5 rounded-md text-[13px] font-mono font-semibold cursor-pointer border-none transition-colors duration-150"
+                          style={{
+                            backgroundColor:
+                              editorTab === tab
+                                ? "var(--color-base-100)"
+                                : "transparent",
+                            color:
+                              editorTab === tab
+                                ? "var(--color-secondary)"
+                                : "var(--color-base-content)",
+                            opacity: editorTab === tab ? 1 : 0.6,
+                          }}
+                        >
+                          {tab === "multiple-choice"
+                            ? "Multiple Choice"
+                            : "Coding Question"}
+                        </button>
+                      ),
+                    )}
+                  </div>
 
-                {/* Editor panel */}
-                {activeQuestion && (
-                  isMCQ ? (
-                    <MCQEditorPanel
-                      question={
-                        activeQuestion.type === "multiple-choice"
-                          ? (activeQuestion as MCQBuilderQuestion)
-                          : { ...activeQuestion, type: "multiple-choice", options: [] } as MCQBuilderQuestion
-                      }
-                      onChange={handleQuestionChange}
-                      onPreviewRendered={onPreviewRendered}
-                    />
-                  ) : (
-                    <CodingEditorPanel
-                      question={
-                        activeQuestion.type === "coding"
-                          ? (activeQuestion as CodingBuilderQuestion)
-                          : { ...activeQuestion, type: "coding", starterCode: "", filename: "main.py", testCases: [] , programType: "cProgram", mainCode: "", deductionPerAttempt: 0 } as CodingBuilderQuestion
-                      }
-                      onChange={handleQuestionChange}
-                      onPreviewRendered={onPreviewRendered}
-                    />
-                  )
-                )}
+                  {/* Editor panel */}
+                  {activeQuestion &&
+                    (isMCQ ? (
+                      <MCQEditorPanel
+                        question={
+                          activeQuestion.type === "multiple-choice"
+                            ? (activeQuestion as MCQBuilderQuestion)
+                            : ({
+                                ...activeQuestion,
+                                type: "multiple-choice",
+                                options: [],
+                              } as MCQBuilderQuestion)
+                        }
+                        onChange={handleQuestionChange}
+                        onPreviewRendered={onPreviewRendered}
+                      />
+                    ) : (
+                      <CodingEditorPanel
+                        question={
+                          activeQuestion.type === "coding"
+                            ? (activeQuestion as CodingBuilderQuestion)
+                            : ({
+                                ...activeQuestion,
+                                type: "coding",
+                                starterCode: "",
+                                filename: "main.py",
+                                testCases: [],
+                                programType: "cProgram",
+                                mainCode: "",
+                                deductionPerAttempt: 0,
+                              } as CodingBuilderQuestion)
+                        }
+                        onChange={handleQuestionChange}
+                        onPreviewRendered={onPreviewRendered}
+                      />
+                    ))}
                 </>
               )}
-              
+
               {saveError && (
-                <p className="text-[13px] mb-2" style={{ color: "var(--color-error)" }}>
+                <p
+                  className="text-[13px] mb-2"
+                  style={{ color: "var(--color-error)" }}
+                >
                   {saveError}
                 </p>
               )}
 
               {deleteError && (
-                <p className="text-[13px] mb-2" style={{ color: "var(--color-error)" }}>
+                <p
+                  className="text-[13px] mb-2"
+                  style={{ color: "var(--color-error)" }}
+                >
                   {deleteError}
                 </p>
               )}
-              
+
               {/* Bottom action row */}
               <div
                 className="flex items-center justify-between mt-8 pt-5 border-t"
@@ -285,7 +397,10 @@ export function ExamBuilderScreen({
                   onClick={() => handleDeleteQuestion(activeQuestion?.id ?? "")}
                   disabled={isDeleting}
                   className="flex items-center gap-1.5 text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
-                  style={{ color: "var(--color-error)", opacity: isDeleting ? 0.6 : 1 }}
+                  style={{
+                    color: "var(--color-error)",
+                    opacity: isDeleting ? 0.6 : 1,
+                  }}
                 >
                   <Trash2 size={14} />
                   {isDeleting ? "Deleting..." : "Delete Question"}
@@ -294,7 +409,11 @@ export function ExamBuilderScreen({
                   <button
                     onClick={handleDiscard}
                     className="px-5 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
-                    style={{ borderColor: "var(--color-base-300)", color: "var(--color-base-content)", backgroundColor: "transparent" }}
+                    style={{
+                      borderColor: "var(--color-base-300)",
+                      color: "var(--color-base-content)",
+                      backgroundColor: "transparent",
+                    }}
                   >
                     Discard
                   </button>
@@ -302,7 +421,11 @@ export function ExamBuilderScreen({
                     onClick={handleSaveAndContinue}
                     disabled={isSaving}
                     className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-                    style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)", opacity: isSaving ? 0.6 : 1 }}
+                    style={{
+                      backgroundColor: "var(--color-primary)",
+                      color: "var(--color-primary-content)",
+                      opacity: isSaving ? 0.6 : 1,
+                    }}
                   >
                     {isSaving ? "Saving..." : "Save & Continue"}
                   </button>
@@ -312,6 +435,16 @@ export function ExamBuilderScreen({
           </main>
         </div>
       </div>
+
+      <SaveExamOverlay
+        isOpen={showSaveOverlay}
+        examCode={examData?.examCode ?? null}
+        isSaving={isUpdating}
+        error={statusError}
+        onClose={() => setShowSaveOverlay(false)}
+        onSaveOnly={handleSaveOnly}
+        onPublish={handlePublish}
+      />
     </div>
   );
 }

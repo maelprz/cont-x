@@ -15,10 +15,10 @@ export function useExamLibrary() {
 
     let isActive = true;
 
-    async function loadExams(teacherId: string) {
+    async function loadExams(id: string) {
       setIsLoading(true);
       try {
-        const result = await getExamsByTeacherId(teacherId);
+        const result = await getExamsByTeacherId(id);
         if (isActive) setExams(result);
       } catch (err) {
         if (isActive) setError("Could not fetch exams. Try again.");
@@ -28,7 +28,19 @@ export function useExamLibrary() {
     }
 
     loadExams(teacherId);
+
+    return () => {
+      isActive = false; // prevents stale updates if teacher changes or unmounts
+    };
   }, [teacherId]);
 
-  return { exams, isLoading, error };
+  // re-runs the fetch, used after publish/end/delete to refresh the list
+  const refetch = () => {
+    if (!teacherId) return;
+    getExamsByTeacherId(teacherId)
+      .then(setExams)
+      .catch(() => setError("Could not refresh exams."));
+  };
+
+  return { exams, isLoading, error, refetch };
 }
