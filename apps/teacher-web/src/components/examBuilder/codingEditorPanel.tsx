@@ -1,5 +1,7 @@
 import { Plus, Trash2, Eye, Settings } from "lucide-react";
 import type { CodingBuilderQuestion, CodingProgramType, TestCase } from "../../screens/examBuilder/examBuilderScreen.types";
+import { CodeEditor } from "./codeEditor";
+import { starterCodeFor, mainCodeFor } from "./createBlankQuestion";
 
 export function CodingEditorPanel({
   question,
@@ -17,7 +19,18 @@ export function CodingEditorPanel({
   // Updates the starter code shown to students.
   const setStarterCode = (v: string) => onChange({ ...question, starterCode: v });
   // Switches between full program and single function mode.
-  const setProgramType = (v: CodingProgramType) => onChange({ ...question, programType: v });
+  // Refreshes the code templates too, but only if they were never customized.
+  const setProgramType = (v: CodingProgramType) => {
+    const starterUntouched = question.starterCode === starterCodeFor(question.programType);
+    const mainUntouched = question.mainCode === mainCodeFor(question.programType);
+
+    onChange({
+      ...question,
+      programType: v,
+      starterCode: starterUntouched ? starterCodeFor(v) : question.starterCode,
+      mainCode: mainUntouched ? mainCodeFor(v) : question.mainCode,
+    });
+  };
   // Updates the teacher's main code used to call the student's function.
   const setMainCode = (v: string) => onChange({ ...question, mainCode: v });
   // Updates how many points are lost per check attempt.
@@ -118,14 +131,7 @@ export function CodingEditorPanel({
                 main.c
               </span>
             </div>
-            <textarea
-              value={question.mainCode}
-              onChange={(e) => setMainCode(e.target.value)}
-              rows={7}
-              spellCheck={false}
-              className="w-full px-4 py-3 text-[13px] resize-none outline-none leading-6"
-              style={{ backgroundColor: "#1a2332", color: "#c2c6d6", fontFamily: "'JetBrains Mono', monospace", border: "none" }}
-            />
+            <CodeEditor value={question.mainCode} onChange={setMainCode} height={180} />
           </div>
         </div>
       )}
@@ -144,14 +150,7 @@ export function CodingEditorPanel({
               <Settings size={14} />
             </button>
           </div>
-          <textarea
-            value={question.starterCode}
-            onChange={(e) => setStarterCode(e.target.value)}
-            rows={7}
-            spellCheck={false}
-            className="w-full px-4 py-3 text-[13px] resize-none outline-none leading-6"
-            style={{ backgroundColor: "#1a2332", color: "#c2c6d6", fontFamily: "'JetBrains Mono', monospace", border: "none" }}
-          />
+          <CodeEditor value={question.starterCode} onChange={setStarterCode} height={180} />
         </div>
       </div>
 
