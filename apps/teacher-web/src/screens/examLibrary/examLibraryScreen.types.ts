@@ -1,11 +1,11 @@
-export type ExamStatus = "published" | "draft" | "ended";
+export type ExamStatus = "draft" | "saved" | "active" | "ended"; // matches the db check constraint exactly
 
 export interface ExamCard {
   id: string;
   code: string;
   title: string;
   description: string;
-  status: "draft" | "published" | "ended"; // matches the db check constraint exactly
+  status: ExamStatus; // matches the db check constraint exactly
   questionCount: number;
   createdAt: string; // display string e.g. "Oct 12, 2023"
   studentCount?: number; // only on published exams
