@@ -1,5 +1,12 @@
-import {supabase} from "./supabaseClient";
-import type { BuilderQuestion, MCQBuilderQuestion, CodingBuilderQuestion, CodingProgramType, MCQOption, TestCase } from "../screens/examBuilder/examBuilderScreen.types";
+import { supabase } from "./supabaseClient";
+import type {
+  BuilderQuestion,
+  MCQBuilderQuestion,
+  CodingBuilderQuestion,
+  CodingProgramType,
+  MCQOption,
+  TestCase,
+} from "../screens/examBuilder/examBuilderScreen.types";
 
 function generateExamCode(): string {
   return `EX-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
@@ -48,7 +55,10 @@ type ExamBuilderRow = {
 };
 
 // creates a blank draft exam row with the teacher's chosen title, returns its new id
-export async function createDraftExam(teacherId: string, title: string): Promise<string> {
+export async function createDraftExam(
+  teacherId: string,
+  title: string,
+): Promise<string> {
   const { data, error } = await supabase
     .from("exams")
     .insert({
@@ -175,7 +185,10 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
 }
 
 // deletes mc_options no longer in the current list, then upserts the rest
-async function syncMcOptions(questionId: string, options: MCQOption[]): Promise<void> {
+async function syncMcOptions(
+  questionId: string,
+  options: MCQOption[],
+): Promise<void> {
   const { data: existingRows, error: fetchError } = await supabase
     .from("mc_options")
     .select("id") // only need ids to compare against
@@ -187,7 +200,10 @@ async function syncMcOptions(questionId: string, options: MCQOption[]): Promise<
   const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id)); // removed by teacher
 
   if (idsToDelete.length > 0) {
-    const { error: deleteError } = await supabase.from("mc_options").delete().in("id", idsToDelete);
+    const { error: deleteError } = await supabase
+      .from("mc_options")
+      .delete()
+      .in("id", idsToDelete);
     if (deleteError) throw deleteError;
   }
 
@@ -205,7 +221,10 @@ async function syncMcOptions(questionId: string, options: MCQOption[]): Promise<
 }
 
 // deletes test_cases no longer in the current list, then upserts the rest
-async function syncTestCases(questionId: string, testCases: TestCase[]): Promise<void> {
+async function syncTestCases(
+  questionId: string,
+  testCases: TestCase[],
+): Promise<void> {
   const { data: existingRows, error: fetchError } = await supabase
     .from("test_cases")
     .select("id") // only need ids to compare against
@@ -217,7 +236,10 @@ async function syncTestCases(questionId: string, testCases: TestCase[]): Promise
   const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id)); // removed by teacher
 
   if (idsToDelete.length > 0) {
-    const { error: deleteError } = await supabase.from("test_cases").delete().in("id", idsToDelete);
+    const { error: deleteError } = await supabase
+      .from("test_cases")
+      .delete()
+      .in("id", idsToDelete);
     if (deleteError) throw deleteError;
   }
 
@@ -236,7 +258,10 @@ async function syncTestCases(questionId: string, testCases: TestCase[]): Promise
 }
 
 // saves one question (and its type-specific child rows) to the database
-export async function saveQuestion(examId: string, question: BuilderQuestion): Promise<void> {
+export async function saveQuestion(
+  examId: string,
+  question: BuilderQuestion,
+): Promise<void> {
   const dbType = question.type === "multiple-choice" ? "mcq" : "coding"; // matches db's check constraint
 
   const { error: questionError } = await supabase.from("questions").upsert({
@@ -251,18 +276,22 @@ export async function saveQuestion(examId: string, question: BuilderQuestion): P
   if (questionError) throw questionError;
 
   if (question.type === "multiple-choice") {
-    const { error: mcqError } = await supabase.from("mcq_question").upsert({ question_id: question.id });
+    const { error: mcqError } = await supabase
+      .from("mcq_question")
+      .upsert({ question_id: question.id });
     if (mcqError) throw mcqError;
 
     await syncMcOptions(question.id, question.options);
   } else {
-    const { error: codingError } = await supabase.from("coding_question").upsert({
-      question_id: question.id,
-      starter_code: question.starterCode,
-      program_type: question.programType,
-      main_code: question.mainCode,
-      check_penalty_per_attempt: question.deductionPerAttempt,
-    });
+    const { error: codingError } = await supabase
+      .from("coding_question")
+      .upsert({
+        question_id: question.id,
+        starter_code: question.starterCode,
+        program_type: question.programType,
+        main_code: question.mainCode,
+        check_penalty_per_attempt: question.deductionPerAttempt,
+      });
     if (codingError) throw codingError;
 
     await syncTestCases(question.id, question.testCases);
@@ -271,6 +300,21 @@ export async function saveQuestion(examId: string, question: BuilderQuestion): P
 
 // permanently deletes a question from supabase and will remove all child rows too
 export async function deleteQuestion(questionId: string): Promise<void> {
-  const { error } = await supabase.from("questions").delete().eq("id", questionId);
+  const { error } = await supabase
+    .from("questions")
+    .delete()
+    .eq("id", questionId);
+  if (error) throw error;
+}
+
+export async function updateExamStatus(
+  examId: string,
+  status: "saved" | "active",
+): Promise<void> {
+  const { error } = await supabase
+    .from("exams")
+    .update({ status })
+    .eq("id", examId);
+
   if (error) throw error;
 }
