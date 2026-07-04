@@ -2,18 +2,41 @@ import { Calendar, FileText, Users, Clock, BadgeCheck, MoreVertical } from "luci
 import type { ExamCard } from "../../screens/examLibrary/examLibraryScreen.types";
 import { StatusBadge } from "./statusBadge";
 
-export function ExamCardTile({ exam }: { exam: ExamCard }) {
+export function ExamCardTile({
+  exam,
+  onClick,
+}: {
+  exam: ExamCard;
+  onClick?: () => void;
+}) {
   const isDraft = exam.status === "draft";
+  const isClickable = Boolean(onClick);
 
   return (
-    <div className="flex flex-col rounded-2xl border overflow-hidden transition-shadow duration-200 hover:shadow-md bg-[var(--color-base-100)] border border-[var(--color-base-300)]">
+    <div
+      role={isClickable ? "button" : undefined}
+      tabIndex={isClickable ? 0 : undefined}
+      onClick={onClick}
+      onKeyDown={(event) => {
+        if (!isClickable) return;
+        if (event.key === "Enter" || event.key === " ") {
+          event.preventDefault();
+          onClick?.();
+        }
+      }}
+      className="flex flex-col rounded-2xl border overflow-hidden transition-shadow duration-200 hover:shadow-md bg-[var(--color-base-100)] border border-[var(--color-base-300)]"
+      style={{ cursor: isClickable ? "pointer" : "default" }}
+    >
       {/* Card body */}
       <div className="flex flex-col gap-3 p-5 flex-grow">
         {/* Status + menu row */}
         <div className="flex items-center justify-between">
           <StatusBadge status={exam.status} />
           <button
-            onClick={exam.onMenuOpen}
+            onClick={(event) => {
+              event.stopPropagation();
+              exam.onMenuOpen?.();
+            }}
             className="p-1 rounded-lg cursor-pointer border-none bg-transparent transition-colors duration-150 hover:opacity-70 text-[var(--color-base-content)] opacity-50"
           >
             <MoreVertical size={16} />
@@ -85,7 +108,10 @@ export function ExamCardTile({ exam }: { exam: ExamCard }) {
 
         {/* CTA link */}
         <button
-          onClick={exam.onCta}
+          onClick={(event) => {
+            event.stopPropagation();
+            exam.onCta?.();
+          }}
           className="flex items-center gap-1 text-[13px] font-bold cursor-pointer border-none bg-transparent transition-opacity duration-150 hover:opacity-70 text-[var(--color-secondary)]"
         >
           {exam.ctaLabel ?? "Edit Exam"}

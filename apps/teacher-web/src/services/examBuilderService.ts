@@ -268,3 +268,9 @@ export async function saveQuestion(examId: string, question: BuilderQuestion): P
     await syncTestCases(question.id, question.testCases);
   }
 }
+
+// permanently deletes a question from supabase and will remove all child rows too
+export async function deleteQuestion(questionId: string): Promise<void> {
+  const { error } = await supabase.from("questions").delete().eq("id", questionId);
+  if (error) throw error;
+}

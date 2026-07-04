@@ -9,15 +9,13 @@ import type {
 } from "./examBuilderScreen.types";
 import { useExamBuilder } from "../../hooks/useExamBuilder";
 import { useSaveQuestion } from "../../hooks/useSaveQuestion";
+import { useDeleteQuestion } from "../../hooks/useDeleteQuestion";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
 import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
-
-// ---------------------------------------------------------------------------
-// Main screen — named export (not default)
-// ---------------------------------------------------------------------------
+import {createBlankMCQuestion, createBlankCodingQuestion} from "../../components/examBuilder/createBlankQuestion";
 
 export function ExamBuilderScreen({
   questions: externalQuestions,
@@ -37,18 +35,74 @@ export function ExamBuilderScreen({
   const [questions, setQuestions] = useState<BuilderQuestion[]>(externalQuestions ?? []);
   const [activeId, setActiveId] = useState<string>(externalActiveId ?? "");
 
+  // mirrors what's actually persisted, so Discard has something to revert to
+  const [savedQuestions, setSavedQuestions] = useState<BuilderQuestion[]>(externalQuestions ?? []);
+
   // fills the builder with real questions once the exam finishes loading
+  // replace the load effect to also capture the saved snapshot:
   useEffect(() => {
     if (externalQuestions) return; // parent controls questions directly, skip
     if (!examData) return; // still loading, or no exam selected
 
+    const firstQuestion = examData.questions[0];
     setQuestions(examData.questions);
-    setActiveId(examData.questions[0]?.id ?? "");
+    setSavedQuestions(examData.questions); // snapshot of what's actually persisted
+    setActiveId(firstQuestion?.id ?? "");
+    setEditorTab(firstQuestion?.type ?? "multiple-choice");
   }, [examData, externalQuestions]);
 
   const activeQuestion = questions.find((q) => q.id === activeId) ?? questions[0];
   const [editorTab, setEditorTab] = useState<QuestionType>(activeQuestion?.type ?? "multiple-choice");
 
+  const handleAddQuestion = () => {
+    // creates a new blank question and makes it the active one
+    const newQuestion = createBlankMCQuestion(crypto.randomUUID(), questions.length + 1);
+
+    setQuestions((prev) => [...prev, newQuestion]);
+    setActiveId(newQuestion.id);
+    setEditorTab("multiple-choice");
+    onAddQuestion?.(); // still notify parent in case it needs to know
+  };
+
+  // add the discard handler
+  const handleDiscard = () => {
+    if (!activeQuestion) return; // nothing selected, nothing to discard
+
+    const savedVersion = savedQuestions.find((q) => q.id === activeQuestion.id);
+
+    // reverts to last save, or a blank template if this question was never saved
+    const revertedQuestion: BuilderQuestion =
+      savedVersion ??
+      (activeQuestion.type === "multiple-choice"
+        ? createBlankMCQuestion(activeQuestion.id, activeQuestion.number)
+        : createBlankCodingQuestion(activeQuestion.id, activeQuestion.number));
+
+    setQuestions((prev) => prev.map((q) => (q.id === revertedQuestion.id ? revertedQuestion : q)));
+    setEditorTab(revertedQuestion.type); // matches the reverted question's actual type
+    onDiscardQuestion?.();
+  };
+
+  const { deleteQuestion, isDeleting, error: deleteError } = useDeleteQuestion();
+
+  const handleDeleteQuestion = async (id: string) => {
+    if (!id) return; // nothing selected, nothing to delete
+
+    const didDelete = await deleteQuestion(id);
+    if (!didDelete) return;
+
+    const deletedIndex = questions.findIndex((q) => q.id === id);
+    const remaining = questions.filter((q) => q.id !== id);
+
+    setQuestions(remaining);
+    setSavedQuestions((prev) => prev.filter((q) => q.id !== id));
+
+    const nextActive = remaining[deletedIndex] ?? null; // item that shifted into the deleted slot
+    setActiveId(nextActive?.id ?? "");
+    setEditorTab(nextActive?.type ?? "multiple-choice");
+
+    onDeleteQuestion?.(id);
+  };
+  
   const handleSelectQuestion = (id: string) => {
     setActiveId(id);
     const q = questions.find((q) => q.id === id);
@@ -85,7 +139,15 @@ export function ExamBuilderScreen({
   const handleSaveAndContinue = async () => {
     if (!activeQuestion) return; // nothing selected, nothing to save
     const didSave = await saveQuestion(activeQuestion);
-    if (didSave) onSaveAndContinue?.();
+    if (didSave) {
+      // this question is now the "last saved" version, for future Discards
+      setSavedQuestions((prev) =>
+        prev.some((q) => q.id === activeQuestion.id)
+          ? prev.map((q) => (q.id === activeQuestion.id ? activeQuestion : q))
+          : [...prev, activeQuestion],
+      );
+      onSaveAndContinue?.();
+    }
   };
 
   const isMCQ = editorTab === "multiple-choice";
@@ -103,7 +165,7 @@ export function ExamBuilderScreen({
             questions={questions}
             activeId={activeId}
             onSelectQuestion={handleSelectQuestion}
-            onAddQuestion={onAddQuestion}
+            onAddQuestion={handleAddQuestion}
             onReorderQuestions={onReorderQuestions}
           />
 
@@ -201,29 +263,36 @@ export function ExamBuilderScreen({
                 )}
                 </>
               )}
-              {/* shows errors in saving the question, if any */}
+              
               {saveError && (
                 <p className="text-[13px] mb-2" style={{ color: "var(--color-error)" }}>
                   {saveError}
                 </p>
               )}
 
+              {deleteError && (
+                <p className="text-[13px] mb-2" style={{ color: "var(--color-error)" }}>
+                  {deleteError}
+                </p>
+              )}
+              
               {/* Bottom action row */}
               <div
                 className="flex items-center justify-between mt-8 pt-5 border-t"
                 style={{ borderColor: "var(--color-base-300)" }}
               >
                 <button
-                  onClick={() => onDeleteQuestion?.(activeQuestion?.id ?? "")}
+                  onClick={() => handleDeleteQuestion(activeQuestion?.id ?? "")}
+                  disabled={isDeleting}
                   className="flex items-center gap-1.5 text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
-                  style={{ color: "var(--color-error)" }}
+                  style={{ color: "var(--color-error)", opacity: isDeleting ? 0.6 : 1 }}
                 >
                   <Trash2 size={14} />
-                  Delete Question
+                  {isDeleting ? "Deleting..." : "Delete Question"}
                 </button>
                 <div className="flex items-center gap-3">
                   <button
-                    onClick={onDiscardQuestion}
+                    onClick={handleDiscard}
                     className="px-5 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
                     style={{ borderColor: "var(--color-base-300)", color: "var(--color-base-content)", backgroundColor: "transparent" }}
                   >
