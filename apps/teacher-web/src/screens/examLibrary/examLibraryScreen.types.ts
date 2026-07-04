@@ -13,7 +13,6 @@ export interface ExamCard {
   footerMeta?: string; // e.g. "Quality Audited" — shown on some published
   ctaLabel?: string; // override CTA text, e.g. "Continue Building"
   onCta?: () => void;
-  onMenuOpen?: () => void;
 }
 
 export interface ExamLibraryScreenProps {

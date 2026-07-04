@@ -1,13 +1,15 @@
-import { Calendar, FileText, Users, Clock, BadgeCheck, MoreVertical } from "lucide-react";
+import { Calendar, FileText, Users, Clock, BadgeCheck } from "lucide-react";
 import type { ExamCard } from "../../screens/examLibrary/examLibraryScreen.types";
 import { StatusBadge } from "./statusBadge";
 
 export function ExamCardTile({
   exam,
   onClick,
+  menu,
 }: {
   exam: ExamCard;
   onClick?: () => void;
+  menu?: React.ReactNode; // the three-dot dropdown, passed in from the parent
 }) {
   const isDraft = exam.status === "draft";
   const isClickable = Boolean(onClick);
@@ -32,15 +34,7 @@ export function ExamCardTile({
         {/* Status + menu row */}
         <div className="flex items-center justify-between">
           <StatusBadge status={exam.status} />
-          <button
-            onClick={(event) => {
-              event.stopPropagation();
-              exam.onMenuOpen?.();
-            }}
-            className="p-1 rounded-lg cursor-pointer border-none bg-transparent transition-colors duration-150 hover:opacity-70 text-[var(--color-base-content)] opacity-50"
-          >
-            <MoreVertical size={16} />
-          </button>
+          {menu}
         </div>
 
         {/* Title + description */}
@@ -56,7 +50,10 @@ export function ExamCardTile({
         {/* Meta: questions + created */}
         <div className="flex items-start gap-6 mt-auto pt-2">
           <div className="flex items-center gap-1.5">
-            <FileText size={14} style={{ color: "var(--color-base-content)", opacity: 0.5 }} />
+            <FileText
+              size={14}
+              style={{ color: "var(--color-base-content)", opacity: 0.5 }}
+            />
             <div>
               <p className="font-mono text-[9px] font-semibold uppercase tracking-widest mb-0.5 text-[var(--color-base-content)] opacity-50">
                 Questions
@@ -68,7 +65,10 @@ export function ExamCardTile({
           </div>
 
           <div className="flex items-center gap-1.5">
-            <Calendar size={14} style={{ color: "var(--color-base-content)", opacity: 0.5 }} />
+            <Calendar
+              size={14}
+              style={{ color: "var(--color-base-content)", opacity: 0.5 }}
+            />
             <div>
               <p className="font-mono text-[9px] font-semibold uppercase tracking-widest mb-0.5 text-[var(--color-base-content)] opacity-50">
                 Created
@@ -83,8 +83,6 @@ export function ExamCardTile({
 
       {/* Card footer */}
       <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--color-base-300)]">
-
-        {/* Left footer meta */}
         <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-base-content)] opacity-55">
           {exam.studentCount !== undefined && (
             <>
@@ -106,7 +104,6 @@ export function ExamCardTile({
           )}
         </div>
 
-        {/* CTA link */}
         <button
           onClick={(event) => {
             event.stopPropagation();
@@ -115,8 +112,19 @@ export function ExamCardTile({
           className="flex items-center gap-1 text-[13px] font-bold cursor-pointer border-none bg-transparent transition-opacity duration-150 hover:opacity-70 text-[var(--color-secondary)]"
         >
           {exam.ctaLabel ?? "Edit Exam"}
-          <svg width="13" height="13" viewBox="0 0 24 24" fill="none" stroke="currentColor" strokeWidth="2.5">
-            <path strokeLinecap="round" strokeLinejoin="round" d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3" />
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke="currentColor"
+            strokeWidth="2.5"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M13.5 4.5 21 12m0 0-7.5 7.5M21 12H3"
+            />
           </svg>
         </button>
       </div>

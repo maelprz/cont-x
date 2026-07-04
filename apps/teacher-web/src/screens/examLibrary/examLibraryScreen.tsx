@@ -4,20 +4,16 @@ import type { ExamLibraryScreenProps } from "./examLibraryScreen.types";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { ExamCardTile } from "../../components/examLibrary/examCardTile";
+import { ExamCardMenu } from "../../components/examLibrary/examCardMenu";
+import { ConfirmActionDialog } from "../../components/examLibrary/confirmActionDialog";
+import { PublishSuccessOverlay } from "../../components/examLibrary/publishSuccessOverlay";
 import { CreateNewCard } from "../../components/examLibrary/createNewCard";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamLibrary } from "../../hooks/useExamLibrary";
 import { useCreateExam } from "../../hooks/useCreateExam";
+import { useExamCardActions } from "../../hooks/useExamCardActions";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { CreateExamModal } from "../../components/examLibrary/createExamModal";
-
-// ---------------------------------------------------------------------------
-// Mock data — replace with real Supabase query when wiring up
-// ---------------------------------------------------------------------------
-
-// ---------------------------------------------------------------------------
-// Main screen — named export (not default)
-// ---------------------------------------------------------------------------
 
 export function ExamLibraryScreen({
   exams: examsProp,
@@ -32,23 +28,40 @@ export function ExamLibraryScreen({
 
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  const { exams: fetchedExams} = useExamLibrary();
+  const { exams: fetchedExams, refetch } = useExamLibrary();
   const exams = examsProp ?? fetchedExams;
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { createExam, isCreating, error: createError } = useCreateExam();
-  const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
+  const setCurrentExamId = useExamBuilderStore(
+    (state) => state.setCurrentExamId,
+  );
+
+  const {
+    handlePublish,
+    handleEnd,
+    handleDelete,
+    isProcessing,
+    error: actionError,
+  } = useExamCardActions();
+
+  // tracks which exam's confirmation dialog is open, and which action it's for
+  const [confirmAction, setConfirmAction] = useState<{
+    examId: string;
+    type: "end" | "delete";
+  } | null>(null);
+  // holds the code to show after a successful publish, null when no overlay is open
+  const [publishedCode, setPublishedCode] = useState<string | null>(null);
 
   const openExamBuilder = (examId: string) => {
     setCurrentExamId(examId);
     navigateTo("examBuilder");
   };
 
-  // called when teacher confirms the title in the modal
   const handleCreateExam = async (title: string) => {
     const newExamId = await createExam(title);
     if (newExamId) {
-      setCurrentExamId(newExamId); // tells ExamBuilder which exam to load
+      setCurrentExamId(newExamId);
       setIsCreateModalOpen(false);
       onCreateNewAssessment?.();
       navigateTo("examBuilder");
@@ -60,6 +73,35 @@ export function ExamLibraryScreen({
     onSearchChange?.(q);
   };
 
+  // publishes right away, then shows the code so the teacher can share it
+  const requestPublish = async (examId: string, examCode: string) => {
+    const didPublish = await handlePublish(examId);
+    if (didPublish) {
+      setPublishedCode(examCode);
+      refetch();
+    }
+  };
+
+  // opens the confirmation dialog instead of acting immediately
+  const requestEnd = (examId: string) =>
+    setConfirmAction({ examId, type: "end" });
+  const requestDelete = (examId: string) =>
+    setConfirmAction({ examId, type: "delete" });
+
+  // runs whichever action the teacher confirmed, then refreshes the list
+  const confirmPendingAction = async () => {
+    if (!confirmAction) return;
+    const didSucceed =
+      confirmAction.type === "end"
+        ? await handleEnd(confirmAction.examId)
+        : await handleDelete(confirmAction.examId);
+
+    if (didSucceed) {
+      setConfirmAction(null);
+      refetch();
+    }
+  };
+
   const filtered = exams.filter(
     (e) =>
       e.title.toLowerCase().includes(search.toLowerCase()) ||
@@ -68,7 +110,6 @@ export function ExamLibraryScreen({
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
-      {/* reuses the exact same sidebar, "examLibrary" marks the active item */}
       <TeacherSidebar activeItem="examLibrary" />
 
       <div className="flex-1 flex flex-col overflow-hidden">
@@ -82,7 +123,6 @@ export function ExamLibraryScreen({
             Teacher Portal &gt; Exam Library
           </p>
 
-          {/* heading + search/filter row */}
           <div className="flex items-start justify-between gap-6 mb-7">
             <div>
               <h1 className="text-2xl font-bold mb-1">Academic Inventory</h1>
@@ -94,7 +134,6 @@ export function ExamLibraryScreen({
             </div>
 
             <div className="flex flex-col items-end gap-2 shrink-0">
-              {/* Search */}
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg border w-[280px] border-[var(--color-base-300)] bg-[var(--color-base-100)]">
                 <svg
                   width="14"
@@ -120,18 +159,17 @@ export function ExamLibraryScreen({
                 />
               </div>
 
-              {/* Filter + grid-view toggle */}
               <div className="flex items-center gap-2">
                 <button
                   onClick={onFilter}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] text-[13px] text-[var(--color-base-content)]  bg-[var(--color-base-100)] font-medium cursor-pointer transition-opacity hover:opacity-70"
+                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] text-[13px] text-[var(--color-base-content)] bg-[var(--color-base-100)] font-medium cursor-pointer transition-opacity hover:opacity-70"
                 >
                   <Filter size={13} />
                   Filter
                 </button>
                 <button
                   onClick={onToggleView}
-                  className="p-2 rounded-lg border border-[var(--color-base-300)]  text-[var(--color-base-content)] bg-[var(--color-base-100)] cursor-pointer transition-opacity hover:opacity-70"
+                  className="p-2 rounded-lg border border-[var(--color-base-300)] text-[var(--color-base-content)] bg-[var(--color-base-100)] cursor-pointer transition-opacity hover:opacity-70"
                 >
                   <LayoutGrid size={15} />
                 </button>
@@ -139,9 +177,16 @@ export function ExamLibraryScreen({
             </div>
           </div>
 
-          {/* Card grid */}
+          {actionError && (
+            <p
+              className="text-[13px] mb-4"
+              style={{ color: "var(--color-error)" }}
+            >
+              {actionError}
+            </p>
+          )}
+
           <div className="grid grid-cols-3 gap-5">
-            {/* "Create New" card — navigates to exam builder */}
             <CreateNewCard onClick={() => setIsCreateModalOpen(true)} />
             {filtered.map((exam) => (
               <ExamCardTile
@@ -151,6 +196,15 @@ export function ExamLibraryScreen({
                   onCta: () => openExamBuilder(exam.id),
                 }}
                 onClick={() => openExamBuilder(exam.id)}
+                menu={
+                  <ExamCardMenu
+                    status={exam.status}
+                    isProcessing={isProcessing}
+                    onPublish={() => requestPublish(exam.id, exam.code)}
+                    onEnd={() => requestEnd(exam.id)}
+                    onDelete={() => requestDelete(exam.id)}
+                  />
+                }
               />
             ))}
             <CreateExamModal
@@ -163,6 +217,31 @@ export function ExamLibraryScreen({
           </div>
         </main>
       </div>
+
+      <ConfirmActionDialog
+        isOpen={confirmAction !== null}
+        title={
+          confirmAction?.type === "end" ? "End this exam?" : "Delete this exam?"
+        }
+        message={
+          confirmAction?.type === "end"
+            ? "Students will no longer be able to join or submit answers."
+            : "This permanently removes the exam and all of its questions."
+        }
+        confirmLabel={
+          confirmAction?.type === "end" ? "End Exam" : "Delete Exam"
+        }
+        isProcessing={isProcessing}
+        error={actionError}
+        onConfirm={confirmPendingAction}
+        onCancel={() => setConfirmAction(null)}
+      />
+
+      <PublishSuccessOverlay
+        isOpen={publishedCode !== null}
+        examCode={publishedCode ?? ""}
+        onClose={() => setPublishedCode(null)}
+      />
     </div>
   );
 }
