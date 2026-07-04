@@ -35,6 +35,7 @@ export interface CodingQuestion extends BaseQuestion {
   constraints?: string[];        // bullet list under CONSTRAINTS
   starterCode?: string;          // pre-filled code in the editor
   filename?: string;             // e.g. 'solution.js'
+  language?: string;             // Monaco language mode, e.g. 'c'
 }
 
 // Multiple-choice question extras

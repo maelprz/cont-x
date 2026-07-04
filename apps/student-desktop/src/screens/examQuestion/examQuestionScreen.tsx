@@ -1,5 +1,6 @@
 import { useState } from 'react';
 import { useRouterLogic } from '../../router/routerLogic';
+import { CodeEditor } from '../../components/examQuestion/codeEditor';
 import type {
   ExamQuestionScreenProps,
   QuestionMapItem,
@@ -10,7 +11,7 @@ import type {
 } from './examQuestionScreen.types';
 
 // ---------------------------------------------------------------------------
-// Mock data — replace with real store/hook values when wiring up
+// Mock data, replace with real store or hook values when wiring up
 // ---------------------------------------------------------------------------
 
 const MOCK_QUESTION_MAP: QuestionMapItem[] = [
@@ -46,9 +47,9 @@ const MOCK_CODING_QUESTION: CodingQuestion = {
   constraints: [
     '1 <= s.length <= 1000',
     's consists of only digits and English letters',
-    'Time complexity: O(n²) preferred',
+    'Time complexity: O(n^2) preferred',
   ],
-  starterCode: `function longestPalindrome(s) {\n  // Write your code here\n  let result = "";\n\n  return result;\n}`,
+  starterCode: `#include <stdio.h>\n#include <string.h>\n\nchar* longestPalindrome(char* s) {\n    // Write your code here\n    return "";\n}\n\nint main() {\n    char s[1001];\n    scanf("%s", s);\n    printf("%s\\n", longestPalindrome(s));\n    return 0;\n}`,
   isFlagged: false,
 };
 
@@ -59,10 +60,10 @@ const MOCK_MCQ_QUESTION: MCQQuestion = {
   title: 'Question 3',
   body: 'Which of the following best describes the time complexity of binary search on a sorted array of n elements?',
   options: [
-    { id: 'A', text: 'O(n) — Linear time, scanning each element once' },
-    { id: 'B', text: 'O(log n) — Logarithmic time, halving the search space each step' },
-    { id: 'C', text: 'O(n²) — Quadratic time, comparing all pairs' },
-    { id: 'D', text: 'O(1) — Constant time, direct index access' },
+    { id: 'A', text: 'O(n), linear time, scanning each element once' },
+    { id: 'B', text: 'O(log n), logarithmic time, halving the search space each step' },
+    { id: 'C', text: 'O(n^2), quadratic time, comparing all pairs' },
+    { id: 'D', text: 'O(1), constant time, direct index access' },
   ],
   selectedOptionId: undefined,
   isFlagged: false,
@@ -124,64 +125,6 @@ function QuestionMapGrid({
   );
 }
 
-// Coding pane: simple read-only code display with line numbers
-// (swap for MonacoEditorPane when wiring up real editor)
-function CodeEditor({
-  code,
-  onRunTests,
-  onRunCode,
-}: {
-  code: string;
-  onRunTests?: () => void;
-  onRunCode?: () => void;
-}) {
-  const lines = code.split('\n');
-  return (
-    <div className="flex flex-col h-full">
-      {/* Editor toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-app)] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onRunTests}
-            className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-secondary)] text-[12px] font-semibold font-mono cursor-pointer hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-colors duration-150"
-          >
-            Run Tests
-          </button>
-          <button
-            onClick={onRunCode}
-            className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[12px] font-bold font-mono cursor-pointer transition-transform duration-150 hover:scale-[1.02] bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)]"
-          >
-            Run Code
-          </button>
-        </div>
-      </div>
-
-      {/* Code area */}
-      <div className="flex-grow overflow-auto bg-[var(--bg-app)] p-4">
-        <table className="w-full border-collapse">
-          <tbody>
-            {lines.map((line, i) => (
-              <tr key={i} className="leading-6">
-                <td className="pr-4 text-right text-[var(--text-secondary)] font-mono text-[13px] select-none w-8 align-top">
-                  {i + 1}
-                </td>
-                <td className="font-mono text-[13px] text-[var(--text-primary)] whitespace-pre align-top">
-                  {/* Very basic syntax highlight — function names in primary */}
-                  {line.split(/(\bfunction\b|\breturn\b|\blet\b|\bconst\b|\bvar\b)/).map((part, j) =>
-                    ['function', 'return', 'let', 'const', 'var'].includes(part)
-                      ? <span key={j} className="text-[var(--warning-text)]">{part}</span>
-                      : <span key={j}>{part}</span>
-                  )}
-                </td>
-              </tr>
-            ))}
-          </tbody>
-        </table>
-      </div>
-    </div>
-  );
-}
-
 // MCQ answer options
 function MCQOptions({
   options,
@@ -235,7 +178,7 @@ function MCQOptions({
 }
 
 // ---------------------------------------------------------------------------
-// Main screen — named export (not default)
+// Main screen, named export (not default)
 // ---------------------------------------------------------------------------
 
 export function ExamQuestionScreen({
@@ -248,6 +191,7 @@ export function ExamQuestionScreen({
   onNavigate,
   onFlag,
   onAnswerSelect,
+  onCodeChange,
   onRunTests,
   onRunCode,
   onPrevious,
@@ -255,14 +199,24 @@ export function ExamQuestionScreen({
   onSubmit,
 }: ExamQuestionScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
-  // Local MCQ selection state — will be lifted via onAnswerSelect when wired up
+  // Local MCQ selection state, will be lifted via onAnswerSelect when wired up
   const [localSelectedOption, setLocalSelectedOption] = useState<string | undefined>(
     question.type === 'multiple-choice' ? question.selectedOptionId : undefined
   );
-  
+
+  // Local code text, will be lifted via onCodeChange when wired up
+  const [localCode, setLocalCode] = useState<string>(
+    question.type === 'coding' ? question.starterCode ?? '' : ''
+  );
+
   const handleOptionSelect = (id: string) => {
     setLocalSelectedOption(id);
     onAnswerSelect?.(question.number, id);
+  };
+
+  const handleCodeChange = (code: string) => {
+    setLocalCode(code);
+    onCodeChange?.(question.number, code);
   };
 
   const handleOnSubmit = () => {
@@ -275,12 +229,12 @@ export function ExamQuestionScreen({
   const isLastQuestion = question.number >= question.totalQuestions;
   const codingQ  = isCoding ? (question as CodingQuestion) : null;
   const mcqQ     = !isCoding ? (question as MCQQuestion) : null;
-  
+
   return (
     <div
       className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden bg-[var(--bg-sidebar)]"
     >
-      {/* ── Top navigation bar ──────────────────────────────────────── */}
+      {/* Top navigation bar */}
       <header
         className="h-14 flex-shrink-0 flex items-center px-6 border-b border-[var(--border-primary)] backdrop-blur-md z-10 bg-[var(--bg-sidebar)]"
       >
@@ -309,7 +263,7 @@ export function ExamQuestionScreen({
             </div>
           </div>
 
-          {/* Timer — height capped to fit header row */}
+          {/* Timer, height capped to fit header row */}
           <div
             className="flex items-center gap-2 px-3 rounded-lg border border-[var(--border-subtle)] flex-shrink-0 h-9"
           >
@@ -328,10 +282,10 @@ export function ExamQuestionScreen({
         </div>
       </header>
 
-      {/* ── Body: sidebar + content ──────────────────────────────────── */}
+      {/* Body: sidebar and content */}
       <div className="flex flex-grow overflow-hidden">
 
-        {/* ── Left Pane: question pane ──────────────────────────────────── */}
+        {/* Left pane: question pane */}
         <section
           className={`flex flex-col overflow-y-auto bg-[var(--bg-app)] border-r border-[var(--border-primary)] min-w-0 ${isCoding ? 'w-[420px] flex-shrink-0' : 'flex-1'}`}
         >
@@ -414,17 +368,19 @@ export function ExamQuestionScreen({
           </div>
         </section>
 
-        {/* ── Center Pane: Code editor (coding only) ─────────────────── */}
+        {/* Center pane: code editor (coding only) */}
         {isCoding && codingQ && (
           <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
             <CodeEditor
-              code={codingQ.starterCode ?? ''}
+              code={localCode}
+              language={codingQ.language ?? 'c'}
+              onChange={handleCodeChange}
               onRunTests={onRunTests}
               onRunCode={onRunCode}
             />
           </section>
         )}
-        {/* ── Right sidebar: question map ─────────────────────────────── */}
+        {/* Right sidebar: question map */}
         <aside className="w-[220px] flex-shrink-0 flex flex-col border-l border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
           <div className="p-4 flex-grow">
             <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--text-inverted-secondary)] mb-3">
@@ -453,7 +409,7 @@ export function ExamQuestionScreen({
         </aside>
       </div>
 
-      {/* ── Bottom action bar ───────────────────────────────────────── */}
+      {/* Bottom action bar */}
       <footer
         className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-t border-[var(--border-primary)] backdrop-blur-sm bg-[var(--bg-sidebar)]"
       >
@@ -484,7 +440,7 @@ export function ExamQuestionScreen({
             T-STAMP: {new Date().toLocaleTimeString('en-GB', { hour: '2-digit', minute: '2-digit', second: '2-digit' })}
           </span>
         </div>
-        {/* Merged Next/Submit button — Submit only appears on the last question */}
+        {/* Merged Next/Submit button, Submit only appears on the last question */}
           <button
             onClick={isLastQuestion ? handleOnSubmit : onNext}
             className={
