@@ -89,7 +89,6 @@ static void setPolicyValue(const char* valueName, bool enable) {
 
 // turns Windows' built-in Task Manager block on or off
 Napi::Value SetTaskManagerDisabled(const Napi::CallbackInfo& info) {
-  // expects true (disable) or false (re-enable) from JS
   bool disable = info[0].As<Napi::Boolean>().Value();
   setPolicyValue("DisableTaskMgr", disable);
   return info.Env().Undefined();
@@ -116,15 +115,38 @@ Napi::Value SetFastUserSwitchingDisabled(const Napi::CallbackInfo& info) {
   return info.Env().Undefined();
 }
 
-// registers all callable functions for Node.js
+// hides or shows the Windows taskbar and secondary taskbar (multi-monitor)
+// called with true to restore, false to hide during lockdown
+Napi::Value SetTaskbarVisible(const Napi::CallbackInfo& info) {
+  bool visible = info[0].As<Napi::Boolean>().Value();
+
+  // finds the taskbar window by its well-known class name
+  HWND taskbar = FindWindow(TEXT("Shell_TrayWnd"), NULL);
+  if (taskbar != NULL) {
+    // SW_HIDE makes it completely invisible and unclickable
+    // SW_SHOW restores it to its normal state
+    ShowWindow(taskbar, visible ? SW_SHOW : SW_HIDE);
+  }
+
+  // also handle the secondary taskbar on multi-monitor setups
+  HWND secondaryTaskbar = FindWindow(TEXT("Shell_SecondaryTrayWnd"), NULL);
+  if (secondaryTaskbar != NULL) {
+    ShowWindow(secondaryTaskbar, visible ? SW_SHOW : SW_HIDE);
+  }
+
+  return info.Env().Undefined();
+}
+
+// registers all functions so Node.js can call them via require()
 Napi::Object Init(Napi::Env env, Napi::Object exports) {
-  exports.Set("startHook", Napi::Function::New(env, StartHook));
-  exports.Set("stopHook",  Napi::Function::New(env, StopHook));
-  exports.Set("setTaskManagerDisabled", Napi::Function::New(env, SetTaskManagerDisabled));
-  // new: lock down the rest of the Ctrl+Alt+Del screen
-  exports.Set("setLockWorkstationDisabled", Napi::Function::New(env, SetLockWorkstationDisabled));
-  exports.Set("setChangePasswordDisabled", Napi::Function::New(env, SetChangePasswordDisabled));
+  exports.Set("startHook",                    Napi::Function::New(env, StartHook));
+  exports.Set("stopHook",                     Napi::Function::New(env, StopHook));
+  exports.Set("setTaskManagerDisabled",       Napi::Function::New(env, SetTaskManagerDisabled));
+  exports.Set("setLockWorkstationDisabled",   Napi::Function::New(env, SetLockWorkstationDisabled));
+  exports.Set("setChangePasswordDisabled",    Napi::Function::New(env, SetChangePasswordDisabled));
   exports.Set("setFastUserSwitchingDisabled", Napi::Function::New(env, SetFastUserSwitchingDisabled));
+  exports.Set("setTaskbarVisible",            Napi::Function::New(env, SetTaskbarVisible));
+  // was missing from Init in your original — SetTaskbarVisible existed but was never callable from JS
   return exports;
 }
 

@@ -1,13 +1,12 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { registerCompilerHandlers } from './ipc/compilerHandlers';
+import { registerCompilerHandlers } from "./ipc/compilerHandlers";
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
 
-// set APP_ROOT first before anything else uses it
 process.env.APP_ROOT = path.join(__dirname, "..");
 
 export const VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
@@ -18,8 +17,8 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, "public")
   : RENDERER_DIST;
 
-// safely load the C++ keyboard hook addon
-// if it fails, the app still opens — lockdown just won't be active
+// type definition for every function exported by the C++ native module
+// setTaskbarVisible is now included — was missing before
 let keyboardHook: {
   startHook: () => void;
   stopHook: () => void;
@@ -27,6 +26,7 @@ let keyboardHook: {
   setLockWorkstationDisabled: (disable: boolean) => void;
   setChangePasswordDisabled: (disable: boolean) => void;
   setFastUserSwitchingDisabled: (disable: boolean) => void;
+  setTaskbarVisible: (visible: boolean) => void; // added — was missing from the type
 } | null = null;
 
 try {
@@ -41,46 +41,50 @@ try {
   console.error("[lockdown] keyboard hook failed to load:", err);
 }
 
-let win: BrowserWindow | null;
+let win: BrowserWindow | null = null;
+let isExiting = false;
 
-// clears any leftover Ctrl+Alt+Del restrictions from a crashed previous session
+// clears any leftover restrictions from a crashed previous session
+// runs before createWindow so a clean state is guaranteed on startup
 function cleanupStaleLockdownState() {
   try {
+    keyboardHook?.stopHook();
     keyboardHook?.setTaskManagerDisabled(false);
     keyboardHook?.setLockWorkstationDisabled(false);
     keyboardHook?.setChangePasswordDisabled(false);
     keyboardHook?.setFastUserSwitchingDisabled(false);
+    keyboardHook?.setTaskbarVisible(true); // restore taskbar if it was hidden by a crash
     console.log("[lockdown] cleared any leftover state from last run");
   } catch (err) {
     console.error("[lockdown] cleanup failed:", err);
   }
 }
 
-// installs the WH_KEYBOARD_LL hook — blocks restricted keys system-wide
+// installs the WH_KEYBOARD_LL hook and applies all OS-level restrictions
 function registerLockdown() {
   try {
     keyboardHook?.startHook();
-    // restrict what's reachable from the Ctrl+Alt+Del screen
     keyboardHook?.setTaskManagerDisabled(true);
     keyboardHook?.setLockWorkstationDisabled(true);
     keyboardHook?.setChangePasswordDisabled(true);
     keyboardHook?.setFastUserSwitchingDisabled(true);
-    console.log("[lockdown] hook registered");
+    keyboardHook?.setTaskbarVisible(false); // hide taskbar so student can't close app from it
+    console.log("[lockdown] hook registered, taskbar hidden");
   } catch (err) {
     console.error("[lockdown] failed to register hook:", err);
   }
 }
 
-// removes the WH_KEYBOARD_LL hook — called before app quits
+// removes all restrictions — called before app quits or exam ends
 function unregisterLockdown() {
   try {
     keyboardHook?.stopHook();
-    // give normal Windows options back once the exam session ends
     keyboardHook?.setTaskManagerDisabled(false);
     keyboardHook?.setLockWorkstationDisabled(false);
     keyboardHook?.setChangePasswordDisabled(false);
     keyboardHook?.setFastUserSwitchingDisabled(false);
-    console.log("[lockdown] hook unregistered");
+    keyboardHook?.setTaskbarVisible(true); // always restore taskbar before exit
+    console.log("[lockdown] hook unregistered, taskbar restored");
   } catch (err) {
     console.error("[lockdown] failed to unregister hook:", err);
   }
@@ -90,22 +94,33 @@ function createWindow() {
   win = new BrowserWindow({
     title: "Cont/x",
     icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
-    kiosk: true, // covers the taskbar
+    kiosk: true, // covers the taskbar area at the OS level as a secondary layer
     frame: false, // removes the title bar and window controls
     webPreferences: {
       preload: path.join(__dirname, "preload.mjs"),
     },
   });
 
-  // keeps the app above all other windows
+  // keeps the app above all other windows at the highest z-order level
   win.setAlwaysOnTop(true, "screen-saver");
 
-  // if somehow minimized, restore it immediately
+  // if somehow minimized (e.g. via a hotkey we didn't catch), restore immediately
   win.on("minimize", () => {
     win?.restore();
   });
 
-  // prevents Vite from overriding the window title
+  // prevents the student from closing the app via taskbar right-click → Close
+  // or any other close attempt while the app is running
+  win.on("close", (event) => {
+    if (!isExiting) {
+      // student tried to close via taskbar, Alt+F4, or anything else — block it
+      event.preventDefault();
+      console.log("[lockdown] close attempt blocked");
+    }
+    // if isExiting is true, we let the close proceed naturally
+  });
+
+  // prevents Vite from overriding the window title during dev
   win.on("page-title-updated", (evt) => evt.preventDefault());
 
   win.webContents.on("did-finish-load", () => {
@@ -119,19 +134,35 @@ function createWindow() {
   }
 }
 
-// called when the student clicks logout — cleans up and exits
+// called when the student clicks logout — the only valid exit path
 ipcMain.on("exit-app", () => {
-  unregisterLockdown();
+  isExiting = true; // tell the close handler to allow the next close
+  unregisterLockdown(); // restore taskbar, remove hooks, re-enable task manager
   if (win) {
-    win.closable = true; // allow the window to close
     win.setAlwaysOnTop(false); // release always-on-top before quitting
   }
-  app.quit();
+  app.quit(); // now the close event fires and isExiting = true lets it through
+});
+
+// last-resort cleanup if the process exits unexpectedly
+// restores the taskbar even if unregisterLockdown() was never called
+process.on("exit", () => {
+  try {
+    keyboardHook?.stopHook();
+    keyboardHook?.setTaskManagerDisabled(false);
+    keyboardHook?.setLockWorkstationDisabled(false);
+    keyboardHook?.setChangePasswordDisabled(false);
+    keyboardHook?.setFastUserSwitchingDisabled(false);
+    keyboardHook?.setTaskbarVisible(true); // critical — stuck hidden taskbar is very bad UX
+  } catch {
+    // silently ignore — process is already exiting
+  }
 });
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    unregisterLockdown();
+    // unregisterLockdown already called by exit-app — don't call again here
+    // just make sure the process actually exits
     app.quit();
     win = null;
   }
@@ -144,8 +175,8 @@ app.on("activate", () => {
 });
 
 app.whenReady().then(() => {
-  cleanupStaleLockdownState(); // undo any restrictions left by a crash
+  cleanupStaleLockdownState(); // undo any restrictions left by a previous crash
   createWindow();
-  registerLockdown(); // lockdown starts the moment the app is ready
+  registerLockdown(); // lockdown starts the moment the window is ready
   registerCompilerHandlers(); // sets up the run-test-cases IPC channel
 });
