@@ -1,28 +1,43 @@
 import { useState } from "react";
-import { updateExamStatus } from "../services/examBuilderService";
+import { updateExamStatus, publishExam } from "../services/examBuilderService";
 
-// manages loading and error state while changing an exam's status
+// manages loading and error state for Save/Publish transitions
 export function useUpdateExamStatus() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  // writes the new status, returns true only if it succeeded
-  async function changeStatus(
-    examId: string,
-    status: "saved" | "active",
-  ): Promise<boolean> {
+  // marks the exam as saved but not yet visible to students
+  async function saveOnly(examId: string): Promise<boolean> {
     setIsUpdating(true);
     setError(null);
     try {
-      await updateExamStatus(examId, status);
+      await updateExamStatus(examId, "saved");
       return true;
     } catch (err) {
-      setError("Could not update exam status. Try again.");
+      setError("Could not save exam. Try again.");
       return false;
     } finally {
       setIsUpdating(false);
     }
   }
 
-  return { changeStatus, isUpdating, error };
+  // publishes the exam with the teacher's chosen verification code
+  async function publish(
+    examId: string,
+    verificationCode: string,
+  ): Promise<boolean> {
+    setIsUpdating(true);
+    setError(null);
+    try {
+      await publishExam(examId, verificationCode);
+      return true;
+    } catch (err) {
+      setError("Could not publish exam. Try again.");
+      return false;
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
+  return { saveOnly, publish, isUpdating, error };
 }

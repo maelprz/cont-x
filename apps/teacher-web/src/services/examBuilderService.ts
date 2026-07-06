@@ -309,11 +309,23 @@ export async function deleteQuestion(questionId: string): Promise<void> {
 
 export async function updateExamStatus(
   examId: string,
-  status: "saved" | "active",
+  status: "saved",
 ): Promise<void> {
   const { error } = await supabase
     .from("exams")
     .update({ status })
+    .eq("id", examId);
+
+  if (error) throw error;
+}
+
+export async function publishExam(
+  examId: string,
+  verificationCode: string,
+): Promise<void> {
+  const { error } = await supabase
+    .from("exams")
+    .update({ status: "active", verification_code: verificationCode })
     .eq("id", examId);
 
   if (error) throw error;
