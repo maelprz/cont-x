@@ -196,7 +196,8 @@ export function ExamBuilderScreen({
   };
 
   const {
-    changeStatus,
+    saveOnly,
+    publish,
     isUpdating,
     error: statusError,
   } = useUpdateExamStatus();
@@ -205,13 +206,13 @@ export function ExamBuilderScreen({
   // marks the exam as saved but not yet visible to students
   const handleSaveOnly = async (): Promise<boolean> => {
     if (!examData?.id) return false; // no exam loaded, nothing to update
-    return changeStatus(examData.id, "saved");
+    return saveOnly(examData.id);
   };
 
   // makes the exam live so students can join with the exam code
-  const handlePublish = async (): Promise<boolean> => {
+  const handlePublish = async (verificationCode: string): Promise<boolean> => {
     if (!examData?.id) return false; // no exam loaded, nothing to update
-    return changeStatus(examData.id, "active");
+    return publish(examData.id, verificationCode);
   };
 
   const isMCQ = editorTab === "multiple-choice";
