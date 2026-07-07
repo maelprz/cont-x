@@ -46,6 +46,7 @@ export function ExamConfirmationScreen({
   const storeExamId = useExamSessionStore((state) => state.examId); // real exam id from Dashboard
   const storeExamTitle = useExamSessionStore((state) => state.examTitle); // real exam title from Dashboard
   const setSessionId = useExamSessionStore((state) => state.setSessionId); // saves session id after verifying
+  const storeAttemptsRemaining = useExamSessionStore((state) => state.attemptsRemaining); // real attempts left
   const { details } = useExamConfirmationDetails(storeExamId);
 
   // Builds the real detail cards from fetched data, falling back to placeholder text.
@@ -67,8 +68,8 @@ export function ExamConfirmationScreen({
     },
     {
       label: 'Attempts Left',
-      value: '1 of 1', // fixed for now — real per-exam attempts is a separate, not-yet-built feature
-      subtext: 'No retakes allowed',
+      value: storeAttemptsRemaining != null ? `${storeAttemptsRemaining} Remaining` : '—',
+      subtext: storeAttemptsRemaining === 1 ? 'Final attempt' : 'Attempts remaining',
     },
   ];
 
