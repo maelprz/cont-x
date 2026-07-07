@@ -6,6 +6,7 @@ import type { DashboardScreenProps } from "./dashboardScreen.types"; // this scr
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 import { useAuthStore } from "../../stores/useAuthStore"; // store controlling the user's auth state
 import { useExamHistory } from "../../hooks/useExamHistory"; // custom hook for fetching exam history
+import { useVerifyExamCode } from "../../hooks/useVerifyExamCode"; // new hook for exam code lookup
 
 export function DashboardScreen(_props: DashboardScreenProps) {
   const [examCodeInput, setExamCodeInput] = useState("");
@@ -13,13 +14,22 @@ export function DashboardScreen(_props: DashboardScreenProps) {
   const user = useAuthStore((state) => state.user);
 
   const { examHistory, isLoading, error } = useExamHistory(); // fetch exam history using the custom hook
+  const {
+    verifyExamCode,
+    isVerifying,
+    error: verifyError,
+  } = useVerifyExamCode();
 
   function handleExamCodeChange(event: ChangeEvent<HTMLInputElement>) {
     setExamCodeInput(event.target.value);
   }
 
-  function handleVerifyExamCode() {
-    navigateTo("examConfirmation");
+  async function handleVerifyExamCode() {
+    const exam = await verifyExamCode(examCodeInput); // check the typed code against Supabase
+
+    if (exam) {
+      navigateTo("examConfirmation"); // only redirect if an exam was actually found
+    }
   }
 
   return (
@@ -66,6 +76,11 @@ export function DashboardScreen(_props: DashboardScreenProps) {
               Verify Exam Code <ArrowRight size={16} />
             </button>
           </div>
+          {verifyError && (
+            <p className="text-xs text-[#ef4444] mt-2 basis-full">
+              {verifyError}
+            </p>
+          )}
         </section>
 
         {/* Previous exams table, using the mock data defined above */}
