@@ -6,7 +6,6 @@ export interface ExamDetail {
 
 export interface ExamConfirmationScreenProps {
   examTitle?: string;
-  courseCode?: string;
   studentName?: string;
   studentId?: string;
   examDetails?: ExamDetail[];

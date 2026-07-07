@@ -1,24 +1,11 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import type { ExamConfirmationScreenProps, ExamDetail } from './examConfirmationScreen.types';
+import { useExamConfirmationDetails } from '../../hooks/useExamConfirmationDetails';
+import { useExamSessionStore } from '../../stores/useExamSessionStore';
+import { useAuthStore } from '../../stores/useAuthStore';
 import { useRouterLogic } from '../../router/routerLogic';
 import { AppHeader } from '../../components/layout/appHeader';
 import { SessionVerificationModal } from '../../components/modals/sessionVerificationModal';
-
-// ---------------------------------------------------------------------------
-// Mock data — replace with real store/hook values when wiring up
-// ---------------------------------------------------------------------------
-const MOCK_EXAM_TITLE = 'Advanced Algorithms';
-const MOCK_COURSE_CODE = 'CS302';
-const MOCK_STUDENT_NAME = 'Juan dela Cruz';
-const MOCK_STUDENT_ID = '2021-00123';
-const MOCK_VERIFICATION_CODE = '000000';
-
-const MOCK_EXAM_DETAILS: ExamDetail[] = [
-  { label: 'Duration',        value: '120 Minutes',    subtext: 'Non-stop session'   },
-  { label: 'Total Questions', value: '4 Coding Tasks', subtext: 'Live evaluation'    },
-  { label: 'Pass Mark',       value: '70% Threshold',  subtext: 'Academy standard'   },
-  { label: 'Attempts Left',   value: '1 of 1',         subtext: 'No retakes allowed' },
-];
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -45,27 +32,72 @@ function DetailCard({ label, value, subtext }: ExamDetail) {
 // ---------------------------------------------------------------------------
 
 export function ExamConfirmationScreen({
-  examTitle   = MOCK_EXAM_TITLE,
-  courseCode  = MOCK_COURSE_CODE,
-  studentName = MOCK_STUDENT_NAME,
-  studentId   = MOCK_STUDENT_ID,
-  examDetails = MOCK_EXAM_DETAILS,
+  examTitle,
+  studentName,
+  studentId,
+  examDetails,
   onStartExam,
   onCancel,
 }: ExamConfirmationScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const [isVerificationOpen, setIsVerificationOpen] = useState(false);
 
+  const user = useAuthStore((state) => state.user); // real student name + id number
+  const storeExamId = useExamSessionStore((state) => state.examId); // real exam id from Dashboard
+  const storeExamTitle = useExamSessionStore((state) => state.examTitle); // real exam title from Dashboard
+  const setSessionId = useExamSessionStore((state) => state.setSessionId); // saves session id after verifying
+  const { details } = useExamConfirmationDetails(storeExamId);
+
+  // Builds the real detail cards from fetched data, falling back to placeholder text.
+  const displayExamDetails: ExamDetail[] = examDetails ?? [
+    {
+      label: 'Duration',
+      value: details ? `${details.durationMinutes} Minutes` : '—',
+      subtext: 'Non-stop session',
+    },
+    {
+      label: 'Total Questions',
+      value: details ? `${details.totalQuestions} Questions` : '—',
+      subtext: 'Live evaluation',
+    },
+    {
+      label: 'Pass Mark',
+      value: details ? `${details.passMark}% Threshold` : '—',
+      subtext: 'Academy standard',
+    },
+    {
+      label: 'Attempts Left',
+      value: '1 of 1', // fixed for now — real per-exam attempts is a separate, not-yet-built feature
+      subtext: 'No retakes allowed',
+    },
+  ];
+
+  // If this screen is reached with no exam loaded (e.g. back button, refresh),
+  // send the student back to Dashboard instead of showing broken mock data.
+  useEffect(() => {
+    if (!storeExamId) {
+      navigateTo('dashboard');
+    }
+  }, [storeExamId, navigateTo]);
+
+  // Prop overrides win, otherwise use the real store value, otherwise fall back to mock.
+  const displayTitle = examTitle ?? storeExamTitle;
+  // Prop overrides win, otherwise use the real logged-in student, otherwise fall back to mock.
+  const displayStudentName = studentName ?? (user ? `${user.firstName} ${user.lastName}` : '');
+  const displayStudentId = studentId ?? user?.idNumber;
+  
   const handleCancel = () => {
     onCancel?.();
     navigateTo('dashboard');
   };
 
   const handleStart = () => {
-    setIsVerificationOpen(true);
+    setIsVerificationOpen(true); // opens the modal, unchanged
   };
 
-  const handleVerificationConfirm = () => {
+  // Called by the modal only after the server confirms the code is correct.
+  const handleVerificationConfirm = (sessionId: string) => {
+    setSessionId(sessionId); // save the real session id for the next screen
     onStartExam?.();
     setIsVerificationOpen(false);
     navigateTo('examQuestion');
@@ -77,10 +109,10 @@ export function ExamConfirmationScreen({
 
   return (
     <div className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden">
-      <AppHeader studentName={studentName} studentId={studentId} />
+      <AppHeader studentName={displayStudentName} studentId={displayStudentId} />
       <SessionVerificationModal
         isOpen={isVerificationOpen}
-        expectedCode={MOCK_VERIFICATION_CODE}
+        examId={storeExamId ?? ''}
         onConfirm={handleVerificationConfirm}
         onCancel={handleVerificationCancel}
       />
@@ -96,11 +128,8 @@ export function ExamConfirmationScreen({
             {/* ── Card header ───────────────────────────────────── */}
             <div className="mb-6">
               <h1 className="text-[28px] font-bold text-[var(--text-inverted)] leading-tight mb-1">
-                {examTitle}
+                {displayTitle}
               </h1>
-              <p className="font-mono text-[11px] font-semibold text-[var(--text-inverted-secondary)] uppercase tracking-[0.15em] mb-3">
-                {courseCode} Module
-              </p>
               <p className="text-[var(--text-inverted-secondary)] text-[14px] leading-relaxed max-w-[580px]">
                 Please confirm the details below. Once you start, the system will enter a restricted
                 state to ensure academic integrity. Make sure your environment is quiet and free of
@@ -110,7 +139,7 @@ export function ExamConfirmationScreen({
 
             {/* ── Detail grid ───────────────────────────────────── */}
             <div className="grid grid-cols-4 gap-3 mb-5">
-              {examDetails.map((detail) => (
+              {displayExamDetails.map((detail) => (
                 <DetailCard key={detail.label} {...detail} />
               ))}
             </div>

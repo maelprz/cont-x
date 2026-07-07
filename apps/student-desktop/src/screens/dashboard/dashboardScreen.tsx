@@ -5,6 +5,7 @@ import { useRouterLogic } from "../../router/routerLogic"; // store controlling 
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 import { useAuthStore } from "../../stores/useAuthStore"; // store controlling the user's auth state
+import { useExamSessionStore } from "../../stores/useExamSessionStore"; // carries exam to Confirmation
 import { useExamHistory } from "../../hooks/useExamHistory"; // custom hook for fetching exam history
 import { useVerifyExamCode } from "../../hooks/useVerifyExamCode"; // new hook for exam code lookup
 
@@ -13,12 +14,13 @@ export function DashboardScreen(_props: DashboardScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const user = useAuthStore((state) => state.user);
 
-  const { examHistory, isLoading, error } = useExamHistory(); // fetch exam history using the custom hook
+  const { examHistory} = useExamHistory(); // fetch exam history using the custom hook
   const {
     verifyExamCode,
-    isVerifying,
     error: verifyError,
   } = useVerifyExamCode();
+
+  const setExam = useExamSessionStore((state) => state.setExam); // saves exam into the shared store
 
   function handleExamCodeChange(event: ChangeEvent<HTMLInputElement>) {
     setExamCodeInput(event.target.value);
@@ -28,6 +30,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
     const exam = await verifyExamCode(examCodeInput); // check the typed code against Supabase
 
     if (exam) {
+      setExam(exam); // hand the found exam off to the Confirmation screen via the store
       navigateTo("examConfirmation"); // only redirect if an exam was actually found
     }
   }
