@@ -1,16 +1,18 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SessionVerificationModalProps, VerificationStatus } from './sessionVerificationModal.types';
+import { verifySessionCode } from '../../services/examService';
 
 export function SessionVerificationModal({
   isOpen,
+  examId,
   codeLength = 6,
   dashAfterIndex = 3,
-  expectedCode,
   onConfirm,
   onCancel,
 }: SessionVerificationModalProps) {
   const [digits, setDigits] = useState<string[]>(Array(codeLength).fill(''));
   const [status, setStatus] = useState<VerificationStatus>('idle');
+  const [errorMessage, setErrorMessage] = useState(''); // real message from the server, if any
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
 
   useEffect(() => {
@@ -41,21 +43,24 @@ export function SessionVerificationModal({
     }
   };
 
-  const handleConfirm = () => {
-    const code = digits.join('');
+  const handleConfirm = async () => {
+    const code = digits.join(''); // combine the digit boxes into one string
     if (code.length < codeLength) {
+      setErrorMessage('Please enter all digits.'); // incomplete code, don't call the server
       setStatus('error');
       return;
     }
 
-    if (expectedCode && code !== expectedCode) {
-      setStatus('error');
-      return;
-    }
+    setStatus('verifying'); // show the spinner while the server checks the code
 
-    setStatus('verifying');
-    // TODO: replace with real verification call via useIpcBridge
-    onConfirm?.(code);
+    try {
+      const result = await verifySessionCode(examId, code); // real server-side check + session start
+      onConfirm?.(result.sessionId); // hand the new session id up to the screen
+    } catch (err) {
+      const message = err instanceof Error ? err.message : 'Verification failed.';
+      setErrorMessage(message); // show the server's real reason (wrong code, exam not active, etc.)
+      setStatus('error');
+    }
   };
 
   return (
@@ -123,7 +128,7 @@ export function SessionVerificationModal({
                 className="font-mono text-[11px] font-semibold uppercase tracking-wide transition-opacity duration-300 text-[var(--warning-icon)]"
                 style={{ opacity: status === 'error' ? 1 : 0 }}
               >
-                Invalid Code. Please try again.
+                {errorMessage}
               </span>
             </div>
           </div>
