@@ -421,7 +421,7 @@ export function ExamBuilderScreen({
                       backgroundColor: "transparent",
                     }}
                   >
-                    Discard
+                    Reset Question
                   </button>
                   <button
                     onClick={handleSaveAndContinue}

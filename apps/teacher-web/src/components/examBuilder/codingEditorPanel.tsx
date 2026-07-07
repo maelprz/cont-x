@@ -12,6 +12,8 @@ export function CodingEditorPanel({
   onChange: (q: CodingBuilderQuestion) => void;
   onPreviewRendered?: () => void;
 }) {
+  // Updates the question's title text.
+  const setTitle = (v: string) => onChange({ ...question, title: v });
   // Updates the points awarded per test case.
   const setPoints = (v: string) => onChange({ ...question, points: Number(v) || 0 });
   // Updates the problem description text.
@@ -50,52 +52,98 @@ export function CodingEditorPanel({
 
   return (
     <div className="flex flex-col gap-6">
-      {/* Question format, points per test case, and deduction row */}
-      <div className="flex items-end gap-6">
-        {/* Dropdown to pick full program vs single function */}
-        <div>
-          <label className="block text-[13px] font-medium mb-2" style={{ color: "var(--color-base-content)" }}>
-            Question Format
-          </label>
-          <select
-            value={question.programType}
-            onChange={(e) => setProgramType(e.target.value as CodingProgramType)}
-            className="w-40 px-3 py-2 rounded-lg border text-[14px] outline-none"
-            style={{ backgroundColor: "var(--color-base-100)", borderColor: "var(--color-base-300)", color: "var(--color-base-content)", fontFamily: "inherit" }}
-          >
-            <option value="cProgram">C Program</option>
-            <option value="cFunction">C Function</option>
-          </select>
-        </div>
+      {/* Title, question format, points per test case, and deduction row */}
+        <div className="flex items-end gap-6">
+          {/* Editable question title */}
+          <div className="w-[300px]">
+            <label
+              className="block text-[13px] font-medium mb-2"
+              style={{ color: "var(--color-base-content)" }}
+            >
+              Question Title
+            </label>
+            <input
+              type="text"
+              value={question.title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border text-[14px] outline-none"
+              style={{
+                backgroundColor: "var(--color-base-100)",
+                borderColor: "var(--color-base-300)",
+                color: "var(--color-base-content)",
+                fontFamily: "inherit",
+              }}
+            />
+          </div>
 
-        {/* Points earned for each passing test case */}
-        <div>
-          <label className="block text-[13px] font-medium mb-2" style={{ color: "var(--color-base-content)" }}>
-            Points per Test Case
-          </label>
-          <input
-            type="number"
-            value={question.points}
-            onChange={(e) => setPoints(e.target.value)}
-            className="w-36 px-3 py-2 rounded-lg border text-[14px] outline-none"
-            style={{ backgroundColor: "var(--color-base-100)", borderColor: "var(--color-base-300)", color: "var(--color-base-content)", fontFamily: "inherit" }}
-          />
-        </div>
+          {/* Dropdown to pick full program vs single function */}
+          <div>
+            <label
+              className="block text-[13px] font-medium mb-2"
+              style={{ color: "var(--color-base-content)" }}
+            >
+              Question Format
+            </label>
+            <select
+              value={question.programType}
+              onChange={(e) => setProgramType(e.target.value as CodingProgramType)}
+              className="w-40 px-3 py-2 rounded-lg border text-[14px] outline-none"
+              style={{
+                backgroundColor: "var(--color-base-100)",
+                borderColor: "var(--color-base-300)",
+                color: "var(--color-base-content)",
+                fontFamily: "inherit",
+              }}
+            >
+              <option value="cProgram">C Program</option>
+              <option value="cFunction">C Function</option>
+            </select>
+          </div>
 
-        {/* Points lost every time student checks their answer */}
-        <div>
-          <label className="block text-[13px] font-medium mb-2" style={{ color: "var(--color-base-content)" }}>
-            Deduction per Attempt
-          </label>
-          <input
-            type="number"
-            value={question.deductionPerAttempt}
-            onChange={(e) => setDeductionPerAttempt(e.target.value)}
-            className="w-36 px-3 py-2 rounded-lg border text-[14px] outline-none"
-            style={{ backgroundColor: "var(--color-base-100)", borderColor: "var(--color-base-300)", color: "var(--color-base-content)", fontFamily: "inherit" }}
-          />
+          {/* Points earned for each passing test case */}
+          <div>
+            <label
+              className="block text-[13px] font-medium mb-2"
+              style={{ color: "var(--color-base-content)" }}
+            >
+              Points per Test Case
+            </label>
+            <input
+              type="number"
+              value={question.points}
+              onChange={(e) => setPoints(e.target.value)}
+              className="w-36 px-3 py-2 rounded-lg border text-[14px] outline-none"
+              style={{
+                backgroundColor: "var(--color-base-100)",
+                borderColor: "var(--color-base-300)",
+                color: "var(--color-base-content)",
+                fontFamily: "inherit",
+              }}
+            />
+          </div>
+
+          {/* Points lost every time student checks their answer */}
+          <div>
+            <label
+              className="block text-[13px] font-medium mb-2"
+              style={{ color: "var(--color-base-content)" }}
+            >
+              Deduction per Attempt
+            </label>
+            <input
+              type="number"
+              value={question.deductionPerAttempt}
+              onChange={(e) => setDeductionPerAttempt(e.target.value)}
+              className="w-36 px-3 py-2 rounded-lg border text-[14px] outline-none"
+              style={{
+                backgroundColor: "var(--color-base-100)",
+                borderColor: "var(--color-base-300)",
+                color: "var(--color-base-content)",
+                fontFamily: "inherit",
+              }}
+            />
+          </div>
         </div>
-      </div>
 
       {/* Problem description */}
       <div>

@@ -10,6 +10,8 @@ export function MCQEditorPanel({
   onChange: (q: MCQBuilderQuestion) => void;
   onPreviewRendered?: () => void;
 }) {
+  // updates the question's title text
+  const setTitle = (v: string) => onChange({ ...question, title: v });
   const setPoints = (v: string) => onChange({ ...question, points: Number(v) || 0 });
   const setDescription = (v: string) => onChange({ ...question, description: v });
 
@@ -27,19 +29,52 @@ export function MCQEditorPanel({
   
   return (
     <div className="flex flex-col gap-6">
-      {/* Points */}
-      <div>
-        <label className="block text-[13px] font-medium mb-2" style={{ color: "var(--color-base-content)" }}>
-          Points
-        </label>
-        <input
-          type="number"
-          value={question.points}
-          onChange={(e) => setPoints(e.target.value)}
-          className="w-36 px-3 py-2 rounded-lg border text-[14px] outline-none"
-          style={{ backgroundColor: "var(--color-base-100)", borderColor: "var(--color-base-300)", color: "var(--color-base-content)", fontFamily: "inherit" }}
-        />
-      </div>
+      {/* Title and Points row */}
+        <div className="flex items-end gap-6">
+          {/* Editable question title */}
+          <div className="w-[300px]">
+            <label
+              className="block text-[13px] font-medium mb-2"
+              style={{ color: "var(--color-base-content)" }}
+            >
+              Question Title
+            </label>
+            <input
+              type="text"
+              value={question.title}
+              onChange={(e) => setTitle(e.target.value)}
+              className="w-full px-3 py-2 rounded-lg border text-[14px] outline-none"
+              style={{
+                backgroundColor: "var(--color-base-100)",
+                borderColor: "var(--color-base-300)",
+                color: "var(--color-base-content)",
+                fontFamily: "inherit",
+              }}
+            />
+          </div>
+
+          {/* Points */}
+          <div>
+            <label
+              className="block text-[13px] font-medium mb-2"
+              style={{ color: "var(--color-base-content)" }}
+            >
+              Points
+            </label>
+            <input
+              type="number"
+              value={question.points}
+              onChange={(e) => setPoints(e.target.value)}
+              className="w-36 px-3 py-2 rounded-lg border text-[14px] outline-none"
+              style={{
+                backgroundColor: "var(--color-base-100)",
+                borderColor: "var(--color-base-300)",
+                color: "var(--color-base-content)",
+                fontFamily: "inherit",
+              }}
+            />
+          </div>
+        </div>
 
       {/* Problem description */}
       <div>
