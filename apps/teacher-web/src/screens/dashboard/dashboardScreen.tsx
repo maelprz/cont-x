@@ -1,20 +1,17 @@
 import { Plus } from "lucide-react";
-import type { DashboardScreenProps, ExamSummaryCard } from "./dashboardScreen.types";
+import type {
+  DashboardScreenProps,
+  ExamSummaryCard,
+} from "./dashboardScreen.types";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useAuthStore } from "../../store/useAuthStore";
+import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
+import { ExamBuilderScreen } from "../examBuilder/examBuilderScreen";
 
 // ---------------------------------------------------------------------------
-// Mock data -- replace with real Supabase query when wiring up
 // ---------------------------------------------------------------------------
-const MOCK_SUMMARY_CARDS: ExamSummaryCard[] = [
-  { label: "Active Exams", value: "3", subtext: "Currently running" },
-  { label: "Total Students", value: "128", subtext: "Enrolled across all exams" },
-  { label: "Pending Reviews", value: "12", subtext: "Awaiting manual check" },
-  { label: "Violations Flagged", value: "5", subtext: "Requires attention" },
-];
-
 // one summary stat card, same role as DetailCard in examConfirmationScreen
 function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
   return (
@@ -47,14 +44,29 @@ function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
   );
 }
 
-export function DashboardScreen({
-  summaryCards = MOCK_SUMMARY_CARDS,
-}: DashboardScreenProps) {
+export function DashboardScreen({}: DashboardScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
   // pulls the logged in user's name directly from the auth store
   const user = useAuthStore((state) => state.user);
   const firstName = user?.fullName?.split(" ")[0] ?? "Teacher";
+
+  const { data, isLoading, error } = useTeacherDashboard(user?.id);
+
+  const summaryCards: ExamSummaryCard[] = [
+    {
+      label: "Total Exams",
+      value: isLoading ? "—" : String(data?.totalExams ?? 0), // count of all exams this teacher created
+      subtext: "All statuses",
+    },
+    {
+      label: "Total Students",
+      value: isLoading ? "—" : String(data?.totalStudents ?? 0), // summed session count across all exams
+      subtext: "Verified session starts",
+    },
+  ];
+
+  const recentExams = data?.recentExams.slice(0, 5) ?? [];
 
   return (
     <div
@@ -99,6 +111,7 @@ export function DashboardScreen({
           <div className="mb-2 flex items-center justify-between">
             <h2 className="text-base font-semibold">Recent Exams</h2>
             <button
+              onClick={() => navigateTo("examLibrary")}
               className="text-xs bg-transparent border-none cursor-pointer opacity-60 hover:opacity-100"
               style={{ color: "var(--color-base-content)" }}
             >
@@ -122,51 +135,41 @@ export function DashboardScreen({
                     color: "var(--color-base-content)",
                   }}
                 >
-                  <th className="text-left py-3 px-5 font-medium opacity-60">Exam Title</th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">Code</th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">Status</th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">Students</th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">Created</th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">Actions</th>
+                  <th className="text-left py-3 px-5 font-medium opacity-60">
+                    Exam Title
+                  </th>
+                  <th className="text-left py-3 px-5 font-medium opacity-60">
+                    Code
+                  </th>
+                  <th className="text-left py-3 px-5 font-medium opacity-60">
+                    Status
+                  </th>
+                  <th className="text-left py-3 px-5 font-medium opacity-60">
+                    Students
+                  </th>
+                  <th className="text-left py-3 px-5 font-medium opacity-60">
+                    Created
+                  </th>
+                  <th className="text-left py-3 px-5 font-medium opacity-60">
+                    Actions
+                  </th>
                 </tr>
               </thead>
               <tbody>
-                {/* placeholder rows -- replace with real exam data when wiring up */}
-                {[
-                  {
-                    id: "1",
-                    title: "Midterm Coding Exam",
-                    code: "CS101-42",
-                    status: "active",
-                    students: 34,
-                    created: "2026-06-28",
-                  },
-                  {
-                    id: "2",
-                    title: "Final Algorithm Assessment",
-                    code: "CS302-17",
-                    status: "draft",
-                    students: 0,
-                    created: "2026-06-25",
-                  },
-                  {
-                    id: "3",
-                    title: "Database Design Quiz",
-                    code: "DB221-09",
-                    status: "ended",
-                    students: 28,
-                    created: "2026-06-20",
-                  },
-                ].map((exam, index, arr) => (
+                {recentExams.map((exam, index) => (
                   <tr
                     key={exam.id}
                     className={`hover:opacity-80 ${
-                      index < arr.length - 1 ? "border-b" : ""
+                      index < recentExams.length - 1 ? "border-b" : ""
                     }`}
                     style={{ borderColor: "var(--color-base-300)" }}
                   >
-                    <td className="py-3.5 px-5 text-sm font-medium">{exam.title}</td>
-                    <td className="py-3.5 px-5 text-sm font-mono opacity-70">{exam.code}</td>
+                    <td className="py-3.5 px-5 text-sm font-medium">
+                      {exam.title}
+                    </td>
+                    <td className="py-3.5 px-5 text-sm font-mono opacity-70">
+                      {exam.code}
+                    </td>
                     <td className="py-3.5 px-5">
                       <span
                         className="text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full"
@@ -175,23 +178,28 @@ export function DashboardScreen({
                             exam.status === "active"
                               ? "var(--color-success)"
                               : exam.status === "draft"
-                              ? "var(--color-base-300)"
-                              : "var(--color-warning)",
+                                ? "var(--color-base-300)"
+                                : "var(--color-warning)",
                           color:
                             exam.status === "active"
                               ? "var(--color-success-content)"
                               : exam.status === "draft"
-                              ? "var(--color-base-content)"
-                              : "var(--color-warning-content)",
+                                ? "var(--color-base-content)"
+                                : "var(--color-warning-content)",
                         }}
                       >
                         {exam.status}
                       </span>
                     </td>
-                    <td className="py-3.5 px-5 text-sm opacity-70">{exam.students}</td>
-                    <td className="py-3.5 px-5 text-sm opacity-70">{exam.created}</td>
+                    <td className="py-3.5 px-5 text-sm opacity-70">
+                      {exam.studentCount ?? 0}
+                    </td>
+                    <td className="py-3.5 px-5 text-sm opacity-70">
+                      {exam.createdAt}
+                    </td>
                     <td className="py-3.5 px-5">
                       <button
+                        onClick={() => navigateTo("examBuilder")}
                         className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80"
                         style={{
                           borderColor: "var(--color-base-300)",
@@ -208,9 +216,7 @@ export function DashboardScreen({
             </table>
           </div>
 
-          <p className="text-xs opacity-50 mt-3">
-            Showing 3 of 3 exams
-          </p>
+          <p className="text-xs opacity-50 mt-3">Showing 3 of 3 exams</p>
         </main>
       </div>
     </div>
