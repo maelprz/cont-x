@@ -90,23 +90,24 @@ export interface ExamConfirmationDetails {
 export async function getExamConfirmationDetails(
   examId: string, // which exam to pull details for
 ): Promise<ExamConfirmationDetails> {
-  const { data, error } = await supabase
+  const { data: exam, error: examError } = await supabase
     .from("exams")
-    .select(
-      `
-      duration_minutes,
-      pass_mark,
-      questions(count)
-    `,
-    )
+    .select(`duration_minutes, pass_mark`)
     .eq("id", examId)
     .single(); // exactly one exam row expected
 
-  if (error) throw new Error(error.message); // bubble up, let the hook decide the message
+  if (examError) throw new Error(examError.message); // bubble up, let the hook decide the message
+
+  const { data: totalQuestions, error: countError } = await supabase.rpc(
+    "get_exam_question_count",
+    { p_exam_id: examId },
+  );
+
+  if (countError) throw new Error(countError.message);
 
   return {
-    totalQuestions: data.questions[0]?.count ?? 0, // pull count out of embedded array
-    durationMinutes: data.duration_minutes, // straight from the column, no math needed
-    passMark: data.pass_mark,
+    totalQuestions: totalQuestions ?? 0, // pull count out of embedded array
+    durationMinutes: exam.duration_minutes, // straight from the column, no math needed
+    passMark: exam.pass_mark,
   };
 }
