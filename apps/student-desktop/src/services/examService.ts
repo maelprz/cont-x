@@ -55,7 +55,7 @@ export async function verifySessionCode(
 // Real detail-card data for the Confirmation screen.
 export interface ExamConfirmationDetails {
   totalQuestions: number; // count of rows in questions for this exam
-  durationMinutes: number | null; // null if starts_at/ends_at aren't both set
+  durationMinutes: number; // exams.duration_minutes, set directly by the teacher
   passMark: number; // exams.pass_mark, e.g. 70
 }
 
@@ -67,8 +67,7 @@ export async function getExamConfirmationDetails(
     .from("exams")
     .select(
       `
-      starts_at,
-      ends_at,
+      duration_minutes,
       pass_mark,
       questions(count)
     `,
@@ -78,17 +77,9 @@ export async function getExamConfirmationDetails(
 
   if (error) throw new Error(error.message); // bubble up, let the hook decide the message
 
-  // both timestamps must exist to compute a real duration
-  let durationMinutes: number | null = null;
-  if (data.starts_at && data.ends_at) {
-    const start = new Date(data.starts_at).getTime(); // ms since epoch, start
-    const end = new Date(data.ends_at).getTime(); // ms since epoch, end
-    durationMinutes = Math.round((end - start) / 60000); // convert ms to whole minutes
-  }
-
   return {
     totalQuestions: data.questions[0]?.count ?? 0, // pull count out of embedded array
-    durationMinutes,
+    durationMinutes: data.duration_minutes, // straight from the column, no math needed
     passMark: data.pass_mark,
   };
 }

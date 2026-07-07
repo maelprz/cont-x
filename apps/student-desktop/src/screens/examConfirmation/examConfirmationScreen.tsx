@@ -52,7 +52,7 @@ export function ExamConfirmationScreen({
   const displayExamDetails: ExamDetail[] = examDetails ?? [
     {
       label: 'Duration',
-      value: details?.durationMinutes != null ? `${details.durationMinutes} Minutes` : 'Not Scheduled',
+      value: details ? `${details.durationMinutes} Minutes` : '—',
       subtext: 'Non-stop session',
     },
     {
