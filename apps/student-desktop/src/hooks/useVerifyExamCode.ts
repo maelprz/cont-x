@@ -30,6 +30,12 @@ export function useVerifyExamCode() {
         return null;
       }
 
+      // early, friendly warning — the server still enforces this for real on Confirmation
+      if (exam.attemptsRemaining <= 0) {
+        setError("You have no attempts remaining for this exam.");
+        return null;
+      }
+
       return exam; // found it — caller decides what happens next
     } catch (err) {
       setError("Something went wrong. Please try again."); // network/DB failure
