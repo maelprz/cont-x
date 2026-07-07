@@ -1,71 +1,22 @@
 import { useState } from "react";
 import type { ChangeEvent } from "react";
+import { Loader2 } from "lucide-react";
 import { AdminHeader } from "../../components/layoutAdmin/adminHeader";
 import { AdminSidebar } from "../../components/layoutAdmin/adminSidebar";
-import type { AuditLogsScreenProps, AuditLogEntry, AuditActionType } from "./auditLogsScreen.types";
-
-// ---------------------------------------------------------------------------
-// Mock data -- replace with real Supabase query from admin_account_actions when wiring up
-// ---------------------------------------------------------------------------
-const MOCK_LOGS: AuditLogEntry[] = [
-  {
-    id: "1",
-    adminName: "Admin Root",
-    actionType: "create",
-    targetName: "Mel Perez",
-    targetRole: "teacher",
-    details: "Created teacher account with email maelprz@gmail.com",
-    performedAt: "2026-07-01T06:21:12Z",
-  },
-  {
-    id: "2",
-    adminName: "Admin Root",
-    actionType: "update",
-    targetName: "Juan dela Cruz",
-    targetRole: "student",
-    details: "Updated last name from dela Cruz to Santos",
-    performedAt: "2026-07-01T07:45:00Z",
-  },
-  {
-    id: "3",
-    adminName: "Admin Root",
-    actionType: "delete",
-    targetName: "Sarah Kinsley",
-    targetRole: "teacher",
-    details: "Deleted teacher account with email s.kinsley@contx.edu",
-    performedAt: "2026-07-01T08:10:33Z",
-  },
-  {
-    id: "4",
-    adminName: "Admin Root",
-    actionType: "reset_password",
-    targetName: "Elias Miller",
-    targetRole: "student",
-    details: "Issued password reset for e.miller_24@student.contx.edu",
-    performedAt: "2026-07-01T09:00:00Z",
-  },
-  {
-    id: "5",
-    adminName: "Admin Root",
-    actionType: "disable",
-    targetName: "Dr. Aris Thorne",
-    targetRole: "teacher",
-    details: "Disabled account pending academic integrity review",
-    performedAt: "2026-07-01T10:15:44Z",
-  },
-];
+import { useAuditLogs } from "../../hooks/useAuditLogs";
+import type { AuditActionType } from "./auditLogsScreen.types";
 
 // badge style per action type
 const actionBadgeStyle: Record<AuditActionType, string> = {
-  create:         "bg-[var(--color-success)]/20 text-[var(--color-success-content)]",
-  update:         "bg-[var(--color-primary)]/20 text-[var(--color-primary-content)]",
-  delete:         "bg-[var(--color-error)]/15 text-[var(--color-error)]",
-  disable:        "bg-[var(--color-warning)]/20 text-[var(--color-warning-content)]",
-  enable:         "bg-[var(--color-info)]/15 text-[var(--color-info-content)]",
+  create:         "bg-[var(--color-success)] text-[var(--color-success-content)]",
+  update:         "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
+  delete:         "bg-[var(--color-error)] text-[var(--color-error-content)]",
+  disable:        "bg-[var(--color-warning)] text-[var(--color-warning-content)]",
+  enable:         "bg-[var(--color-info)] text-[var(--color-info-content)]",
   reset_password: "bg-[var(--color-base-300)] text-[var(--color-base-content)]",
 };
 
-// human-readable label per action type
+// human readable label per action type
 const actionLabel: Record<AuditActionType, string> = {
   create:         "Created",
   update:         "Updated",
@@ -80,7 +31,10 @@ function formatTimestamp(iso: string): string {
   return iso.slice(0, 16).replace("T", " ");
 }
 
-export function AuditLogsScreen({ logs = MOCK_LOGS }: AuditLogsScreenProps) {
+export function AuditLogsScreen() {
+  // pulls real log data, loading state, and error state from Supabase
+  const { logs, isLoading, error } = useAuditLogs();
+
   const [searchQuery, setSearchQuery] = useState("");
 
   // filter dropdown: which action type to show
@@ -164,68 +118,85 @@ export function AuditLogsScreen({ logs = MOCK_LOGS }: AuditLogsScreenProps) {
             </div>
           </div>
 
+          {/* loading state */}
+          {isLoading && (
+            <div className="flex items-center gap-2 text-sm opacity-60 py-8">
+              <Loader2 size={16} className="animate-spin" />
+              Loading audit logs...
+            </div>
+          )}
+
+          {/* error state */}
+          {error && (
+            <div className="bg-[var(--color-error)]/10 text-[var(--color-error)] rounded-xl px-5 py-4 text-sm mb-4">
+              {error}
+            </div>
+          )}
+
           {/* log table */}
-          <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl overflow-hidden">
-            <table className="w-full border-collapse">
-              <thead>
-                <tr className="text-xs uppercase tracking-wide opacity-60 bg-[var(--color-base-200)]">
-                  <th className="text-left py-3 px-5 font-medium">Timestamp</th>
-                  <th className="text-left py-3 px-5 font-medium">Admin</th>
-                  <th className="text-left py-3 px-5 font-medium">Action</th>
-                  <th className="text-left py-3 px-5 font-medium">Target Account</th>
-                  <th className="text-left py-3 px-5 font-medium">Details</th>
-                </tr>
-              </thead>
-              <tbody>
-                {filteredLogs.map((log, index) => (
-                  <tr
-                    key={log.id}
-                    className={`hover:bg-[var(--color-base-200)] ${
-                      index < filteredLogs.length - 1
-                        ? "border-b border-[var(--color-base-300)]"
-                        : ""
-                    }`}
-                  >
-                    {/* timestamp */}
-                    <td className="py-3.5 px-5 text-sm font-mono opacity-70 whitespace-nowrap">
-                      {formatTimestamp(log.performedAt)}
-                    </td>
-
-                    {/* admin who performed the action */}
-                    <td className="py-3.5 px-5 text-sm font-medium">
-                      {log.adminName}
-                    </td>
-
-                    {/* action badge */}
-                    <td className="py-3.5 px-5">
-                      <span
-                        className={`text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full ${actionBadgeStyle[log.actionType]}`}
-                      >
-                        {actionLabel[log.actionType]}
-                      </span>
-                    </td>
-
-                    {/* target user */}
-                    <td className="py-3.5 px-5">
-                      <p className="text-sm font-medium">{log.targetName}</p>
-                      <p className="text-xs opacity-60 capitalize">{log.targetRole}</p>
-                    </td>
-
-                    {/* details */}
-                    <td className="py-3.5 px-5 text-sm opacity-70 max-w-xs">
-                      {log.details}
-                    </td>
+          {!isLoading && !error && (
+            <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl overflow-hidden">
+              <table className="w-full border-collapse">
+                <thead>
+                  <tr className="text-xs uppercase tracking-wide opacity-60 bg-[var(--color-base-200)]">
+                    <th className="text-left py-3 px-5 font-medium">Timestamp</th>
+                    <th className="text-left py-3 px-5 font-medium">Admin</th>
+                    <th className="text-left py-3 px-5 font-medium">Action</th>
+                    <th className="text-left py-3 px-5 font-medium">Target Account</th>
+                    <th className="text-left py-3 px-5 font-medium">Details</th>
                   </tr>
-                ))}
-              </tbody>
-            </table>
+                </thead>
+                <tbody>
+                  {filteredLogs.map((log, index) => (
+                    <tr
+                      key={log.id}
+                      className={`hover:bg-[var(--color-base-200)] ${
+                        index < filteredLogs.length - 1
+                          ? "border-b border-[var(--color-base-300)]"
+                          : ""
+                      }`}
+                    >
+                      {/* timestamp */}
+                      <td className="py-3.5 px-5 text-sm font-mono opacity-70 whitespace-nowrap">
+                        {formatTimestamp(log.performedAt)}
+                      </td>
 
-            {filteredLogs.length === 0 && (
-              <p className="text-center text-sm opacity-60 py-8">
-                No log entries match that search.
-              </p>
-            )}
-          </div>
+                      {/* admin who performed the action */}
+                      <td className="py-3.5 px-5 text-sm font-medium">
+                        {log.adminName}
+                      </td>
+
+                      {/* action badge */}
+                      <td className="py-3.5 px-5">
+                        <span
+                          className={`text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full ${actionBadgeStyle[log.actionType]}`}
+                        >
+                          {actionLabel[log.actionType]}
+                        </span>
+                      </td>
+
+                      {/* target user */}
+                      <td className="py-3.5 px-5">
+                        <p className="text-sm font-medium">{log.targetName}</p>
+                        <p className="text-xs opacity-60 capitalize">{log.targetRole}</p>
+                      </td>
+
+                      {/* details */}
+                      <td className="py-3.5 px-5 text-sm opacity-70 max-w-xs">
+                        {log.details}
+                      </td>
+                    </tr>
+                  ))}
+                </tbody>
+              </table>
+
+              {filteredLogs.length === 0 && (
+                <p className="text-center text-sm opacity-60 py-8">
+                  No log entries match that search.
+                </p>
+              )}
+            </div>
+          )}
 
           <p className="text-xs opacity-50 mt-3">
             Showing {filteredLogs.length} of {logs.length} entries
