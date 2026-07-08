@@ -1,6 +1,7 @@
 import {
   LayoutDashboard,
-  BookOpen,
+  Library,
+  Vault,
   LogOut,
   Shield,
 } from "lucide-react";
@@ -59,8 +60,18 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
             activeItem === "examLibrary" ? navItemActive : navItemInactive
           }`}
         >
-          <BookOpen size={16} />
+          <Library size={16} />
           {<span>Exam Library</span>}
+        </button>
+
+        <button
+          onClick={() => navigateTo("questionBank")}
+          className={`${navItemBase} ${
+            activeItem === "questionBank" ? navItemActive : navItemInactive
+          }`}
+        >
+          <Vault size={16} />
+          {<span>Question Bank</span>}
         </button>
       </nav>
 

@@ -34,7 +34,6 @@ export function ExamBuilderScreen({
   onDiscardQuestion,
   onDeleteQuestion,
   onPreviewExam,
-  onSaveExam,
   onPreviewRendered,
   onSaveAndContinue,
 }: ExamBuilderScreenProps) {
