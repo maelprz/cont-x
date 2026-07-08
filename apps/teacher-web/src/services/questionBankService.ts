@@ -310,3 +310,8 @@ export async function removeTagFromQuestion(bankQuestionId: string, tagId: strin
     .eq("tag_id", tagId);
   if (error) throw error;
 }
+
+export async function deleteBankTag(tagId: string): Promise<void> {
+  const { error } = await supabase.from("question_bank_tags").delete().eq("id", tagId);
+  if (error) throw error;
+}

@@ -1,5 +1,5 @@
 import { useState, useMemo } from "react";
-import { Search, Plus, Tag as TagIcon, ArrowLeft, Trash2 } from "lucide-react";
+import { Search, Plus, Tag as TagIcon, ArrowLeft, Trash2, X } from "lucide-react";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
@@ -13,6 +13,7 @@ import {
   getBankQuestionById,
   deleteBankQuestion,
   createBankTag,
+  deleteBankTag,
   addTagToQuestion,
   removeTagFromQuestion,
 } from "../../services/questionBankService";
@@ -27,6 +28,8 @@ import type {
   QuestionType,
 } from "../examBuilder/examBuilderScreen.types";
 
+import { NewQuestionModal } from "../../components/questionBank/newQuestionModal";
+
 export function QuestionBankScreen() {
   const teacherId = useAuthStore((state) => state.user?.id);
   const { questions, tags, isLoading, error, refetch } = useQuestionBank();
@@ -35,7 +38,10 @@ export function QuestionBankScreen() {
 
   const [search, setSearch] = useState(""); // teacher-typed search text
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]); // tags currently filtering the table
-  const [newTagName, setNewTagName] = useState(""); // teacher-typed new tag name
+  const [originalTagIds, setOriginalTagIds] = useState<string[]>([]); // tags as they exist on the server, for diffing on save
+  const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding">("all"); // narrows the table by type
+  const [showNewQuestionModal, setShowNewQuestionModal] = useState(false); // shows the type-choice modal
+  const [newTagNameInEditor, setNewTagNameInEditor] = useState(""); // teacher-typed tag name, while editing a question
 
   const [editingQuestion, setEditingQuestion] = useState<BuilderQuestion | null>(null); // null = showing the table
   const [editingTagIds, setEditingTagIds] = useState<string[]>([]); // tags attached to the question being edited
@@ -49,9 +55,10 @@ export function QuestionBankScreen() {
       const matchesSearch = q.title.toLowerCase().includes(search.toLowerCase());
       const matchesTags =
         activeTagIds.length === 0 || activeTagIds.every((tagId) => q.tags.some((t) => t.id === tagId));
-      return matchesSearch && matchesTags;
+      const matchesType = activeTypeFilter === "all" || q.type === activeTypeFilter; // combines with search and tags
+      return matchesSearch && matchesTags && matchesType;
     });
-  }, [questions, search, activeTagIds]);
+  }, [questions, search, activeTagIds, activeTypeFilter]);
 
   // toggles one tag chip on/off in the filter row
   const toggleTagFilter = (tagId: string) => {
@@ -60,16 +67,35 @@ export function QuestionBankScreen() {
     );
   };
 
-  // creates a brand new tag the teacher can use for filtering and tagging
-  const handleCreateTag = async () => {
-    const trimmed = newTagName.trim();
+  // creates a tag directly from inside the editor, same behavior as the table's tag creation
+  const handleCreateTagInEditor = async () => {
+    const trimmed = newTagNameInEditor.trim();
     if (!trimmed || !teacherId) return; // ignore empty submissions
     try {
       await createBankTag(teacherId, trimmed);
-      setNewTagName("");
+      setNewTagNameInEditor("");
       await refetch();
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Could not create tag.", "error");
+    }
+  };
+
+  // permanently deletes a tag everywhere it's used — confirms first, since this can't be undone
+  const handleDeleteTag = async (tagId: string) => {
+    const confirmed = window.confirm(
+      "Delete this tag? It will be removed from every question that uses it. This cannot be undone.",
+    );
+    if (!confirmed) return;
+
+    try {
+      await deleteBankTag(tagId);
+      setEditingTagIds((prev) => prev.filter((id) => id !== tagId));
+      setOriginalTagIds((prev) => prev.filter((id) => id !== tagId)); // keep the diff baseline honest
+      setActiveTagIds((prev) => prev.filter((id) => id !== tagId));
+      showToast("Tag deleted.", "success");
+      await refetch();
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not delete tag.", "error");
     }
   };
 
@@ -79,7 +105,9 @@ export function QuestionBankScreen() {
       const question = await getBankQuestionById(id);
       setEditingQuestion(question);
       const row = questions.find((q) => q.id === id);
-      setEditingTagIds(row?.tags.map((t) => t.id) ?? []);
+      const tagIds = row?.tags.map((t) => t.id) ?? [];
+      setEditingTagIds(tagIds); // pending selection, starts equal to saved state
+      setOriginalTagIds(tagIds); // snapshot to diff against when saving
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Could not load this question.", "error");
     }
@@ -92,22 +120,41 @@ export function QuestionBankScreen() {
         ? createBlankMCQuestion(crypto.randomUUID(), 0)
         : createBlankCodingQuestion(crypto.randomUUID(), 0);
     setEditingQuestion(blank);
-    setEditingTagIds([]);
+    setEditingTagIds([]); // no tags yet — pending selection starts empty
+    setOriginalTagIds([]); // nothing saved yet either
   };
 
   // returns to the table view without saving
   const handleBackToList = () => setEditingQuestion(null);
 
   // saves the question currently open in the editor, shows a toast either way
+  // saves the question, then applies any pending tag changes, all in one action
   const handleSave = async () => {
     if (!editingQuestion) return;
     const didSave = await saveQuestion(editingQuestion);
-    if (didSave) {
+    if (!didSave) {
+      showToast(saveError ?? "Could not save this question.", "error");
+      return;
+    }
+
+    // figure out which tags were added or removed since this question was loaded
+    const tagsToAdd = editingTagIds.filter((id) => !originalTagIds.includes(id));
+    const tagsToRemove = originalTagIds.filter((id) => !editingTagIds.includes(id));
+
+    try {
+      await Promise.all([
+        ...tagsToAdd.map((tagId) => addTagToQuestion(editingQuestion.id, tagId)),
+        ...tagsToRemove.map((tagId) => removeTagFromQuestion(editingQuestion.id, tagId)),
+      ]);
       showToast("Question saved to bank.", "success");
       await refetch();
       setEditingQuestion(null);
-    } else {
-      showToast(saveError ?? "Could not save this question.", "error");
+    } catch (err) {
+      // question itself saved fine, but a tag link failed — say so precisely
+      showToast(
+        err instanceof Error ? `Question saved, but tags failed: ${err.message}` : "Question saved, but tags failed to update.",
+        "error",
+      );
     }
   };
 
@@ -124,21 +171,11 @@ export function QuestionBankScreen() {
   };
 
   // attaches or detaches a tag on the question currently being edited
-  const handleToggleQuestionTag = async (tagId: string) => {
-    if (!editingQuestion || isNewQuestion) return; // must be saved first
-    const isLinked = editingTagIds.includes(tagId);
-    try {
-      if (isLinked) {
-        await removeTagFromQuestion(editingQuestion.id, tagId);
-        setEditingTagIds((prev) => prev.filter((id) => id !== tagId));
-      } else {
-        await addTagToQuestion(editingQuestion.id, tagId);
-        setEditingTagIds((prev) => [...prev, tagId]);
-      }
-      await refetch();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Could not update tag.", "error");
-    }
+  // toggles a tag in the pending selection only — nothing persists until Save Question
+  const handleToggleQuestionTag = (tagId: string) => {
+    setEditingTagIds((prev) =>
+      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
+    );
   };
 
   return (
@@ -187,27 +224,43 @@ export function QuestionBankScreen() {
                 </div>
               </div>
 
-              {/* Tag assignment — disabled until the question has been saved once */}
+              {/* Tag assignment — pending until Save Question is clicked, same as every other field */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
                 <TagIcon size={14} style={{ opacity: 0.5 }} />
-                {isNewQuestion ? (
-                  <span className="text-[12px] opacity-50">Save this question first to add tags.</span>
-                ) : (
-                  tags.map((tag) => (
+                {tags.map((tag) => (
+                  <div
+                    key={tag.id}
+                    className="flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full text-[12px] font-medium border"
+                    style={{
+                      borderColor: editingTagIds.includes(tag.id) ? "var(--color-secondary)" : "var(--color-base-300)",
+                      backgroundColor: editingTagIds.includes(tag.id) ? "var(--color-secondary)" : "transparent",
+                      color: editingTagIds.includes(tag.id) ? "white" : "var(--color-base-content)",
+                    }}
+                  >
                     <button
-                      key={tag.id}
-                      onClick={() => handleToggleQuestionTag(tag.id)}
-                      className="px-3 py-1 rounded-full text-[12px] font-medium cursor-pointer border transition-opacity hover:opacity-80"
-                      style={{
-                        borderColor: editingTagIds.includes(tag.id) ? "var(--color-secondary)" : "var(--color-base-300)",
-                        backgroundColor: editingTagIds.includes(tag.id) ? "var(--color-secondary)" : "transparent",
-                        color: editingTagIds.includes(tag.id) ? "white" : "var(--color-base-content)",
-                      }}
+                      onClick={() => handleToggleQuestionTag(tag.id)} // pending only, applied on Save Question
+                      className="cursor-pointer border-none bg-transparent p-0 text-inherit"
                     >
                       {tag.name}
                     </button>
-                  ))
-                )}
+                    <button
+                      onClick={() => handleDeleteTag(tag.id)} // this one IS immediate — deletes the tag everywhere
+                      title="Delete this tag everywhere"
+                      className="cursor-pointer border-none bg-transparent p-0.5 opacity-60 hover:opacity-100"
+                    >
+                      <X size={11} />
+                    </button>
+                  </div>
+                ))}
+                <input
+                  type="text"
+                  placeholder="+ New tag"
+                  value={newTagNameInEditor}
+                  onChange={(e) => setNewTagNameInEditor(e.target.value)}
+                  onKeyDown={(e) => e.key === "Enter" && handleCreateTagInEditor()}
+                  className="px-3 py-1 rounded-full text-[12px] outline-none border border-dashed"
+                  style={{ borderColor: "var(--color-base-300)", backgroundColor: "transparent", color: "var(--color-base-content)", width: 100 }}
+                />
               </div>
 
               {editingQuestion.type === "multiple-choice" ? (
@@ -234,20 +287,12 @@ export function QuestionBankScreen() {
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
-                    onClick={() => handleCreateNew("multiple-choice")}
-                    className="flex items-center gap-1.5 px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
-                    style={{ borderColor: "var(--color-base-300)", color: "var(--color-base-content)", backgroundColor: "var(--color-base-100)" }}
-                  >
-                    <Plus size={14} />
-                    New MCQ
-                  </button>
-                  <button
-                    onClick={() => handleCreateNew("coding")}
+                    onClick={() => setShowNewQuestionModal(true)}
                     className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
                     style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
                   >
                     <Plus size={14} />
-                    New Coding Question
+                    New Question
                   </button>
                 </div>
               </div>
@@ -262,6 +307,25 @@ export function QuestionBankScreen() {
                   onChange={(e) => setSearch(e.target.value)}
                   className="flex-grow text-[13px] outline-none bg-transparent border-none text-[var(--color-base-content)] font-[inherit]"
                 />
+              </div>
+
+              {/* Type filter — combines with search and tag filters below */}
+              <div className="flex items-center gap-2 mb-3">
+                <span className="text-[12px] opacity-60 font-medium">Type:</span>
+                {(["all", "multiple-choice", "coding"] as const).map((type) => (
+                  <button
+                    key={type}
+                    onClick={() => setActiveTypeFilter(type)}
+                    className="px-3 py-1 rounded-full text-[12px] font-medium cursor-pointer border transition-opacity hover:opacity-80"
+                    style={{
+                      borderColor: activeTypeFilter === type ? "var(--color-secondary)" : "var(--color-base-300)",
+                      backgroundColor: activeTypeFilter === type ? "var(--color-secondary)" : "transparent",
+                      color: activeTypeFilter === type ? "white" : "var(--color-base-content)",
+                    }}
+                  >
+                    {type === "all" ? "All" : type === "multiple-choice" ? "Multiple Choice" : "Coding"}
+                  </button>
+                ))}
               </div>
 
               {/* Tag filters + inline tag creation */}
@@ -281,15 +345,6 @@ export function QuestionBankScreen() {
                     {tag.name}
                   </button>
                 ))}
-                <input
-                  type="text"
-                  placeholder="+ New tag"
-                  value={newTagName}
-                  onChange={(e) => setNewTagName(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateTag()}
-                  className="px-3 py-1 rounded-full text-[12px] outline-none border border-dashed"
-                  style={{ borderColor: "var(--color-base-300)", backgroundColor: "transparent", color: "var(--color-base-content)", width: 110 }}
-                />
               </div>
 
               {isLoading && <p className="text-[13px] opacity-60">Loading question bank...</p>}
@@ -348,6 +403,14 @@ export function QuestionBankScreen() {
       </div>
 
       <Toast toast={toast} onDismiss={dismissToast} />
+      <NewQuestionModal
+        isOpen={showNewQuestionModal}
+        onClose={() => setShowNewQuestionModal(false)}
+        onSelectType={(type) => {
+          setShowNewQuestionModal(false);
+          handleCreateNew(type);
+        }}
+      />
     </div>
   );
 }
