@@ -10,6 +10,7 @@ import { AuditLogsScreen } from "../screens/auditLogs/auditLogsScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamLibraryScreen } from "../screens/examLibrary/examLibraryScreen";
 import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
+import { QuestionBankScreen } from "../screens/questionBank/questionBankScreen";
 
 const screenComponents: Record<ScreenName, ComponentType> = {
   login: LoginScreen,
@@ -19,6 +20,7 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   exams: DashboardScreen, // TEMP placeholder until exams screen is built
   examLibrary: ExamLibraryScreen,
   examBuilder: ExamBuilderScreen, // TEMP placeholder until examBuilder screen is built
+  questionBank: QuestionBankScreen,
 };
 
 export function AppRouter() {

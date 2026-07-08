@@ -1,2 +1,2 @@
 // List here all the screens used in teacher-web
-export type ScreenName = "login" | "userManagement" | "auditLogs" | "dashboard" | "exams" | "examLibrary" | "examBuilder";
+export type ScreenName = "login" | "userManagement" | "auditLogs" | "dashboard" | "exams" | "examLibrary" | "examBuilder" | "questionBank";
