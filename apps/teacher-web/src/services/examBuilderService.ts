@@ -51,6 +51,9 @@ type ExamBuilderRow = {
   title: string;
   exam_code: string | null;
   status: "draft" | "active" | "ended";
+  duration_minutes: number;
+  description: string | null;
+  max_attempts: number;
   questions: QuestionRow[];
 };
 
@@ -82,6 +85,9 @@ export interface ExamBuilderData {
   title: string;
   examCode: string | null;
   status: "draft" | "active" | "ended";
+  durationMinutes: number;
+  description: string; // empty string when not set, never null in the UI
+  maxAttempts: number;
   questions: BuilderQuestion[];
 }
 
@@ -145,6 +151,9 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
       title,
       exam_code,
       status,
+       duration_minutes,
+       description,
+       max_attempts,
       questions (
         id,
         title,
@@ -178,6 +187,9 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
     title: row.title,
     examCode: row.exam_code,
     status: row.status,
+    durationMinutes: row.duration_minutes,
+    description: row.description ?? "",
+    maxAttempts: row.max_attempts,
     questions: row.questions
       .map(mapQuestionRow)
       .filter((q): q is BuilderQuestion => q !== null), // drop unsupported/bad rows
@@ -314,6 +326,26 @@ export async function updateExamStatus(
   const { error } = await supabase
     .from("exams")
     .update({ status })
+    .eq("id", examId);
+
+  if (error) throw error;
+}
+
+export async function updateExamSettings(
+  examId: string,
+  settings: {
+    description: string;
+    maxAttempts: number;
+    durationMinutes: number;
+  },
+): Promise<void> {
+  const { error } = await supabase
+    .from("exams")
+    .update({
+      description: settings.description, // empty string is fine, it's optional
+      max_attempts: settings.maxAttempts,
+      duration_minutes: settings.durationMinutes,
+    })
     .eq("id", examId);
 
   if (error) throw error;
