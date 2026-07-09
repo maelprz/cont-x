@@ -111,3 +111,71 @@ export async function getExamConfirmationDetails(
     passMark: exam.pass_mark,
   };
 }
+
+// Shape of one answer option after being fetched and reshaped for the UI.
+export interface FetchedMCQOption {
+  id: string; // mc_options.id, used as the option's key
+  text: string; // mc_options.option_text, shown to the student
+  isCorrect: boolean; // mc_options.is_correct, used only for local scoring later
+}
+
+// Shape of one question after being fetched and reshaped for the UI.
+export interface FetchedQuestion {
+  id: string; // questions.id, the real database id
+  orderIndex: number; // questions.order_index, used to sort and number questions
+  title: string; // questions.title, shown as the question heading
+  prompt: string; // questions.prompt, shown as the question body text
+  type: "mcq" | "coding"; // questions.type, tells the UI which shape to expect
+  maxPoints: number; // questions.max_points, kept for future scoring use
+  options?: FetchedMCQOption[]; // present only when type is "mcq"
+  starterCode?: string | null; // present only when type is "coding"
+  language?: string; // coding_question.program_type, passed to Monaco as its language mode
+}
+
+// Fetches every question for one exam, in the order the teacher set,
+// including each question's MCQ options or coding starter code.
+export async function getExamQuestions(
+  examId: string, // which exam's questions to load
+): Promise<FetchedQuestion[]> {
+  const { data, error } = await supabase
+    .from("questions") // start from the questions table
+    .select(
+      `
+      id,
+      order_index,
+      title,
+      prompt,
+      type,
+      max_points,
+      mcq_question ( mc_options ( id, option_text, is_correct ) ),
+      coding_question ( starter_code, program_type )
+    `,
+    ) // pull matching child rows in the same call
+    .eq("exam_id", examId) // only this exam's questions
+    .order("order_index", { ascending: true }); // teacher-defined question order
+
+  if (error) throw new Error(error.message); // bubble up, let the hook decide the message
+
+  // Reshape each raw row into the flat FetchedQuestion shape the UI expects.
+  return (data ?? []).map((row: any) => {
+    const isCoding = row.type === "coding"; // check which question type this row is
+
+    return {
+      id: row.id, // real question id
+      orderIndex: row.order_index, // used for numbering and sort order
+      title: row.title, // question heading
+      prompt: row.prompt, // question body text
+      type: row.type, // "mcq" or "coding"
+      maxPoints: row.max_points, // kept for later scoring
+      options: !isCoding
+        ? row.mcq_question?.mc_options?.map((opt: any) => ({
+            id: opt.id, // real option id
+            text: opt.option_text, // option label text
+            isCorrect: opt.is_correct, // used only for local scoring later
+          }))
+        : undefined, // coding questions have no options
+      starterCode: isCoding ? row.coding_question?.starter_code : undefined, // pre-filled editor code
+      language: isCoding ? row.coding_question?.program_type : undefined, // Monaco language mode
+    };
+  });
+}
