@@ -7,6 +7,7 @@ import { ExamCardTile } from "../../components/examLibrary/examCardTile";
 import { ExamCardMenu } from "../../components/examLibrary/examCardMenu";
 import { ConfirmActionDialog } from "../../components/examLibrary/confirmActionDialog";
 import { PublishSuccessOverlay } from "../../components/examLibrary/publishSuccessOverlay";
+import { EditSettingsModal } from "../../components/examLibrary/editSettingsModal";
 import { CreateNewCard } from "../../components/examLibrary/createNewCard";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamLibrary } from "../../hooks/useExamLibrary";
@@ -51,8 +52,10 @@ export function ExamLibraryScreen({
     examId: string;
     type: "end" | "delete";
   } | null>(null);
+
   // holds the code to show after a successful publish, null when no overlay is open
   const [publishedCode, setPublishedCode] = useState<string | null>(null);
+  const [settingsExamId, setSettingsExamId] = useState<string | null>(null); // which exam's settings modal is open
 
   const openExamBuilder = (examId: string) => {
     setCurrentExamId(examId);
@@ -204,6 +207,7 @@ export function ExamLibraryScreen({
                     onPublish={() => requestPublish(exam.id, exam.code)}
                     onEnd={() => requestEnd(exam.id)}
                     onDelete={() => requestDelete(exam.id)}
+                    onEditSettings={() => setSettingsExamId(exam.id)}
                   />
                 }
               />
@@ -236,6 +240,14 @@ export function ExamLibraryScreen({
         error={actionError}
         onConfirm={confirmPendingAction}
         onCancel={() => setConfirmAction(null)}
+      />
+      
+      {/* Overlay / Modals */}
+      <EditSettingsModal
+        isOpen={settingsExamId !== null}
+        examId={settingsExamId}
+        onClose={() => setSettingsExamId(null)}
+        onSaved={refetch}
       />
 
       <PublishSuccessOverlay
