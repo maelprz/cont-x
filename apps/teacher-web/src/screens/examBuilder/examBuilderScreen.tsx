@@ -19,7 +19,6 @@ import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
 import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
-import { SaveExamOverlay } from "../../components/examBuilder/saveExamOverlay";
 import { QuestionBankModal } from "../../components/examBuilder/questionBankModal";
 import {
   createBlankMCQuestion,
@@ -290,12 +289,9 @@ export function ExamBuilderScreen({
 
   const {
     saveDraft,
-    saveOnly,
-    publish,
-    isUpdating,
+    saveExam,
     error: statusError,
   } = useUpdateExamStatus();
-  const [showSaveOverlay, setShowSaveOverlay] = useState(false);
 
   // quick save — persists all question edits, marks the exam as draft, returns to the library
   const handleSaveDraft = async () => {
@@ -307,23 +303,13 @@ export function ExamBuilderScreen({
   };
 
   // marks the exam as draft but not yet visible to students
-  const handleSaveOnly = async (): Promise<boolean> => {
+  const handleSaveExam = async (): Promise<boolean> => {
     if (!examData?.id) return false;
     const questionsOk = await persistAllQuestions();
     if (!questionsOk) return false;
-    const didSave = await saveOnly(examData.id);
+    const didSave = await saveExam(examData.id);
     if (didSave) navigateTo("examLibrary");
     return didSave;
-  };
-
-  // makes the exam live so students can join with the exam code
-  const handlePublish = async (verificationCode: string): Promise<boolean> => {
-    if (!examData?.id) return false;
-    const questionsOk = await persistAllQuestions();
-    if (!questionsOk) return false;
-    const didPublish = await publish(examData.id, verificationCode);
-    if (didPublish) navigateTo("examLibrary");
-    return didPublish;
   };
 
   const isMCQ = editorTab === "multiple-choice";
@@ -352,7 +338,7 @@ export function ExamBuilderScreen({
           <main className="flex-1 flex flex-col overflow-hidden min-w-0">
             {/* Editor top bar */}
             <div
-              className="flex items-start justify-between px-7 py-4 border-b flex-shrink-0"
+              className="relative flex items-start justify-between px-7 py-4 border-b flex-shrink-0"
               style={{ borderColor: "var(--color-base-300)" }}
             >
               <div>
@@ -385,7 +371,7 @@ export function ExamBuilderScreen({
                   {isSavingAllQuestions ? "Saving..." : "Save Draft"}
                 </button>
                 <button
-                  onClick={() => setShowSaveOverlay(true)}
+                  onClick={handleSaveExam}
                   className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-90 border-none"
                   style={{
                     backgroundColor: "var(--color-primary)",
@@ -395,6 +381,14 @@ export function ExamBuilderScreen({
                   Save Exam
                 </button>
               </div>
+              {statusError && (
+                <p
+                  className="absolute top-full right-7 mt-2 text-[13px]"
+                  style={{ color: "var(--color-error)" }}
+                >
+                  {statusError}
+                </p>
+              )}
             </div>
 
             {/* Scrollable body */}
@@ -572,16 +566,6 @@ export function ExamBuilderScreen({
         onClose={() => setShowQuestionBankModal(false)}
         onQuestionsAdded={handleQuestionsAddedFromBank}
         onCreateNewQuestion={handleCreateNewQuestionFromModal}
-      />
-
-      <SaveExamOverlay
-        isOpen={showSaveOverlay}
-        examCode={examData?.examCode ?? null}
-        isSaving={isUpdating || isSavingAllQuestions}
-        error={statusError ?? saveAllError}
-        onClose={() => setShowSaveOverlay(false)}
-        onSaveOnly={handleSaveOnly}
-        onPublish={handlePublish}
       />
     </div>
   );
