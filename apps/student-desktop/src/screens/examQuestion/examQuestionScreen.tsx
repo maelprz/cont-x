@@ -1,8 +1,9 @@
-import { useState, useMemo } from 'react'; // added useMemo for reshaping fetched data
+import { useState, useMemo, useEffect } from 'react'; // added useMemo for reshaping fetched data
 import { useRouterLogic } from '../../router/routerLogic';
 import { useExamSessionStore } from '../../stores/useExamSessionStore'; // real examId/sessionId from Confirmation
 import { useExamQuestions } from '../../hooks/useExamQuestions'; // real question fetch
 import { CodeEditor } from '../../components/examQuestion/codeEditor';
+
 import type {
   ExamQuestionScreenProps,
   QuestionMapItem,
@@ -72,29 +73,32 @@ function MCQOptions({
   options,
   selectedId,
   onSelect,
+  onClear,
 }: {
-  options: MCQQuestion['options'];
+  options: (MCQQuestion['options'][number] & { displayLetter?: string })[];
   selectedId?: string;
   onSelect?: (id: string) => void;
+  onClear?: () => void;
 }) {
   return (
     <div className="flex flex-col gap-3 mt-6 w-full min-w-0">
-      {options.map(({ id, text }) => {
+      {options.map(({ id, text, displayLetter }) => {
         const isSelected = selectedId === id;
         return (
           <button
             key={id}
             onClick={() => onSelect?.(id)}
+            style={{ outline: 'none', boxShadow: 'none' }}
             className={`
               flex items-start gap-4 w-full max-w-full text-left px-5 py-4 rounded-lg border
               cursor-pointer transition-all duration-150 box-border overflow-hidden
               ${isSelected
-                ? 'border-[var(--text-primary)] bg-[var(--bg-app)]'
+                ? 'border-[#00285d] bg-[var(--bg-app)]'
                 : 'border-[var(--border-subtle)] bg-[var(--bg-sidebar)]'
               }
             `}
           >
-            {/* Option letter badge */}
+            {/* Option letter badge, shows A/B/C/D, not the raw database id */}
             <span
               className={`
                 flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center
@@ -105,7 +109,7 @@ function MCQOptions({
                 }
               `}
             >
-              {id}
+              {displayLetter ?? id}
             </span>
             <span
               className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? 'text-[var(--text-primary)]' : 'text-[var(--text-inverted)]'}`}
@@ -115,6 +119,16 @@ function MCQOptions({
           </button>
         );
       })}
+
+      {/* Clears the current selection, only shown if something is picked. Plain clickable text, not a button, so it never gets a native focus ring. */}
+      {selectedId && (
+        <span
+          onClick={() => onClear?.()}
+          className="self-end mt-1 text-[13px] font-semibold cursor-pointer text-[#00285d] hover:underline"
+        >
+          Clear Choice
+        </span>
+      )}
     </div>
   );
 }
@@ -187,20 +201,28 @@ export function ExamQuestionScreen({
     return {
       ...shared,
       type: 'multiple-choice',
-      options: (raw.options ?? []).map((opt) => ({ id: opt.id, text: opt.text })),
+      options: (raw.options ?? []).map((opt, i) => ({
+        id: opt.id, // real UUID, still used for selection/scoring
+        text: opt.text,
+        displayLetter: String.fromCharCode(65 + i), // A, B, C, D... based on position
+      })),
       selectedOptionId: selectedOptions[raw.id],
     } as MCQQuestion;
   }, [fetchedQuestions, currentIndex, flaggedIds, selectedOptions]);
 
   // Local MCQ selection state, mirrors the current question's saved choice.
-  const [localSelectedOption, setLocalSelectedOption] = useState<string | undefined>(
-    question?.type === 'multiple-choice' ? question.selectedOptionId : undefined
-  );
+  const [localSelectedOption, setLocalSelectedOption] = useState<string | undefined>(undefined);
 
   // Local code text, mirrors the current question's saved code.
-  const [localCode, setLocalCode] = useState<string>(
-    question?.type === 'coding' ? question.starterCode ?? '' : ''
-  );
+  const [localCode, setLocalCode] = useState<string>('');
+
+  // Re-syncs local state every time the question changes, so switching
+  // questions shows the real saved answer instead of the last one typed.
+  useEffect(() => {
+    if (!question) return; // nothing loaded yet
+    setLocalSelectedOption(question.type === 'multiple-choice' ? question.selectedOptionId : undefined);
+    setLocalCode(question.type === 'coding' ? question.starterCode ?? '' : '');
+  }, [question]);
 
   const handleOptionSelect = (id: string) => {
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
@@ -208,6 +230,17 @@ export function ExamQuestionScreen({
     setSelectedOptions((prev) => ({ ...prev, [fetchedQuestions[currentIndex].id]: id })); // remember this choice
     onAnswerSelect?.(question.number, id);
   };
+
+  const handleClearOption = () => {
+  if (!fetchedQuestions[currentIndex]) return; // guard against no question loaded
+  const id = fetchedQuestions[currentIndex].id;
+  setLocalSelectedOption(undefined); // clear the visible selection
+  setSelectedOptions((prev) => {
+    const next = { ...prev }; // copy so we don't mutate state directly
+    delete next[id]; // remove this question's saved choice
+    return next;
+  });
+};
 
   const handleCodeChange = (code: string) => {
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
@@ -408,6 +441,7 @@ export function ExamQuestionScreen({
                 options={mcqQ.options}
                 selectedId={localSelectedOption}
                 onSelect={handleOptionSelect}
+                onClear={handleClearOption}
               />
             )}
           </div>
