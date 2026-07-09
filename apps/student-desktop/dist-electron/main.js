@@ -1,17 +1,11 @@
 import { BrowserWindow, app, ipcMain } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
-import { spawn } from "child_process";
+import { spawn, spawnSync } from "child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { tmpdir } from "os";
 import path from "node:path";
-//#region \0rolldown/runtime.js
-var __require = /* @__PURE__ */ ((x) => typeof require !== "undefined" ? require : typeof Proxy !== "undefined" ? new Proxy(x, { get: (a, b) => (typeof require !== "undefined" ? require : a)[b] }) : x)(function(x) {
-	if (typeof require !== "undefined") return require.apply(this, arguments);
-	throw Error("Calling `require` for \"" + x + "\" in an environment that doesn't expose the `require` function. See https://rolldown.rs/in-depth/bundling-cjs#require-external-modules for more details.");
-});
-//#endregion
 //#region electron/compiler/compilerService.ts
 var GCC_PATH = join(process.env.APP_ROOT ?? "", "electron", "native", "mingw", "bin", "gcc.exe");
 function compileSource(sourceCode) {
@@ -19,22 +13,6 @@ function compileSource(sourceCode) {
 	const sourcePath = join(workDir, "submission.c");
 	const binaryPath = join(workDir, "submission.exe");
 	writeFileSync(sourcePath, sourceCode, "utf-8");
-	const result = spawnSyncCompile(sourcePath, binaryPath);
-	if (result.status !== 0) {
-		cleanupDir(workDir);
-		return {
-			success: false,
-			stderr: result.stderr
-		};
-	}
-	return {
-		success: true,
-		binaryPath,
-		stderr: result.stderr
-	};
-}
-function spawnSyncCompile(sourcePath, binaryPath) {
-	const { spawnSync } = __require("child_process");
 	const proc = spawnSync(GCC_PATH, [
 		"-std=c11",
 		"-Wall",
@@ -43,8 +21,16 @@ function spawnSyncCompile(sourcePath, binaryPath) {
 		"-o",
 		binaryPath
 	], { encoding: "utf-8" });
+	if (proc.status !== 0) {
+		cleanupDir(workDir);
+		return {
+			success: false,
+			stderr: proc.stderr ?? ""
+		};
+	}
 	return {
-		status: proc.status,
+		success: true,
+		binaryPath,
 		stderr: proc.stderr ?? ""
 	};
 }
@@ -117,7 +103,7 @@ function registerCompilerHandlers() {
 }
 //#endregion
 //#region electron/main.ts
-var require$1 = createRequire(import.meta.url);
+var require = createRequire(import.meta.url);
 var __dirname = path.dirname(fileURLToPath(import.meta.url));
 process.env.APP_ROOT = path.join(__dirname, "..");
 var VITE_DEV_SERVER_URL = process.env["VITE_DEV_SERVER_URL"];
@@ -126,18 +112,21 @@ var RENDERER_DIST = path.join(process.env.APP_ROOT, "dist");
 process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL ? path.join(process.env.APP_ROOT, "public") : RENDERER_DIST;
 var keyboardHook = null;
 try {
-	keyboardHook = require$1(path.join(process.env.APP_ROOT, "electron/native/keyboard-hook/build/Release/keyboard_hook.node"));
+	keyboardHook = require(path.join(process.env.APP_ROOT, "electron/native/keyboard-hook/build/Release/keyboard_hook.node"));
 	console.log("[lockdown] keyboard hook loaded successfully");
 } catch (err) {
 	console.error("[lockdown] keyboard hook failed to load:", err);
 }
-var win;
+var win = null;
+var isExiting = false;
 function cleanupStaleLockdownState() {
 	try {
+		keyboardHook?.stopHook();
 		keyboardHook?.setTaskManagerDisabled(false);
 		keyboardHook?.setLockWorkstationDisabled(false);
 		keyboardHook?.setChangePasswordDisabled(false);
 		keyboardHook?.setFastUserSwitchingDisabled(false);
+		keyboardHook?.setTaskbarVisible(true);
 		console.log("[lockdown] cleared any leftover state from last run");
 	} catch (err) {
 		console.error("[lockdown] cleanup failed:", err);
@@ -150,7 +139,8 @@ function registerLockdown() {
 		keyboardHook?.setLockWorkstationDisabled(true);
 		keyboardHook?.setChangePasswordDisabled(true);
 		keyboardHook?.setFastUserSwitchingDisabled(true);
-		console.log("[lockdown] hook registered");
+		keyboardHook?.setTaskbarVisible(false);
+		console.log("[lockdown] hook registered, taskbar hidden");
 	} catch (err) {
 		console.error("[lockdown] failed to register hook:", err);
 	}
@@ -162,7 +152,8 @@ function unregisterLockdown() {
 		keyboardHook?.setLockWorkstationDisabled(false);
 		keyboardHook?.setChangePasswordDisabled(false);
 		keyboardHook?.setFastUserSwitchingDisabled(false);
-		console.log("[lockdown] hook unregistered");
+		keyboardHook?.setTaskbarVisible(true);
+		console.log("[lockdown] hook unregistered, taskbar restored");
 	} catch (err) {
 		console.error("[lockdown] failed to unregister hook:", err);
 	}
@@ -179,6 +170,12 @@ function createWindow() {
 	win.on("minimize", () => {
 		win?.restore();
 	});
+	win.on("close", (event) => {
+		if (!isExiting) {
+			event.preventDefault();
+			console.log("[lockdown] close attempt blocked");
+		}
+	});
 	win.on("page-title-updated", (evt) => evt.preventDefault());
 	win.webContents.on("did-finish-load", () => {
 		win?.webContents.send("main-process-message", (/* @__PURE__ */ new Date()).toLocaleString());
@@ -187,16 +184,23 @@ function createWindow() {
 	else win.loadFile(path.join(RENDERER_DIST, "index.html"));
 }
 ipcMain.on("exit-app", () => {
+	isExiting = true;
 	unregisterLockdown();
-	if (win) {
-		win.closable = true;
-		win.setAlwaysOnTop(false);
-	}
+	if (win) win.setAlwaysOnTop(false);
 	app.quit();
+});
+process.on("exit", () => {
+	try {
+		keyboardHook?.stopHook();
+		keyboardHook?.setTaskManagerDisabled(false);
+		keyboardHook?.setLockWorkstationDisabled(false);
+		keyboardHook?.setChangePasswordDisabled(false);
+		keyboardHook?.setFastUserSwitchingDisabled(false);
+		keyboardHook?.setTaskbarVisible(true);
+	} catch {}
 });
 app.on("window-all-closed", () => {
 	if (process.platform !== "darwin") {
-		unregisterLockdown();
 		app.quit();
 		win = null;
 	}
