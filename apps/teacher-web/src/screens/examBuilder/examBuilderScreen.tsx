@@ -8,9 +8,12 @@ import type {
   QuestionType,
 } from "./examBuilderScreen.types";
 import { useExamBuilder } from "../../hooks/useExamBuilder";
-import { useSaveQuestion } from "../../hooks/useSaveQuestion";
 import { useDeleteQuestion } from "../../hooks/useDeleteQuestion";
 import { useUpdateExamStatus } from "../../hooks/useUpdateExamStatus";
+import { useAuthStore } from "../../store/useAuthStore";
+import { useRouterLogic } from "../../router/routerLogic";
+import { saveBankQuestion } from "../../services/questionBankService";
+import { saveQuestion as persistExamQuestion } from "../../services/examBuilderService";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
@@ -33,27 +36,41 @@ export function ExamBuilderScreen({
   onReorderQuestions,
   onDiscardQuestion,
   onDeleteQuestion,
-  onPreviewExam,
   onPreviewRendered,
   onSaveAndContinue,
 }: ExamBuilderScreenProps) {
   const { examData, isLoading, error } = useExamBuilder();
+  const teacherId = useAuthStore((state) => state.user?.id);
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
 
   const [questions, setQuestions] = useState<BuilderQuestion[]>(
     externalQuestions ?? [],
   );
-
   const [activeId, setActiveId] = useState<string>(externalActiveId ?? "");
 
-  // mirrors what's actually persisted, so Discard has something to revert to
+  // mirrors what's been locally "confirmed" via Save & Continue — used as the Discard baseline
+  // for pre-existing/previously-confirmed questions. Actual exam persistence is separate (see below).
   const [savedQuestions, setSavedQuestions] = useState<BuilderQuestion[]>(
     externalQuestions ?? [],
   );
 
+  // ids of brand-new questions (created via "+ Create New") that still need their one-time
+  // reusable copy written to question_bank — cleared once that write succeeds.
+  const [pendingBankSaveIds, setPendingBankSaveIds] = useState<Set<string>>(new Set());
+
+  // snapshot of each bank-derived question exactly as it was when added — Discard always
+  // reverts to this, regardless of any edits made afterward.
+  const [bankOriginSnapshots, setBankOriginSnapshots] = useState<Map<string, BuilderQuestion>>(new Map());
+
   const [showQuestionBankModal, setShowQuestionBankModal] = useState(false); // true when the "+" modal is open
 
+  const [isSavingQuestion, setIsSavingQuestion] = useState(false); // Save & Continue's own bank-write in flight
+  const [bankSaveError, setBankSaveError] = useState<string | null>(null);
+
+  const [isSavingAllQuestions, setIsSavingAllQuestions] = useState(false); // Save Draft / Save Exam's bulk persist in flight
+  const [saveAllError, setSaveAllError] = useState<string | null>(null);
+
   // fills the builder with real questions once the exam finishes loading
-  // replace the load effect to also capture the saved snapshot:
   useEffect(() => {
     if (externalQuestions) return; // parent controls questions directly, skip
     if (!examData) return; // still loading, or no exam selected
@@ -77,24 +94,43 @@ export function ExamBuilderScreen({
     onAddQuestion?.(); // still notify parent in case it needs to know
   };
 
-  // runs once the modal finishes adding one or more questions to this exam
+  // starts a brand new blank question in the real editor — matches the old "+" flow exactly
+  const handleCreateNewQuestionFromModal = (type: QuestionType) => {
+    const newQuestion =
+      type === "multiple-choice"
+        ? createBlankMCQuestion(crypto.randomUUID(), questions.length + 1)
+        : createBlankCodingQuestion(crypto.randomUUID(), questions.length + 1);
+
+    setQuestions((prev) => [...prev, newQuestion]);
+    setPendingBankSaveIds((prev) => new Set(prev).add(newQuestion.id)); // needs a bank copy on first save
+    setActiveId(newQuestion.id);
+    setEditorTab(newQuestion.type);
+  };
+
+  // runs once the modal finishes staging bank-selected questions — nothing is saved yet
   const handleQuestionsAddedFromBank = (newQuestions: BuilderQuestion[]) => {
     setQuestions((prev) => [...prev, ...newQuestions]);
-    setSavedQuestions((prev) => [...prev, ...newQuestions]); // already persisted by the modal itself
+    setBankOriginSnapshots((prev) => {
+      const next = new Map(prev);
+      newQuestions.forEach((q) => next.set(q.id, q)); // remember the bank content as-fetched, for Discard
+      return next;
+    });
     if (newQuestions.length > 0) {
       setActiveId(newQuestions[0].id);
       setEditorTab(newQuestions[0].type);
     }
   };
 
-  // add the discard handler
+  // reverts the active question to: its bank original (if bank-derived), its last confirmed
+  // save (if pre-existing/previously confirmed), or a blank template (if brand new, never confirmed).
   const handleDiscard = () => {
     if (!activeQuestion) return; // nothing selected, nothing to discard
 
+    const bankOriginVersion = bankOriginSnapshots.get(activeQuestion.id);
     const savedVersion = savedQuestions.find((q) => q.id === activeQuestion.id);
 
-    // reverts to last save, or a blank template if this question was never saved
     const revertedQuestion: BuilderQuestion =
+      bankOriginVersion ??
       savedVersion ??
       (activeQuestion.type === "multiple-choice"
         ? createBlankMCQuestion(activeQuestion.id, activeQuestion.number)
@@ -116,14 +152,27 @@ export function ExamBuilderScreen({
   const handleDeleteQuestion = async (id: string) => {
     if (!id) return; // nothing selected, nothing to delete
 
-    const didDelete = await deleteQuestion(id);
-    if (!didDelete) return;
+    const wasSaved = savedQuestions.some((q) => q.id === id); // only hit the DB if it's really there
+    if (wasSaved) {
+      const didDelete = await deleteQuestion(id);
+      if (!didDelete) return;
+    }
 
     const deletedIndex = questions.findIndex((q) => q.id === id);
     const remaining = questions.filter((q) => q.id !== id);
 
     setQuestions(remaining);
     setSavedQuestions((prev) => prev.filter((q) => q.id !== id));
+    setPendingBankSaveIds((prev) => {
+      const next = new Set(prev);
+      next.delete(id);
+      return next;
+    });
+    setBankOriginSnapshots((prev) => {
+      const next = new Map(prev);
+      next.delete(id);
+      return next;
+    });
 
     const nextActive = remaining[deletedIndex] ?? null; // item that shifted into the deleted slot
     setActiveId(nextActive?.id ?? "");
@@ -184,24 +233,63 @@ export function ExamBuilderScreen({
     );
   };
 
-  const { saveQuestion, isSaving, error: saveError } = useSaveQuestion();
-
-  // saves the active question, then runs whatever the parent wants on continue
+  // saves a brand-new question's reusable bank copy (once), and marks it locally confirmed.
+  // NEVER writes to the exam's questions table — that only happens via Save Draft / Save Exam.
   const handleSaveAndContinue = async () => {
     if (!activeQuestion) return; // nothing selected, nothing to save
-    const didSave = await saveQuestion(activeQuestion);
-    if (didSave) {
-      // this question is now the "last saved" version, for future Discards
+
+    setIsSavingQuestion(true);
+    setBankSaveError(null);
+    try {
+      if (pendingBankSaveIds.has(activeQuestion.id) && teacherId) {
+        await saveBankQuestion(teacherId, { ...activeQuestion, id: crypto.randomUUID() }); // separate id, independent reusable copy
+        setPendingBankSaveIds((prev) => {
+          const next = new Set(prev);
+          next.delete(activeQuestion.id); // bank copy now exists, never write it again
+          return next;
+        });
+      }
+
       setSavedQuestions((prev) =>
         prev.some((q) => q.id === activeQuestion.id)
           ? prev.map((q) => (q.id === activeQuestion.id ? activeQuestion : q))
           : [...prev, activeQuestion],
       );
       onSaveAndContinue?.();
+    } catch (err) {
+      setBankSaveError(err instanceof Error ? err.message : "Could not save this question to the bank.");
+    } finally {
+      setIsSavingQuestion(false);
+    }
+  };
+
+  // bulk-persists every current question into the exam — the ONLY place that writes to
+  // the exam's questions table. Also catches any bank writes that were never confirmed individually.
+  const persistAllQuestions = async (): Promise<boolean> => {
+    if (!examData?.id) return false;
+
+    setIsSavingAllQuestions(true);
+    setSaveAllError(null);
+    try {
+      for (const q of questions) {
+        if (pendingBankSaveIds.has(q.id) && teacherId) {
+          await saveBankQuestion(teacherId, { ...q, id: crypto.randomUUID() }); // reusable copy, first time only
+        }
+        await persistExamQuestion(examData.id, q); // upserts this question into the exam
+      }
+      setSavedQuestions(questions); // now mirrors exactly what's persisted
+      setPendingBankSaveIds(new Set());
+      return true;
+    } catch (err) {
+      setSaveAllError(err instanceof Error ? err.message : "Could not save all questions.");
+      return false;
+    } finally {
+      setIsSavingAllQuestions(false);
     }
   };
 
   const {
+    saveDraft,
     saveOnly,
     publish,
     isUpdating,
@@ -209,16 +297,33 @@ export function ExamBuilderScreen({
   } = useUpdateExamStatus();
   const [showSaveOverlay, setShowSaveOverlay] = useState(false);
 
-  // marks the exam as saved but not yet visible to students
+  // quick save — persists all question edits, marks the exam as draft, returns to the library
+  const handleSaveDraft = async () => {
+    const questionsOk = await persistAllQuestions();
+    if (!questionsOk || !examData?.id) return;
+
+    const didSave = await saveDraft(examData.id);
+    if (didSave) navigateTo("examLibrary");
+  };
+
+  // marks the exam as draft but not yet visible to students
   const handleSaveOnly = async (): Promise<boolean> => {
-    if (!examData?.id) return false; // no exam loaded, nothing to update
-    return saveOnly(examData.id);
+    if (!examData?.id) return false;
+    const questionsOk = await persistAllQuestions();
+    if (!questionsOk) return false;
+    const didSave = await saveOnly(examData.id);
+    if (didSave) navigateTo("examLibrary");
+    return didSave;
   };
 
   // makes the exam live so students can join with the exam code
   const handlePublish = async (verificationCode: string): Promise<boolean> => {
-    if (!examData?.id) return false; // no exam loaded, nothing to update
-    return publish(examData.id, verificationCode);
+    if (!examData?.id) return false;
+    const questionsOk = await persistAllQuestions();
+    if (!questionsOk) return false;
+    const didPublish = await publish(examData.id, verificationCode);
+    if (didPublish) navigateTo("examLibrary");
+    return didPublish;
   };
 
   const isMCQ = editorTab === "multiple-choice";
@@ -268,15 +373,16 @@ export function ExamBuilderScreen({
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
                 <button
-                  onClick={onPreviewExam}
-                  className="px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
+                  onClick={handleSaveDraft}
+                  disabled={isSavingAllQuestions}
+                  className="px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 disabled:opacity-60"
                   style={{
                     borderColor: "var(--color-base-300)",
                     color: "var(--color-base-content)",
                     backgroundColor: "var(--color-base-100)",
                   }}
                 >
-                  Preview Exam
+                  {isSavingAllQuestions ? "Saving..." : "Save Draft"}
                 </button>
                 <button
                   onClick={() => setShowSaveOverlay(true)}
@@ -312,7 +418,7 @@ export function ExamBuilderScreen({
 
               {!isLoading && !error && (
                 <>
-                  {/* Type toggle + settings pill */}
+                  {/* Type toggle */}
                   <div
                     className="inline-flex rounded-lg p-0.5 mb-6"
                     style={{ backgroundColor: "var(--color-base-300)" }}
@@ -342,7 +448,7 @@ export function ExamBuilderScreen({
                       ),
                     )}
                   </div>
-                  
+
                   {/* Editor panel */}
                   {activeQuestion &&
                     (isMCQ ? (
@@ -381,7 +487,34 @@ export function ExamBuilderScreen({
                     ))}
                 </>
               )}
-              
+
+              {bankSaveError && (
+                <p
+                  className="text-[13px] mb-2"
+                  style={{ color: "var(--color-error)" }}
+                >
+                  {bankSaveError}
+                </p>
+              )}
+
+              {saveAllError && (
+                <p
+                  className="text-[13px] mb-2"
+                  style={{ color: "var(--color-error)" }}
+                >
+                  {saveAllError}
+                </p>
+              )}
+
+              {deleteError && (
+                <p
+                  className="text-[13px] mb-2"
+                  style={{ color: "var(--color-error)" }}
+                >
+                  {deleteError}
+                </p>
+              )}
+
               {/* Bottom action row */}
               <div
                 className="flex items-center justify-between mt-8 pt-5 border-t"
@@ -415,55 +548,37 @@ export function ExamBuilderScreen({
                   </button>
                   <button
                     onClick={handleSaveAndContinue}
-                    disabled={isSaving}
+                    disabled={isSavingQuestion}
                     className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
                     style={{
                       backgroundColor: "var(--color-primary)",
                       color: "var(--color-primary-content)",
-                      opacity: isSaving ? 0.6 : 1,
+                      opacity: isSavingQuestion ? 0.6 : 1,
                     }}
                   >
-                    {isSaving ? "Saving..." : "Save & Continue"}
+                    {isSavingQuestion ? "Saving..." : "Save & Continue"}
                   </button>
                 </div>
               </div>
-
-              {saveError && (
-                <p
-                  className="text-[13px] mb-2"
-                  style={{ color: "var(--color-error)" }}
-                >
-                  {saveError}
-                </p>
-              )}
-
-              {deleteError && (
-                <p
-                  className="text-[13px] mb-2"
-                  style={{ color: "var(--color-error)" }}
-                >
-                  {deleteError}
-                </p>
-              )}
             </div>
           </main>
         </div>
       </div>
-      
+
       {/* Overlays */}
       <QuestionBankModal
         isOpen={showQuestionBankModal}
-        examId={examData?.id ?? ""}
         startingNumber={questions.length}
         onClose={() => setShowQuestionBankModal(false)}
         onQuestionsAdded={handleQuestionsAddedFromBank}
+        onCreateNewQuestion={handleCreateNewQuestionFromModal}
       />
 
       <SaveExamOverlay
         isOpen={showSaveOverlay}
         examCode={examData?.examCode ?? null}
-        isSaving={isUpdating}
-        error={statusError}
+        isSaving={isUpdating || isSavingAllQuestions}
+        error={statusError ?? saveAllError}
         onClose={() => setShowSaveOverlay(false)}
         onSaveOnly={handleSaveOnly}
         onPublish={handlePublish}

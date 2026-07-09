@@ -6,6 +6,21 @@ export function useUpdateExamStatus() {
   const [isUpdating, setIsUpdating] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
+  // marks the exam as draft but not yet visible to students
+  async function saveDraft(examId: string): Promise<boolean> {
+    setIsUpdating(true);
+    setError(null);
+    try {
+      await updateExamStatus(examId, "draft");
+      return true;
+    } catch (err) {
+      setError("Could not save exam. Try again.");
+      return false;
+    } finally {
+      setIsUpdating(false);
+    }
+  }
+
   // marks the exam as saved but not yet visible to students
   async function saveOnly(examId: string): Promise<boolean> {
     setIsUpdating(true);
@@ -39,5 +54,5 @@ export function useUpdateExamStatus() {
     }
   }
 
-  return { saveOnly, publish, isUpdating, error };
+  return { saveDraft, saveOnly, publish, isUpdating, error };
 }
