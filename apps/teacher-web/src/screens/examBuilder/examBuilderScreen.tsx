@@ -18,6 +18,7 @@ import { QuestionListPanel } from "../../components/examBuilder/questionListPane
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
 import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
 import { SaveExamOverlay } from "../../components/examBuilder/saveExamOverlay";
+import { QuestionBankModal } from "../../components/examBuilder/questionBankModal";
 import {
   createBlankMCQuestion,
   createBlankCodingQuestion,
@@ -42,6 +43,7 @@ export function ExamBuilderScreen({
   const [questions, setQuestions] = useState<BuilderQuestion[]>(
     externalQuestions ?? [],
   );
+
   const [activeId, setActiveId] = useState<string>(externalActiveId ?? "");
 
   // mirrors what's actually persisted, so Discard has something to revert to
@@ -49,6 +51,7 @@ export function ExamBuilderScreen({
     externalQuestions ?? [],
   );
 
+  const [showQuestionBankModal, setShowQuestionBankModal] = useState(false); // true when the "+" modal is open
   const [showSettings, setShowSettings] = useState(false); // true when the Exam Settings panel is active
   const [durationHours, setDurationHours] = useState(0); // teacher's typed hours value
   const [durationMinutesInput, setDurationMinutesInput] = useState(0); // teacher's typed minutes value
@@ -80,18 +83,21 @@ export function ExamBuilderScreen({
     activeQuestion?.type ?? "multiple-choice",
   );
 
+  // opens the Question Bank modal instead of creating a blank question directly
   const handleAddQuestion = () => {
-    // creates a new blank question and makes it the active one
-    const newQuestion = createBlankMCQuestion(
-      crypto.randomUUID(),
-      questions.length + 1,
-    );
-
-    setQuestions((prev) => [...prev, newQuestion]);
-    setActiveId(newQuestion.id);
-    setEditorTab("multiple-choice");
-    setShowSettings(false); // adding a question should leave the settings view
+    setShowQuestionBankModal(true);
     onAddQuestion?.(); // still notify parent in case it needs to know
+  };
+
+  // runs once the modal finishes adding one or more questions to this exam
+  const handleQuestionsAddedFromBank = (newQuestions: BuilderQuestion[]) => {
+    setQuestions((prev) => [...prev, ...newQuestions]);
+    setSavedQuestions((prev) => [...prev, ...newQuestions]); // already persisted by the modal itself
+    if (newQuestions.length > 0) {
+      setActiveId(newQuestions[0].id);
+      setEditorTab(newQuestions[0].type);
+    }
+    setShowSettings(false);
   };
 
   // add the discard handler
@@ -666,6 +672,15 @@ export function ExamBuilderScreen({
           </main>
         </div>
       </div>
+      
+      {/* Overlays */}
+      <QuestionBankModal
+        isOpen={showQuestionBankModal}
+        examId={examData?.id ?? ""}
+        startingNumber={questions.length}
+        onClose={() => setShowQuestionBankModal(false)}
+        onQuestionsAdded={handleQuestionsAddedFromBank}
+      />
 
       <SaveExamOverlay
         isOpen={showSaveOverlay}
