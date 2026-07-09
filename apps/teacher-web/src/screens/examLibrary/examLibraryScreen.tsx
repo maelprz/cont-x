@@ -7,14 +7,15 @@ import { ExamCardTile } from "../../components/examLibrary/examCardTile";
 import { ExamCardMenu } from "../../components/examLibrary/examCardMenu";
 import { ConfirmActionDialog } from "../../components/examLibrary/confirmActionDialog";
 import { PublishSuccessOverlay } from "../../components/examLibrary/publishSuccessOverlay";
+import { SetSessionCodeModal } from "../../components/examLibrary/setSessionCodeModal";
 import { EditSettingsModal } from "../../components/examLibrary/editSettingsModal";
+import { CreateExamModal } from "../../components/examLibrary/createExamModal";
 import { CreateNewCard } from "../../components/examLibrary/createNewCard";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamLibrary } from "../../hooks/useExamLibrary";
 import { useCreateExam } from "../../hooks/useCreateExam";
 import { useExamCardActions } from "../../hooks/useExamCardActions";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
-import { CreateExamModal } from "../../components/examLibrary/createExamModal";
 import type { NewExamSettings } from "../../services/examBuilderService";
 
 export function ExamLibraryScreen({
@@ -56,6 +57,8 @@ export function ExamLibraryScreen({
   // holds the code to show after a successful publish, null when no overlay is open
   const [publishedCode, setPublishedCode] = useState<string | null>(null);
   const [settingsExamId, setSettingsExamId] = useState<string | null>(null); // which exam's settings modal is open
+  
+  const [publishTarget, setPublishTarget] = useState<{ examId: string; examCode: string } | null>(null); // exam awaiting a session code before it can publish
 
   const openExamBuilder = (examId: string) => {
     setCurrentExamId(examId);
@@ -77,13 +80,28 @@ export function ExamLibraryScreen({
     onSearchChange?.(q);
   };
 
-  // publishes right away, then shows the code so the teacher can share it
+  // tries to publish immediately; if the exam has no session code yet, opens the prompt instead
   const requestPublish = async (examId: string, examCode: string) => {
-    const didPublish = await handlePublish(examId);
-    if (didPublish) {
+    const result = await handlePublish(examId);
+    if (result === "success") {
       setPublishedCode(examCode);
       refetch();
+    } else if (result === "needsCode") {
+      setPublishTarget({ examId, examCode }); // same behavior stays for exams that already have a code
     }
+    // "error" case falls through — actionError is already set and shown via the existing banner
+  };
+
+  // runs after the teacher enters a code in the prompt — sets it and publishes together
+  const confirmPublishWithCode = async (code: string) => {
+    if (!publishTarget) return;
+    const result = await handlePublish(publishTarget.examId, code);
+    if (result === "success") {
+      setPublishedCode(publishTarget.examCode);
+      setPublishTarget(null);
+      refetch();
+    }
+    // "error" case: actionError is shown inside the modal itself, modal stays open
   };
 
   // opens the confirmation dialog instead of acting immediately
@@ -254,6 +272,14 @@ export function ExamLibraryScreen({
         isOpen={publishedCode !== null}
         examCode={publishedCode ?? ""}
         onClose={() => setPublishedCode(null)}
+      />
+
+      <SetSessionCodeModal
+        isOpen={publishTarget !== null}
+        isProcessing={isProcessing}
+        error={actionError}
+        onCancel={() => setPublishTarget(null)}
+        onConfirm={confirmPublishWithCode}
       />
     </div>
   );

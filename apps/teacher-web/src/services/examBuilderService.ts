@@ -378,18 +378,6 @@ export async function updateExamSettings(
   if (error) throw error;
 }
 
-export async function publishExam(
-  examId: string,
-  verificationCode: string,
-): Promise<void> {
-  const { error } = await supabase
-    .from("exams")
-    .update({ status: "active", verification_code: verificationCode })
-    .eq("id", examId);
-
-  if (error) throw error;
-}
-
 // full settings snapshot for the Edit Settings modal
 export interface ExamSettingsData {
   description: string;
