@@ -132,12 +132,16 @@ export interface FetchedQuestion {
   language?: string; // coding_question.program_type, passed to Monaco as its language mode
 }
 
-// Safely unwraps a nested relation that Supabase may return as
-// either a single object or a one-item array, depending on how
-// it infers the one-to-one relationship.
-function unwrapOne<T>(value: T | T[] | null | undefined): T | undefined {
-  if (Array.isArray(value)) return value[0]; // take the first (and only) item
-  return value ?? undefined; // already a single object, or nothing at all
+// Converts the teacher-facing program_type label into a real Monaco
+// language id. Monaco only understands ids like "c", not "cProgram".
+function mapToMonacoLanguage(programType: string | undefined): string {
+  switch (programType) {
+    case "cProgram": // full C program format
+    case "cFunction": // function-only C format
+      return "c"; // both still highlight as C syntax
+    default:
+      return "c"; // safe fallback if the value is missing or unrecognized
+  }
 }
 
 // Fetches every question for one exam, in the order the teacher set,
@@ -168,10 +172,6 @@ export async function getExamQuestions(
   return (data ?? []).map((row: any) => {
     const isCoding = row.type === "coding"; // check which question type this row is
 
-    // Unwrap in case Supabase returned these as one-item arrays.
-    const mcqRow = unwrapOne(row.mcq_question); // real mcq_question row, if any
-    const codingRow = unwrapOne(row.coding_question); // real coding_question row, if any
-
     return {
       id: row.id, // real question id
       orderIndex: row.order_index, // used for numbering and sort order
@@ -180,14 +180,14 @@ export async function getExamQuestions(
       type: row.type, // "mcq" or "coding"
       maxPoints: row.max_points, // kept for later scoring
       options: !isCoding
-        ? (mcqRow?.mc_options ?? []).map((opt: any) => ({
+        ? row.mcq_question?.mc_options?.map((opt: any) => ({
             id: opt.id, // real option id
             text: opt.option_text, // option label text
             isCorrect: opt.is_correct, // used only for local scoring later
           }))
         : undefined, // coding questions have no options
-      starterCode: isCoding ? codingRow?.starter_code : undefined, // pre-filled editor code
-      language: isCoding ? codingRow?.program_type : undefined, // Monaco language mode
+      starterCode: isCoding ? row.coding_question?.starter_code : undefined, // pre-filled editor code
+      language: isCoding ? mapToMonacoLanguage(row.coding_question?.program_type) : undefined, // Monaco language mode
     };
   });
 }
