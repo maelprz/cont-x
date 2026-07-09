@@ -73,7 +73,38 @@ export async function getExamsByTeacherId(
   return (data as unknown as ExamRow[]).map(mapExamRowToCard);
 }
 
-export async function publishExam(examId: string): Promise<void> {
+// distinct message so the UI can tell "needs a code" apart from a real failure
+export const SESSION_CODE_REQUIRED_MESSAGE =
+  "This exam needs a session code before it can be published.";
+
+// publishes an exam. If a code is given, sets it and publishes together.
+// If no code is given, publishes only if one was already set (via Edit Settings) —
+// otherwise throws SESSION_CODE_REQUIRED_MESSAGE so the caller can prompt for one.
+export async function publishExam(
+  examId: string,
+  verificationCode?: string,
+): Promise<void> {
+  if (verificationCode) {
+    const { error } = await supabase
+      .from("exams")
+      .update({ status: "active", verification_code: verificationCode })
+      .eq("id", examId);
+    if (error) throw error;
+    return;
+  }
+
+  const { data, error: fetchError } = await supabase
+    .from("exams")
+    .select("verification_code")
+    .eq("id", examId)
+    .single();
+
+  if (fetchError || !data) throw fetchError ?? new Error("Exam not found.");
+
+  if (!data.verification_code) {
+    throw new Error(SESSION_CODE_REQUIRED_MESSAGE); // caller shows a prompt, not a dead-end error
+  }
+
   const { error } = await supabase
     .from("exams")
     .update({ status: "active" })

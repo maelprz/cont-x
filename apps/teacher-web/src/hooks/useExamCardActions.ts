@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { publishExam, endExam, deleteExam } from "../services/examService";
+import { publishExam, endExam, deleteExam, SESSION_CODE_REQUIRED_MESSAGE } from "../services/examService";
 
 // manages loading and error state for the three-dot menu actions
 export function useExamCardActions() {
@@ -14,7 +14,6 @@ export function useExamCardActions() {
       await action();
       return true;
     } catch (err) {
-      // shows the real message for known errors, a generic one otherwise
       setError(
         err instanceof Error ? err.message : "Something went wrong. Try again.",
       );
@@ -24,8 +23,28 @@ export function useExamCardActions() {
     }
   }
 
-  const handlePublish = (examId: string) =>
-    runAction(() => publishExam(examId));
+  // publish needs a third outcome — "needs a code" isn't a real error, it's a prompt.
+  // Kept separate from runAction so the caller can react to it synchronously via the return value.
+  async function handlePublish(
+    examId: string,
+    verificationCode?: string,
+  ): Promise<"success" | "needsCode" | "error"> {
+    setIsProcessing(true);
+    setError(null);
+    try {
+      await publishExam(examId, verificationCode);
+      return "success";
+    } catch (err) {
+      if (err instanceof Error && err.message === SESSION_CODE_REQUIRED_MESSAGE) {
+        return "needsCode"; // not shown as an error banner — the UI opens a prompt instead
+      }
+      setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
+      return "error";
+    } finally {
+      setIsProcessing(false);
+    }
+  }
+
   const handleEnd = (examId: string) => runAction(() => endExam(examId));
   const handleDelete = (examId: string) => runAction(() => deleteExam(examId));
 

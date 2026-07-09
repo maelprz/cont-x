@@ -550,7 +550,7 @@ export function ExamBuilderScreen({
                       opacity: isSavingQuestion ? 0.6 : 1,
                     }}
                   >
-                    {isSavingQuestion ? "Saving..." : "Save & Continue"}
+                    {isSavingQuestion ? "Saving..." : "Save Question"}
                   </button>
                 </div>
               </div>
