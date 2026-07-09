@@ -1,73 +1,15 @@
-import { useState } from 'react';
+import { useState, useMemo } from 'react'; // added useMemo for reshaping fetched data
 import { useRouterLogic } from '../../router/routerLogic';
+import { useExamSessionStore } from '../../stores/useExamSessionStore'; // real examId/sessionId from Confirmation
+import { useExamQuestions } from '../../hooks/useExamQuestions'; // real question fetch
 import { CodeEditor } from '../../components/examQuestion/codeEditor';
 import type {
   ExamQuestionScreenProps,
   QuestionMapItem,
-  QuestionStatus,
   CodingQuestion,
   MCQQuestion,
   Question,
 } from './examQuestionScreen.types';
-
-// ---------------------------------------------------------------------------
-// Mock data, replace with real store or hook values when wiring up
-// ---------------------------------------------------------------------------
-
-const MOCK_QUESTION_MAP: QuestionMapItem[] = [
-  { number: 1,  status: 'answered' },
-  { number: 2,  status: 'answered' },
-  { number: 3,  status: 'answered' },
-  { number: 4,  status: 'answered' },
-  { number: 5,  status: 'answered' },
-  { number: 6,  status: 'answered' },
-  { number: 7,  status: 'unanswered' },
-  { number: 8,  status: 'flagged'  },
-  { number: 9,  status: 'unanswered' },
-  { number: 10, status: 'unanswered' },
-  { number: 11, status: 'unanswered' },
-  { number: 12, status: 'unanswered' },
-  { number: 13, status: 'unanswered' },
-  { number: 14, status: 'unanswered' },
-  { number: 15, status: 'unanswered' },
-  { number: 16, status: 'unanswered' },
-  { number: 17, status: 'unanswered' },
-  { number: 18, status: 'unanswered' },
-  { number: 19, status: 'unanswered' },
-  { number: 20, status: 'unanswered' },
-];
-
-const MOCK_CODING_QUESTION: CodingQuestion = {
-  number: 20,
-  totalQuestions: 20,
-  type: 'coding',
-  title: 'Question 7',
-  body: 'Implement a function that finds the longest palindromic substring in a given string. A palindrome is a sequence that reads the same backward as forward.',
-  codeSnippet: `// Example\n\nInput: "babad"\nOutput: "bab"\n(Note: "aba" is also a valid answer)`,
-  constraints: [
-    '1 <= s.length <= 1000',
-    's consists of only digits and English letters',
-    'Time complexity: O(n^2) preferred',
-  ],
-  starterCode: `#include <stdio.h>\n#include <string.h>\n\nchar* longestPalindrome(char* s) {\n    // Write your code here\n    return "";\n}\n\nint main() {\n    char s[1001];\n    scanf("%s", s);\n    printf("%s\\n", longestPalindrome(s));\n    return 0;\n}`,
-  isFlagged: false,
-};
-
-const MOCK_MCQ_QUESTION: MCQQuestion = {
-  number: 20,
-  totalQuestions: 20,
-  type: 'multiple-choice',
-  title: 'Question 3',
-  body: 'Which of the following best describes the time complexity of binary search on a sorted array of n elements?',
-  options: [
-    { id: 'A', text: 'O(n), linear time, scanning each element once' },
-    { id: 'B', text: 'O(log n), logarithmic time, halving the search space each step' },
-    { id: 'C', text: 'O(n^2), quadratic time, comparing all pairs' },
-    { id: 'D', text: 'O(1), constant time, direct index access' },
-  ],
-  selectedOptionId: undefined,
-  isFlagged: false,
-};
 
 // ---------------------------------------------------------------------------
 // Helpers
@@ -80,7 +22,7 @@ function formatTime(seconds: number): string {
   return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
 }
 
-function statusStyle(status: QuestionStatus, isCurrent: boolean): string {
+function statusStyle(status: 'unanswered' | 'answered' | 'flagged', isCurrent: boolean): string {
   if (isCurrent) return 'bg-[#adc6ff] text-[#00285d] border-[#adc6ff]';
   if (status === 'answered') return 'bg-[#1c2b3c] text-[#d4e4fa] border-[#424754]';
   if (status === 'flagged')  return 'bg-transparent text-[#c2c6d6] border-[#424754]';
@@ -182,12 +124,6 @@ function MCQOptions({
 // ---------------------------------------------------------------------------
 
 export function ExamQuestionScreen({
-  examTitle        = 'Advanced Algorithms',
-  timeLeftSeconds  = 6126,
-  progressCurrent  = 6,
-  progressTotal    = 20,
-  questionMap      = MOCK_QUESTION_MAP,
-  question         = MOCK_CODING_QUESTION as Question,
   onNavigate,
   onFlag,
   onAnswerSelect,
@@ -199,30 +135,139 @@ export function ExamQuestionScreen({
   onSubmit,
 }: ExamQuestionScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
-  // Local MCQ selection state, will be lifted via onAnswerSelect when wired up
-  const [localSelectedOption, setLocalSelectedOption] = useState<string | undefined>(
-    question.type === 'multiple-choice' ? question.selectedOptionId : undefined
+  const examId = useExamSessionStore((state) => state.examId); // real exam id from Confirmation
+  const examTitle = useExamSessionStore((state) => state.examTitle) ?? ''; // real exam title
+  const { questions: fetchedQuestions, isLoading, error } = useExamQuestions(examId); // real question list
+
+  // Tracks which question is currently shown, by position in the loaded list.
+  const [currentIndex, setCurrentIndex] = useState(0);
+  // Tracks flagged state per question id, kept in memory only for now.
+  const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
+  // Tracks each question's chosen MCQ option id, kept in memory only for now.
+  const [selectedOptions, setSelectedOptions] = useState<Record<string, string>>({});
+  // Tracks each coding question's current code text, kept in memory only for now.
+  const [codeByQuestion, setCodeByQuestion] = useState<Record<string, string>>({});
+
+  // Builds the question map (sidebar grid) from the real fetched list.
+  const questionMap: QuestionMapItem[] = useMemo(
+    () =>
+      fetchedQuestions.map((q, i) => ({
+        number: i + 1, // display position, not the database id
+        status: flaggedIds.has(q.id)
+          ? 'flagged'
+          : selectedOptions[q.id] || codeByQuestion[q.id]
+            ? 'answered'
+            : 'unanswered',
+      })),
+    [fetchedQuestions, flaggedIds, selectedOptions, codeByQuestion],
   );
 
-  // Local code text, will be lifted via onCodeChange when wired up
+  // Converts the current fetched question into the shape the existing UI expects.
+  const question: Question | null = useMemo(() => {
+    const raw = fetchedQuestions[currentIndex]; // the question at the current position
+    if (!raw) return null; // nothing loaded yet, or index out of range
+
+    const shared = {
+      number: currentIndex + 1, // 1-based display number
+      totalQuestions: fetchedQuestions.length, // real count of loaded questions
+      title: raw.title,
+      body: raw.prompt,
+      isFlagged: flaggedIds.has(raw.id),
+    };
+
+    if (raw.type === 'coding') {
+      return {
+        ...shared,
+        type: 'coding',
+        starterCode: raw.starterCode ?? '',
+        language: raw.language ?? 'c',
+      } as CodingQuestion;
+    }
+
+    return {
+      ...shared,
+      type: 'multiple-choice',
+      options: (raw.options ?? []).map((opt) => ({ id: opt.id, text: opt.text })),
+      selectedOptionId: selectedOptions[raw.id],
+    } as MCQQuestion;
+  }, [fetchedQuestions, currentIndex, flaggedIds, selectedOptions]);
+
+  // Local MCQ selection state, mirrors the current question's saved choice.
+  const [localSelectedOption, setLocalSelectedOption] = useState<string | undefined>(
+    question?.type === 'multiple-choice' ? question.selectedOptionId : undefined
+  );
+
+  // Local code text, mirrors the current question's saved code.
   const [localCode, setLocalCode] = useState<string>(
-    question.type === 'coding' ? question.starterCode ?? '' : ''
+    question?.type === 'coding' ? question.starterCode ?? '' : ''
   );
 
   const handleOptionSelect = (id: string) => {
+    if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
     setLocalSelectedOption(id);
+    setSelectedOptions((prev) => ({ ...prev, [fetchedQuestions[currentIndex].id]: id })); // remember this choice
     onAnswerSelect?.(question.number, id);
   };
 
   const handleCodeChange = (code: string) => {
+    if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
     setLocalCode(code);
+    setCodeByQuestion((prev) => ({ ...prev, [fetchedQuestions[currentIndex].id]: code })); // remember this code
     onCodeChange?.(question.number, code);
+  };
+
+  const handleFlag = () => {
+    if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
+    const id = fetchedQuestions[currentIndex].id;
+    setFlaggedIds((prev) => {
+      const next = new Set(prev); // copy so we don't mutate state directly
+      next.has(id) ? next.delete(id) : next.add(id); // toggle this question's flag
+      return next;
+    });
+    onFlag?.(question.number);
+  };
+
+  const handleNavigate = (n: number) => {
+    setCurrentIndex(n - 1); // convert 1-based display number to array index
+    onNavigate?.(n);
+  };
+
+  const handlePrevious = () => {
+    setCurrentIndex((i) => Math.max(i - 1, 0)); // never go below the first question
+    onPrevious?.();
+  };
+
+  const handleNext = () => {
+    setCurrentIndex((i) => Math.min(i + 1, fetchedQuestions.length - 1)); // never go past the last question
+    onNext?.();
   };
 
   const handleOnSubmit = () => {
     onSubmit?.();
     navigateTo('examResult');
   }
+
+  // Show a simple loading state while questions are being fetched.
+  if (isLoading) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center text-[var(--text-inverted)] bg-[var(--bg-sidebar)]">
+        Loading exam questions...
+      </div>
+    );
+  }
+
+  // Show a simple error state if the fetch failed or nothing came back.
+  if (error || !question) {
+    return (
+      <div className="h-screen w-full flex items-center justify-center text-[var(--text-inverted)] bg-[var(--bg-sidebar)]">
+        {error ?? 'No questions found for this exam.'}
+      </div>
+    );
+  }
+
+  const progressCurrent = Object.keys(selectedOptions).length + Object.keys(codeByQuestion).length; // rough answered count
+  const progressTotal = fetchedQuestions.length; // real total question count
+  const timeLeftSeconds = 6126; // timer wiring is a separate not-started feature
 
   const progressPct = Math.round((progressCurrent / progressTotal) * 100);
   const isCoding = question.type === 'coding';
@@ -295,7 +340,7 @@ export function ExamQuestionScreen({
               {question.title}
             </h2>
             <button
-              onClick={() => onFlag?.(question.number)}
+              onClick={handleFlag}
               className={`
                 flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer
                 transition-colors duration-150 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase bg-[var(--warning-primary)] hover:bg-[var(--warning-secondary)]
@@ -389,7 +434,7 @@ export function ExamQuestionScreen({
             <QuestionMapGrid
               items={questionMap}
               currentNumber={question.number}
-              onNavigate={onNavigate}
+              onNavigate={handleNavigate}
             />
           </div>
 
@@ -416,7 +461,7 @@ export function ExamQuestionScreen({
         {/* Previous */}
         <div className="flex items-center gap-3">
           <button
-            onClick={onPrevious}
+            onClick={handlePrevious}
             disabled={question.number <= 1}
             className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
@@ -442,7 +487,7 @@ export function ExamQuestionScreen({
         </div>
         {/* Merged Next/Submit button, Submit only appears on the last question */}
           <button
-            onClick={isLastQuestion ? handleOnSubmit : onNext}
+            onClick={isLastQuestion ? handleOnSubmit : handleNext}
             className={
               isLastQuestion
                 ? 'flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]'
