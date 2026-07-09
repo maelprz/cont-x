@@ -57,17 +57,27 @@ type ExamBuilderRow = {
   questions: QuestionRow[];
 };
 
-// creates a blank draft exam row with the teacher's chosen title, returns its new id
+// shape of the initial settings collected when creating a new exam
+export interface NewExamSettings {
+  title: string;
+  description: string;
+  durationMinutes: number;
+  maxAttempts: number;
+}
+
+// creates a new draft exam with all its initial settings already set, returns its new id
 export async function createDraftExam(
   teacherId: string,
-  title: string,
+  settings: NewExamSettings,
 ): Promise<string> {
   const { data, error } = await supabase
     .from("exams")
     .insert({
       teacher_id: teacherId, // links exam to the teacher who made it
-      title, // teacher-provided title from the create modal
-      description: "",
+      title: settings.title, // teacher-provided title from the create modal
+      description: settings.description, // empty string is fine, it's optional
+      duration_minutes: settings.durationMinutes, // required column, must be set here now
+      max_attempts: settings.maxAttempts,
       status: "draft", // new exams always start as draft
       exam_code: generateExamCode(), // required unique code, students use to join later
     })
@@ -321,7 +331,7 @@ export async function deleteQuestion(questionId: string): Promise<void> {
 
 export async function updateExamStatus(
   examId: string,
-  status: "saved",
+  status: "draft" | "saved",
 ): Promise<void> {
   const { error } = await supabase
     .from("exams")
@@ -337,17 +347,34 @@ export async function updateExamSettings(
     description: string;
     maxAttempts: number;
     durationMinutes: number;
+    verificationCode?: string; // only ever applied pre-publish
   },
 ): Promise<void> {
-  const { error } = await supabase
-    .from("exams")
-    .update({
-      description: settings.description, // empty string is fine, it's optional
-      max_attempts: settings.maxAttempts,
-      duration_minutes: settings.durationMinutes,
-    })
-    .eq("id", examId);
+  const updatePayload: Record<string, unknown> = {
+    description: settings.description, // empty string is fine, it's optional
+    max_attempts: settings.maxAttempts,
+    duration_minutes: settings.durationMinutes,
+  };
 
+  if (settings.verificationCode !== undefined) {
+    // re-checks status right before writing, so a stale-open modal
+    // can't sneak in a code change after the exam gets published elsewhere
+    const { data: examRow, error: statusError } = await supabase
+      .from("exams")
+      .select("status")
+      .eq("id", examId)
+      .single();
+
+    if (statusError || !examRow) throw statusError ?? new Error("Exam not found.");
+
+    if (examRow.status !== "draft" && examRow.status !== "saved") {
+      throw new Error("Session code can only be changed before an exam is published.");
+    }
+
+    updatePayload.verification_code = settings.verificationCode;
+  }
+
+  const { error } = await supabase.from("exams").update(updatePayload).eq("id", examId);
   if (error) throw error;
 }
 
@@ -361,4 +388,32 @@ export async function publishExam(
     .eq("id", examId);
 
   if (error) throw error;
+}
+
+// full settings snapshot for the Edit Settings modal
+export interface ExamSettingsData {
+  description: string;
+  durationMinutes: number;
+  maxAttempts: number;
+  verificationCode: string | null;
+  status: "draft" | "saved" | "active" | "ended";
+}
+
+// fetches one exam's editable settings, including its current status
+export async function getExamSettings(examId: string): Promise<ExamSettingsData> {
+  const { data, error } = await supabase
+    .from("exams")
+    .select("description, duration_minutes, max_attempts, verification_code, status")
+    .eq("id", examId)
+    .single();
+
+  if (error || !data) throw error ?? new Error("Exam not found.");
+
+  return {
+    description: data.description ?? "",
+    durationMinutes: data.duration_minutes,
+    maxAttempts: data.max_attempts,
+    verificationCode: data.verification_code,
+    status: data.status,
+  };
 }

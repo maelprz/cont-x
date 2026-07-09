@@ -62,7 +62,6 @@ export function QuestionListPanel({
   activeId,
   onSelectQuestion,
   onAddQuestion,
-  onReorderQuestions,
 }: {
   questions: BuilderQuestion[];
   activeId: string;
@@ -102,17 +101,6 @@ export function QuestionListPanel({
             onClick={() => onSelectQuestion(q.id)}
           />
         ))}
-      </div>
-
-      {/* Reorder */}
-      <div className="p-3 border-t flex-shrink-0" style={{ borderColor: "var(--color-base-300)" }}>
-        <button
-          onClick={onReorderQuestions}
-          className="w-full py-2.5 rounded-xl border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
-          style={{ borderColor: "var(--color-base-300)", color: "var(--color-base-content)", backgroundColor: "transparent", opacity: 0.7 }}
-        >
-          Reorder Questions
-        </button>
       </div>
     </aside>
   );

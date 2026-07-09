@@ -3,11 +3,12 @@ import { MoreVertical } from "lucide-react";
 import type { ExamStatus } from "../../screens/examLibrary/examLibraryScreen.types";
 
 type ExamCardMenuProps = {
-  status: ExamStatus; // decides which actions are allowed right now
-  isProcessing: boolean; // disables all actions while one is running
+  status: ExamStatus;
+  isProcessing: boolean;
   onPublish: () => void;
   onEnd: () => void;
   onDelete: () => void;
+  onEditSettings: () => void; // opens the Edit Settings modal
 };
 
 export function ExamCardMenu({
@@ -16,6 +17,7 @@ export function ExamCardMenu({
   onPublish,
   onEnd,
   onDelete,
+  onEditSettings,
 }: ExamCardMenuProps) {
   const [isOpen, setIsOpen] = useState(false); // whether the dropdown is showing
 
@@ -59,6 +61,13 @@ export function ExamCardMenu({
             onClick={(event) => event.stopPropagation()}
             className="absolute right-0 top-full mt-1 w-44 rounded-lg border shadow-lg z-50 py-1 bg-[var(--color-base-100)] border-[var(--color-base-300)]"
           >
+            <button
+              onClick={(event) => !isProcessing && runAndClose(event, onEditSettings)}
+              disabled={isProcessing}
+              className="w-full text-left px-3 py-2 text-[13px] cursor-pointer border-none bg-transparent transition-colors duration-150 hover:bg-[var(--color-base-200)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-base-content)]"
+            >
+              Edit Settings
+            </button>
             <button
               onClick={(event) =>
                 canPublish && !isProcessing && runAndClose(event, onPublish)
