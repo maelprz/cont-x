@@ -57,17 +57,27 @@ type ExamBuilderRow = {
   questions: QuestionRow[];
 };
 
-// creates a blank draft exam row with the teacher's chosen title, returns its new id
+// shape of the initial settings collected when creating a new exam
+export interface NewExamSettings {
+  title: string;
+  description: string;
+  durationMinutes: number;
+  maxAttempts: number;
+}
+
+// creates a new draft exam with all its initial settings already set, returns its new id
 export async function createDraftExam(
   teacherId: string,
-  title: string,
+  settings: NewExamSettings,
 ): Promise<string> {
   const { data, error } = await supabase
     .from("exams")
     .insert({
       teacher_id: teacherId, // links exam to the teacher who made it
-      title, // teacher-provided title from the create modal
-      description: "",
+      title: settings.title, // teacher-provided title from the create modal
+      description: settings.description, // empty string is fine, it's optional
+      duration_minutes: settings.durationMinutes, // required column, must be set here now
+      max_attempts: settings.maxAttempts,
       status: "draft", // new exams always start as draft
       exam_code: generateExamCode(), // required unique code, students use to join later
     })

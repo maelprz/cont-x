@@ -11,7 +11,6 @@ import { useExamBuilder } from "../../hooks/useExamBuilder";
 import { useSaveQuestion } from "../../hooks/useSaveQuestion";
 import { useDeleteQuestion } from "../../hooks/useDeleteQuestion";
 import { useUpdateExamStatus } from "../../hooks/useUpdateExamStatus";
-import { useUpdateExamSettings } from "../../hooks/useUpdateExamSetting"; // saves duration + description + max attempts together
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
@@ -52,11 +51,6 @@ export function ExamBuilderScreen({
   );
 
   const [showQuestionBankModal, setShowQuestionBankModal] = useState(false); // true when the "+" modal is open
-  const [showSettings, setShowSettings] = useState(false); // true when the Exam Settings panel is active
-  const [durationHours, setDurationHours] = useState(0); // teacher's typed hours value
-  const [durationMinutesInput, setDurationMinutesInput] = useState(0); // teacher's typed minutes value
-  const [description, setDescription] = useState(""); // teacher's typed exam description, optional
-  const [maxAttempts, setMaxAttempts] = useState(1); // teacher's chosen attempt limit, default 1
 
   // fills the builder with real questions once the exam finishes loading
   // replace the load effect to also capture the saved snapshot:
@@ -69,12 +63,6 @@ export function ExamBuilderScreen({
     setSavedQuestions(examData.questions); // snapshot of what's actually persisted
     setActiveId(firstQuestion?.id ?? "");
     setEditorTab(firstQuestion?.type ?? "multiple-choice");
-
-    // splits the stored total minutes into separate hours/minutes for display
-    setDurationHours(Math.floor(examData.durationMinutes / 60));
-    setDurationMinutesInput(examData.durationMinutes % 60);
-    setDescription(examData.description); // real saved description, or "" if never set
-    setMaxAttempts(examData.maxAttempts); // real saved attempt limit
   }, [examData, externalQuestions]);
 
   const activeQuestion =
@@ -97,7 +85,6 @@ export function ExamBuilderScreen({
       setActiveId(newQuestions[0].id);
       setEditorTab(newQuestions[0].type);
     }
-    setShowSettings(false);
   };
 
   // add the discard handler
@@ -149,7 +136,6 @@ export function ExamBuilderScreen({
     setActiveId(id);
     const q = questions.find((q) => q.id === id);
     if (q) setEditorTab(q.type);
-    setShowSettings(false); // picking a question should leave the settings view
     onSelectQuestion?.(id);
   };
 
@@ -235,19 +221,6 @@ export function ExamBuilderScreen({
     return publish(examData.id, verificationCode);
   };
 
-  const {
-    saveSettings,
-    isSaving: isSavingSettings,
-    error: settingsError,
-  } = useUpdateExamSettings();
-
-  // combines hours + minutes, then saves duration + description + max attempts together
-  const handleSaveSettings = async () => {
-    if (!examData?.id) return; // no exam loaded, nothing to save
-    const totalMinutes = durationHours * 60 + durationMinutesInput; // single source of truth stored in db
-    await saveSettings(examData.id, description, maxAttempts, totalMinutes);
-  };
-
   const isMCQ = editorTab === "multiple-choice";
 
   return (
@@ -282,17 +255,15 @@ export function ExamBuilderScreen({
                   className="text-[24px] font-bold leading-tight mb-0.5"
                   style={{ color: "var(--color-base-content)" }}
                 >
-                  {showSettings ? "Exam Settings" : "Edit Question"}
+                  Edit Question
                 </h1>
                 <p
                   className="text-[13px]"
                   style={{ color: "var(--color-base-content)", opacity: 0.6 }}
                 >
-                  {showSettings
-                    ? "Set the duration, description, and allowed attempts for this exam."
-                    : isMCQ
-                      ? "Configure your multiple choice question and correct options."
-                      : "Configure your coding challenge requirements and test cases."}
+                  {isMCQ
+                    ? "Configure your multiple choice question and correct options."
+                    : "Configure your coding challenge requirements and test cases."}
                 </p>
               </div>
               <div className="flex items-center gap-3 flex-shrink-0">
@@ -350,22 +321,18 @@ export function ExamBuilderScreen({
                       (tab) => (
                         <button
                           key={tab}
-                          onClick={() => {
-                            setShowSettings(false); // leaving settings, back to a question type
-                            handleTabSwitch(tab);
-                          }}
+                          onClick={() => handleTabSwitch(tab)}
                           className="px-4 py-1.5 rounded-md text-[13px] font-mono font-semibold cursor-pointer border-none transition-colors duration-150"
                           style={{
                             backgroundColor:
-                              !showSettings && editorTab === tab
+                              editorTab === tab
                                 ? "var(--color-base-100)"
                                 : "transparent",
                             color:
-                              !showSettings && editorTab === tab
+                              editorTab === tab
                                 ? "var(--color-secondary)"
                                 : "var(--color-base-content)",
-                            opacity:
-                              !showSettings && editorTab === tab ? 1 : 0.6,
+                            opacity: editorTab === tab ? 1 : 0.6,
                           }}
                         >
                           {tab === "multiple-choice"
@@ -374,234 +341,92 @@ export function ExamBuilderScreen({
                         </button>
                       ),
                     )}
-                    <button
-                      onClick={() => setShowSettings(true)} // switches the panel to exam-level settings
-                      className="px-4 py-1.5 rounded-md text-[13px] font-mono font-semibold cursor-pointer border-none transition-colors duration-150"
-                      style={{
-                        backgroundColor: showSettings
-                          ? "var(--color-base-100)"
-                          : "transparent",
-                        color: showSettings
-                          ? "var(--color-secondary)"
-                          : "var(--color-base-content)",
-                        opacity: showSettings ? 1 : 0.6,
-                      }}
-                    >
-                      Exam Settings
-                    </button>
                   </div>
-
-                  {showSettings ? (
-                    <div className="max-w-sm">
-                      {/* Duration */}
-                      <label
-                        className="block text-[13px] font-semibold mb-2"
-                        style={{ color: "var(--color-base-content)" }}
-                      >
-                        Exam Duration
-                      </label>
-                      <p
-                        className="text-[12px] mb-3"
-                        style={{
-                          color: "var(--color-base-content)",
-                          opacity: 0.6,
-                        }}
-                      >
-                        Total time students get for the whole exam, once
-                        started.
-                      </p>
-                      <div className="flex items-end gap-3 mb-6">
-                        <div>
-                          <label
-                            className="block text-[11px] mb-1"
-                            style={{
-                              color: "var(--color-base-content)",
-                              opacity: 0.6,
-                            }}
-                          >
-                            Hours
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            value={durationHours}
-                            onChange={
-                              (e) =>
-                                setDurationHours(
-                                  Math.max(0, Number(e.target.value)),
-                                ) // block negative values
-                            }
-                            className="w-24 px-3 py-2 rounded-lg border text-[13px]"
-                            style={{
-                              borderColor: "var(--color-base-300)",
-                              color: "var(--color-base-content)",
-                              backgroundColor: "var(--color-base-100)",
-                            }}
-                          />
-                        </div>
-                        <div>
-                          <label
-                            className="block text-[11px] mb-1"
-                            style={{
-                              color: "var(--color-base-content)",
-                              opacity: 0.6,
-                            }}
-                          >
-                            Minutes
-                          </label>
-                          <input
-                            type="number"
-                            min={0}
-                            max={59}
-                            value={durationMinutesInput}
-                            onChange={(e) =>
-                              // clamps typed minutes to a valid 0–59 range
-                              setDurationMinutesInput(
-                                Math.min(
-                                  59,
-                                  Math.max(0, Number(e.target.value)),
-                                ),
-                              )
-                            }
-                            className="w-24 px-3 py-2 rounded-lg border text-[13px]"
-                            style={{
-                              borderColor: "var(--color-base-300)",
-                              color: "var(--color-base-content)",
-                              backgroundColor: "var(--color-base-100)",
-                            }}
-                          />
-                        </div>
-                        <span
-                          className="text-[12px] pb-2"
-                          style={{
-                            color: "var(--color-base-content)",
-                            opacity: 0.6,
-                          }}
-                        >
-                          = {durationHours * 60 + durationMinutesInput} minutes
-                          total
-                        </span>
-                      </div>
-
-                      {/* Description */}
-                      <label
-                        className="block text-[13px] font-semibold mb-2"
-                        style={{ color: "var(--color-base-content)" }}
-                      >
-                        Description{" "}
-                        <span style={{ opacity: 0.5, fontWeight: 400 }}>
-                          (optional)
-                        </span>
-                      </label>
-                      <textarea
-                        value={description}
-                        onChange={(e) => setDescription(e.target.value)}
-                        rows={3}
-                        placeholder="Briefly describe what this exam covers"
-                        className="w-full px-3 py-2 rounded-lg border text-[13px] resize-none mb-6"
-                        style={{
-                          borderColor: "var(--color-base-300)",
-                          color: "var(--color-base-content)",
-                          backgroundColor: "var(--color-base-100)",
-                        }}
-                      />
-
-                      {/* Max attempts */}
-                      <label
-                        className="block text-[13px] font-semibold mb-2"
-                        style={{ color: "var(--color-base-content)" }}
-                      >
-                        Allowed Attempts
-                      </label>
-                      <p
-                        className="text-[12px] mb-3"
-                        style={{
-                          color: "var(--color-base-content)",
-                          opacity: 0.6,
-                        }}
-                      >
-                        How many times a student may attempt this exam.
-                      </p>
-                      <input
-                        type="number"
-                        min={1}
-                        value={maxAttempts}
-                        onChange={
-                          (e) =>
-                            setMaxAttempts(Math.max(1, Number(e.target.value))) // never below 1
+                  
+                  {/* Editor panel */}
+                  {activeQuestion &&
+                    (isMCQ ? (
+                      <MCQEditorPanel
+                        question={
+                          activeQuestion.type === "multiple-choice"
+                            ? (activeQuestion as MCQBuilderQuestion)
+                            : ({
+                                ...activeQuestion,
+                                type: "multiple-choice",
+                                options: [],
+                              } as MCQBuilderQuestion)
                         }
-                        className="w-24 px-3 py-2 rounded-lg border text-[13px] mb-4"
-                        style={{
-                          borderColor: "var(--color-base-300)",
-                          color: "var(--color-base-content)",
-                          backgroundColor: "var(--color-base-100)",
-                        }}
+                        onChange={handleQuestionChange}
+                        onPreviewRendered={onPreviewRendered}
                       />
-
-                      {settingsError && (
-                        <p
-                          className="text-[13px] mb-3"
-                          style={{ color: "var(--color-error)" }}
-                        >
-                          {settingsError}
-                        </p>
-                      )}
-
-                      <button
-                        onClick={handleSaveSettings}
-                        disabled={isSavingSettings}
-                        className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-                        style={{
-                          backgroundColor: "var(--color-primary)",
-                          color: "var(--color-primary-content)",
-                          opacity: isSavingSettings ? 0.6 : 1,
-                        }}
-                      >
-                        {isSavingSettings ? "Saving..." : "Save Exam Settings"}
-                      </button>
-                    </div>
-                  ) : (
-                    <>
-                      {/* Editor panel */}
-                      {activeQuestion &&
-                        (isMCQ ? (
-                          <MCQEditorPanel
-                            question={
-                              activeQuestion.type === "multiple-choice"
-                                ? (activeQuestion as MCQBuilderQuestion)
-                                : ({
-                                    ...activeQuestion,
-                                    type: "multiple-choice",
-                                    options: [],
-                                  } as MCQBuilderQuestion)
-                            }
-                            onChange={handleQuestionChange}
-                            onPreviewRendered={onPreviewRendered}
-                          />
-                        ) : (
-                          <CodingEditorPanel
-                            question={
-                              activeQuestion.type === "coding"
-                                ? (activeQuestion as CodingBuilderQuestion)
-                                : ({
-                                    ...activeQuestion,
-                                    type: "coding",
-                                    starterCode: starterCodeFor("cProgram"),
-                                    filename: "main.py",
-                                    testCases: [],
-                                    programType: "cProgram",
-                                    mainCode: mainCodeFor("cProgram"),
-                                    deductionPerAttempt: 0,
-                                  } as CodingBuilderQuestion)
-                            }
-                            onChange={handleQuestionChange}
-                            onPreviewRendered={onPreviewRendered}
-                          />
-                        ))}
-                    </>
-                  )}
+                    ) : (
+                      <CodingEditorPanel
+                        question={
+                          activeQuestion.type === "coding"
+                            ? (activeQuestion as CodingBuilderQuestion)
+                            : ({
+                                ...activeQuestion,
+                                type: "coding",
+                                starterCode: starterCodeFor("cProgram"),
+                                filename: "main.py",
+                                testCases: [],
+                                programType: "cProgram",
+                                mainCode: mainCodeFor("cProgram"),
+                                deductionPerAttempt: 0,
+                              } as CodingBuilderQuestion)
+                        }
+                        onChange={handleQuestionChange}
+                        onPreviewRendered={onPreviewRendered}
+                      />
+                    ))}
                 </>
               )}
+              
+              {/* Bottom action row */}
+              <div
+                className="flex items-center justify-between mt-8 pt-5 border-t"
+                style={{ borderColor: "var(--color-base-300)" }}
+              >
+                <button
+                  onClick={() =>
+                    handleDeleteQuestion(activeQuestion?.id ?? "")
+                  }
+                  disabled={isDeleting}
+                  className="flex items-center gap-1.5 text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
+                  style={{
+                    color: "var(--color-error)",
+                    opacity: isDeleting ? 0.6 : 1,
+                  }}
+                >
+                  <Trash2 size={14} />
+                  {isDeleting ? "Deleting..." : "Delete Question"}
+                </button>
+                <div className="flex items-center gap-3">
+                  <button
+                    onClick={handleDiscard}
+                    className="px-5 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
+                    style={{
+                      borderColor: "var(--color-base-300)",
+                      color: "var(--color-base-content)",
+                      backgroundColor: "transparent",
+                    }}
+                  >
+                    Discard
+                  </button>
+                  <button
+                    onClick={handleSaveAndContinue}
+                    disabled={isSaving}
+                    className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+                    style={{
+                      backgroundColor: "var(--color-primary)",
+                      color: "var(--color-primary-content)",
+                      opacity: isSaving ? 0.6 : 1,
+                    }}
+                  >
+                    {isSaving ? "Saving..." : "Save & Continue"}
+                  </button>
+                </div>
+              </div>
 
               {saveError && (
                 <p
@@ -619,54 +444,6 @@ export function ExamBuilderScreen({
                 >
                   {deleteError}
                 </p>
-              )}
-
-              {/* Bottom action row — hidden while viewing Exam Settings, since there's no question to act on */}
-              {!showSettings && (
-                <div
-                  className="flex items-center justify-between mt-8 pt-5 border-t"
-                  style={{ borderColor: "var(--color-base-300)" }}
-                >
-                  <button
-                    onClick={() =>
-                      handleDeleteQuestion(activeQuestion?.id ?? "")
-                    }
-                    disabled={isDeleting}
-                    className="flex items-center gap-1.5 text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
-                    style={{
-                      color: "var(--color-error)",
-                      opacity: isDeleting ? 0.6 : 1,
-                    }}
-                  >
-                    <Trash2 size={14} />
-                    {isDeleting ? "Deleting..." : "Delete Question"}
-                  </button>
-                  <div className="flex items-center gap-3">
-                    <button
-                      onClick={handleDiscard}
-                      className="px-5 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
-                      style={{
-                        borderColor: "var(--color-base-300)",
-                        color: "var(--color-base-content)",
-                        backgroundColor: "transparent",
-                      }}
-                    >
-                      Discard
-                    </button>
-                    <button
-                      onClick={handleSaveAndContinue}
-                      disabled={isSaving}
-                      className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-                      style={{
-                        backgroundColor: "var(--color-primary)",
-                        color: "var(--color-primary-content)",
-                        opacity: isSaving ? 0.6 : 1,
-                      }}
-                    >
-                      {isSaving ? "Saving..." : "Save & Continue"}
-                    </button>
-                  </div>
-                </div>
               )}
             </div>
           </main>

@@ -14,6 +14,7 @@ import { useCreateExam } from "../../hooks/useCreateExam";
 import { useExamCardActions } from "../../hooks/useExamCardActions";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { CreateExamModal } from "../../components/examLibrary/createExamModal";
+import type { NewExamSettings } from "../../services/examBuilderService";
 
 export function ExamLibraryScreen({
   exams: examsProp,
@@ -58,8 +59,8 @@ export function ExamLibraryScreen({
     navigateTo("examBuilder");
   };
 
-  const handleCreateExam = async (title: string) => {
-    const newExamId = await createExam(title);
+  const handleCreateExam = async (settings: NewExamSettings) => {
+    const newExamId = await createExam(settings);
     if (newExamId) {
       setCurrentExamId(newExamId);
       setIsCreateModalOpen(false);
