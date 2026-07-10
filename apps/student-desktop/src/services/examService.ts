@@ -112,6 +112,56 @@ export async function getExamConfirmationDetails(
   };
 }
 
+// Safely unwraps a nested relation that Supabase may return as
+// either a single object or a one-item array, depending on how
+// it infers the one-to-one relationship.
+function unwrapOne<T>(value: T | T[] | null | undefined): T | undefined {
+  if (Array.isArray(value)) return value[0]; // take the first (and only) item
+  return value ?? undefined; // already a single object, or nothing at all
+}
+
+// Real data needed to run the countdown timer for a session.
+export interface SessionTimerInfo {
+  durationMinutes: number; // exams.duration_minutes, the total time allowed
+  joinedAt: string; // exam_sessions.joined_at, when the student actually started
+}
+
+// Fetches the real duration and start time for one session, so the
+// countdown survives refreshes instead of resetting to a fixed number.
+export async function getSessionTimerInfo(
+  sessionId: string, // which session to pull timing info for
+): Promise<SessionTimerInfo> {
+  const { data, error } = await supabase
+    .from("exam_sessions")
+    .select("joined_at, exams ( duration_minutes )") // pull the parent exam's duration in the same call
+    .eq("id", sessionId)
+    .single(); // exactly one session row expected
+
+  if (error) throw new Error(error.message); // bubble up, let the hook decide the message
+
+  const examRow = unwrapOne(data.exams as any); // handles Supabase's array-or-object quirk, same as before
+
+  return {
+    durationMinutes: examRow?.duration_minutes ?? 0, // fallback to 0 if somehow missing
+    joinedAt: data.joined_at, // real timestamp the session actually started
+  };
+}
+
+// Fetches just the real student-facing exam_code for one exam.
+export async function getExamCode(
+  examId: string, // which exam to pull the code for
+): Promise<string> {
+  const { data, error } = await supabase
+    .from("exams")
+    .select("exam_code")
+    .eq("id", examId)
+    .single(); // exactly one exam row expected
+
+  if (error) throw new Error(error.message); // bubble up, let the caller decide the fallback
+
+  return data.exam_code; // real student-facing code
+}
+
 // Shape of one answer option after being fetched and reshaped for the UI.
 export interface FetchedMCQOption {
   id: string; // mc_options.id, used as the option's key
@@ -172,6 +222,10 @@ export async function getExamQuestions(
   return (data ?? []).map((row: any) => {
     const isCoding = row.type === "coding"; // check which question type this row is
 
+    // Unwrap in case Supabase returned these as one-item arrays.
+    const mcqRow = unwrapOne(row.mcq_question); // real mcq_question row, if any
+    const codingRow = unwrapOne(row.coding_question); // real coding_question row, if any
+
     return {
       id: row.id, // real question id
       orderIndex: row.order_index, // used for numbering and sort order
@@ -180,14 +234,14 @@ export async function getExamQuestions(
       type: row.type, // "mcq" or "coding"
       maxPoints: row.max_points, // kept for later scoring
       options: !isCoding
-        ? row.mcq_question?.mc_options?.map((opt: any) => ({
+        ? (mcqRow?.mc_options ?? []).map((opt: any) => ({
             id: opt.id, // real option id
             text: opt.option_text, // option label text
             isCorrect: opt.is_correct, // used only for local scoring later
           }))
         : undefined, // coding questions have no options
-      starterCode: isCoding ? row.coding_question?.starter_code : undefined, // pre-filled editor code
-      language: isCoding ? mapToMonacoLanguage(row.coding_question?.program_type) : undefined, // Monaco language mode
+      starterCode: isCoding ? codingRow?.starter_code : undefined, // pre-filled editor code
+      language: isCoding ? mapToMonacoLanguage(codingRow?.program_type) : undefined, // Monaco language mode
     };
   });
 }

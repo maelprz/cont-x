@@ -2,6 +2,7 @@ import { useState, useMemo, useEffect } from 'react'; // added useMemo for resha
 import { useRouterLogic } from '../../router/routerLogic';
 import { useExamSessionStore } from '../../stores/useExamSessionStore'; // real examId/sessionId from Confirmation
 import { useExamQuestions } from '../../hooks/useExamQuestions'; // real question fetch
+import { useExamTimer } from '../../hooks/useExamTimer'; // real countdown, based on real start time + duration
 import { CodeEditor } from '../../components/examQuestion/codeEditor';
 
 import type {
@@ -151,7 +152,16 @@ export function ExamQuestionScreen({
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const examId = useExamSessionStore((state) => state.examId); // real exam id from Confirmation
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ''; // real exam title
+  const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
   const { questions: fetchedQuestions, isLoading, error } = useExamQuestions(examId); // real question list
+
+  // When the real countdown hits zero, this fires exactly once and moves
+  // the student to the Result screen, same as a manual submit would.
+  const handleTimeExpired = () => {
+    navigateTo('examResult');
+  };
+
+  const timeLeftSeconds = useExamTimer(sessionId, handleTimeExpired); // real countdown, ticks every second
 
   // Tracks which question is currently shown, by position in the loaded list.
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -232,15 +242,15 @@ export function ExamQuestionScreen({
   };
 
   const handleClearOption = () => {
-  if (!fetchedQuestions[currentIndex]) return; // guard against no question loaded
-  const id = fetchedQuestions[currentIndex].id;
-  setLocalSelectedOption(undefined); // clear the visible selection
-  setSelectedOptions((prev) => {
-    const next = { ...prev }; // copy so we don't mutate state directly
-    delete next[id]; // remove this question's saved choice
-    return next;
-  });
-};
+    if (!fetchedQuestions[currentIndex]) return; // guard against no question loaded
+    const id = fetchedQuestions[currentIndex].id;
+    setLocalSelectedOption(undefined); // clear the visible selection
+    setSelectedOptions((prev) => {
+      const next = { ...prev }; // copy so we don't mutate state directly
+      delete next[id]; // remove this question's saved choice
+      return next;
+    });
+  };
 
   const handleCodeChange = (code: string) => {
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
@@ -300,14 +310,8 @@ export function ExamQuestionScreen({
 
   const progressCurrent = Object.keys(selectedOptions).length + Object.keys(codeByQuestion).length; // rough answered count
   const progressTotal = fetchedQuestions.length; // real total question count
-  const timeLeftSeconds = 6126; // timer wiring is a separate not-started feature
 
   const progressPct = Math.round((progressCurrent / progressTotal) * 100);
-  const currentRawId = fetchedQuestions[currentIndex]?.id; // real db id of the question on screen
-  const isCurrentAnswered = Boolean(
-    currentRawId && (selectedOptions[currentRawId] || codeByQuestion[currentRawId]),
-  ); // true if this question has a saved MCQ choice or code
-  const isCurrentFlagged = Boolean(currentRawId && flaggedIds.has(currentRawId)); // true if this question is flagged
   const isCoding = question.type === 'coding';
   const isLastQuestion = question.number >= question.totalQuestions;
   const codingQ  = isCoding ? (question as CodingQuestion) : null;
@@ -346,7 +350,7 @@ export function ExamQuestionScreen({
             </div>
           </div>
 
-          {/* Timer, height capped to fit header row */}
+          {/* Timer, height capped to fit header row. Shows real remaining time, or "--:--:--" while it's still loading. */}
           <div
             className="flex items-center gap-2 px-3 rounded-lg border border-[var(--border-subtle)] flex-shrink-0 h-9"
           >
@@ -355,7 +359,7 @@ export function ExamQuestionScreen({
                 Time Left
               </span>
               <span className="font-mono text-[15px] font-bold text-[var(--text-inverted)] leading-tight tracking-tight">
-                {formatTime(timeLeftSeconds)}
+                {timeLeftSeconds !== null ? formatTime(timeLeftSeconds) : '--:--:--'}
               </span>
             </div>
             <svg width="15" height="15" viewBox="0 0 24 24" fill="none" stroke="#adc6ff" strokeWidth="1.5">
@@ -477,23 +481,15 @@ export function ExamQuestionScreen({
             />
           </div>
 
-          {/* Legend, now reflects the current question's real answered/flagged state */}
+          {/* Legend */}
           <div className="px-4 pb-4 flex flex-col gap-2 border-t border-[var(--border-primary)] pt-3">
             <div className="flex items-center gap-2">
-              <span
-                className={`w-3 h-3 rounded-sm ${
-                  isCurrentAnswered
-                    ? 'bg-[var(--bg-card)] border border-[var(--border-primary)]' // filled, question is answered
-                    : 'bg-transparent border border-dashed border-[var(--border-primary)]' // outline only, not answered yet
-                }`}
-              />
+              <span className="w-3 h-3 rounded-sm bg-[var(--bg-card)] border border-[var(--border-primary)]" />
               <span className="font-mono text-[10px] text-[var(--text-inverted-secondary)]">Answered</span>
             </div>
             <div className="flex items-center gap-2">
               <span className="w-3 h-3 rounded-sm bg-transparent border border-dashed border-[var(--border-primary)] relative">
-                {isCurrentFlagged && (
-                  <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[var(--warning-icon)]" />
-                )}
+                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[var(--warning-icon)]" />
               </span>
               <span className="font-mono text-[10px] text-[var(--text-inverted-secondary)]">Flagged</span>
             </div>

@@ -1,17 +1,18 @@
 import { CheckCircle2, Clock, Award, LayoutDashboard } from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
+import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real examTitle/sessionId/examId from the exam just taken
 import type { ExamResultScreenProps, ResultMetric } from "./examResultScreen.types"; // this screen's props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
+import { useEffect, useState } from "react"; // needed to fetch and hold real data
+import { getSessionTimerInfo, getExamCode } from "../../services/examService"; // real timer info + real exam_code
 
 // ---------------------------------------------------------------------------
-// Mock data — replace with real store/IPC values when wiring up
+// Mock data — scoring isn't wired up yet, so these stay as placeholders
+// until a real grading feature exists.
 // ---------------------------------------------------------------------------
-const MOCK_EXAM_TITLE = "Advanced Distributed Systems";
-const MOCK_COURSE_CODE = "CS-402";
-const MOCK_COMPLETED_DATE = "2025.10.24";
-const MOCK_SESSION_ID = "AX-9921";
-const MOCK_FINAL_SCORE = 94;
-const MOCK_VALIDATED_GRADE = "Excellent";
+const MOCK_COURSE_CODE = "CS-402"; // fallback only, used if the real exam_code fetch fails
+const MOCK_FINAL_SCORE = 94; // no grading logic yet, still a placeholder
+const MOCK_VALIDATED_GRADE = "Excellent"; // no grading logic yet, still a placeholder
 
 const MOCK_METRICS: ResultMetric[] = [
   { label: "Time Taken", value: "01:42:15", subtext: "Allocation: 02:00:00 max" },
@@ -46,17 +47,115 @@ function MetricCard({ label, value, subtext, icon }: ResultMetric & { icon: Reac
 // ---------------------------------------------------------------------------
 
 export function ExamResultScreen({
-  examTitle = MOCK_EXAM_TITLE,
-  courseCode = MOCK_COURSE_CODE,
-  completedDate = MOCK_COMPLETED_DATE,
-  sessionId = MOCK_SESSION_ID,
+  examTitle,
+  courseCode,
+  completedDate,
+  sessionId,
   passed = true,
   finalScore = MOCK_FINAL_SCORE,
   validatedGrade = MOCK_VALIDATED_GRADE,
-  metrics = MOCK_METRICS,
+  metrics, // no longer defaults to MOCK_METRICS directly, built below from real data
   onReturnToDashboard,
 }: ExamResultScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+
+  const storeExamTitle = useExamSessionStore((state) => state.examTitle); // real exam title from the session just taken
+  const storeSessionId = useExamSessionStore((state) => state.sessionId); // real session id from the session just taken
+  const storeExamId = useExamSessionStore((state) => state.examId); // real exam id, needed to fetch the real exam_code
+
+  // Holds the real "Time Taken" and "Allocation" values, once fetched.
+  const [timeTakenSeconds, setTimeTakenSeconds] = useState<number | null>(null);
+  const [allocationSeconds, setAllocationSeconds] = useState<number | null>(null);
+  const [realExamCode, setRealExamCode] = useState<string | null>(null); // holds the real student-facing exam_code
+
+  // Fetches the real join time + duration once, and computes how long
+  // the student actually spent, capped at the allotted duration.
+  useEffect(() => {
+    const idToUse = sessionId ?? storeSessionId; // prop override wins, otherwise the real store value
+    if (!idToUse) return; // nothing to fetch without a real session id
+
+    let isMounted = true;
+
+    async function loadTimeTaken() {
+      try {
+        const info = await getSessionTimerInfo(idToUse!); // same real data source as the countdown timer
+        const totalSeconds = info.durationMinutes * 60; // full allotted time, in seconds
+        const joinedAtMs = new Date(info.joinedAt).getTime(); // real start timestamp
+        const elapsedSeconds = Math.max(Math.floor((Date.now() - joinedAtMs) / 1000), 0); // guards against clock drift
+        const cappedElapsed = Math.min(elapsedSeconds, totalSeconds); // never show more than the full duration
+
+        if (isMounted) {
+          setTimeTakenSeconds(cappedElapsed);
+          setAllocationSeconds(totalSeconds);
+        }
+      } catch {
+        // if this fails, the metric card below just falls back to mock text
+      }
+    }
+
+    loadTimeTaken();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [sessionId, storeSessionId]);
+
+  // Fetches the real exam_code once, replacing the placeholder course code.
+  useEffect(() => {
+    const idToUse = storeExamId; // real exam id from the session just taken
+    if (!idToUse) return; // nothing to fetch without a real exam id
+
+    let isMounted = true;
+
+    async function loadExamCode() {
+      try {
+        const code = await getExamCode(idToUse!); // real student-facing code
+        if (isMounted) setRealExamCode(code);
+      } catch {
+        // if this fails, the header just falls back to the mock/prop value
+      }
+    }
+
+    loadExamCode();
+
+    return () => {
+      isMounted = false;
+    };
+  }, [storeExamId]);
+
+  // Formats seconds as HH:MM:SS, matching the existing timer display style.
+  function formatDuration(seconds: number): string {
+    const h = Math.floor(seconds / 3600);
+    const m = Math.floor((seconds % 3600) / 60);
+    const s = seconds % 60;
+    return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  }
+
+  // Builds the real "Time Taken" metric once data has loaded, otherwise
+  // falls back to the mock card so the layout never looks broken mid-fetch.
+  const displayMetrics: ResultMetric[] =
+    metrics ??
+    (timeTakenSeconds !== null && allocationSeconds !== null
+      ? [
+          {
+            label: "Time Taken",
+            value: formatDuration(timeTakenSeconds),
+            subtext: `Allocation: ${formatDuration(allocationSeconds)} max`,
+          },
+          MOCK_METRICS[1], // "Total Score" stays mocked, scoring isn't wired up yet
+        ]
+      : MOCK_METRICS);
+
+  // Prop overrides win, otherwise use the real store value, otherwise fall back to a placeholder.
+  const displayExamTitle = examTitle ?? storeExamTitle ?? "Exam";
+  // Prop overrides win, otherwise use the real session id, otherwise show a placeholder.
+  const displaySessionId = sessionId ?? storeSessionId ?? "—";
+  // Prop overrides win, otherwise use today's real date, since we don't store a submitted_at yet on this screen.
+  const displayCompletedDate =
+    completedDate ??
+    new Date().toLocaleDateString("en-CA"); // e.g. "2026.07.10" style, using ISO-like format
+  // Prop override wins, otherwise the real fetched exam_code, otherwise the mock fallback.
+  const displayCourseCode = courseCode ?? realExamCode ?? MOCK_COURSE_CODE;
 
   // returns to dashboard — calls optional prop callback first, then switches screen
   function handleReturnToDashboard() {
@@ -73,14 +172,14 @@ export function ExamResultScreen({
       <div className="flex items-start justify-between gap-4 px-8 pt-8">
         <div>
           <h1 className="font-[var(--font-headline)] text-[var(--text-primary)] text-2xl mb-2">
-            {examTitle}
+            {displayExamTitle}
           </h1>
           <p className="font-[var(--font-label)] text-xs uppercase tracking-wide text-[var(--text-secondary)]">
-            {courseCode} &middot; Completed on {completedDate} &middot; Session ID: {sessionId}
+            {displayCourseCode} &middot; Completed on {displayCompletedDate} &middot; Session ID: {displaySessionId}
           </p>
         </div>
 
-        {/* pass/fail badge — colored using existing accent tokens */}
+        {/* pass/fail badge — colored using existing accent tokens. Still hardcoded, real grading isn't wired up yet. */}
         <span
           className={`flex items-center gap-1.5 font-[var(--font-label)] text-[11px] uppercase tracking-wide rounded-full px-3 py-1.5 whitespace-nowrap ${
             passed
@@ -120,7 +219,7 @@ export function ExamResultScreen({
 
         {/* ── Metric cards row ── */}
         <section className="flex gap-5 flex-wrap">
-          {metrics.map((metric) => (
+          {displayMetrics.map((metric) => (
             <MetricCard
               key={metric.label}
               {...metric}
