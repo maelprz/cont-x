@@ -26,6 +26,7 @@ import {
   starterCodeFor,
   mainCodeFor,
 } from "../../components/examBuilder/createBlankQuestion";
+import { useToast } from "../../hooks/useToast";
 
 export function ExamBuilderScreen({
   questions: externalQuestions,
@@ -68,6 +69,8 @@ export function ExamBuilderScreen({
 
   const [isSavingAllQuestions, setIsSavingAllQuestions] = useState(false); // Save Draft / Save Exam's bulk persist in flight
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
+
+  const { showToast } = useToast();
 
   // fills the builder with real questions once the exam finishes loading
   useEffect(() => {
@@ -237,14 +240,16 @@ export function ExamBuilderScreen({
   const handleSaveAndContinue = async () => {
     if (!activeQuestion) return; // nothing selected, nothing to save
 
+    const isNewQuestion = pendingBankSaveIds.has(activeQuestion.id);
+
     setIsSavingQuestion(true);
     setBankSaveError(null);
     try {
-      if (pendingBankSaveIds.has(activeQuestion.id) && teacherId) {
-        await saveBankQuestion(teacherId, { ...activeQuestion, id: crypto.randomUUID() }); // separate id, independent reusable copy
+      if (isNewQuestion && teacherId) {
+        await saveBankQuestion(teacherId, { ...activeQuestion, id: crypto.randomUUID() });
         setPendingBankSaveIds((prev) => {
           const next = new Set(prev);
-          next.delete(activeQuestion.id); // bank copy now exists, never write it again
+          next.delete(activeQuestion.id);
           return next;
         });
       }
@@ -254,13 +259,17 @@ export function ExamBuilderScreen({
           ? prev.map((q) => (q.id === activeQuestion.id ? activeQuestion : q))
           : [...prev, activeQuestion],
       );
+      showToast(isNewQuestion ? "Saved to Question Bank." : "Question updated.", "success");
       onSaveAndContinue?.();
     } catch (err) {
-      setBankSaveError(err instanceof Error ? err.message : "Could not save this question to the bank.");
+      const message = err instanceof Error ? err.message : "Could not save this question to the bank.";
+      setBankSaveError(message);
+      showToast(message, "error");
     } finally {
       setIsSavingQuestion(false);
     }
   };
+
 
   // bulk-persists every current question into the exam — the ONLY place that writes to
   // the exam's questions table. Also catches any bank writes that were never confirmed individually.
@@ -296,19 +305,35 @@ export function ExamBuilderScreen({
   // quick save — persists all question edits, marks the exam as draft, returns to the library
   const handleSaveDraft = async () => {
     const questionsOk = await persistAllQuestions();
-    if (!questionsOk || !examData?.id) return;
+    if (!questionsOk || !examData?.id) {
+      showToast(saveAllError ?? "Could not save draft.", "error");
+      return;
+    }
 
     const didSave = await saveDraft(examData.id);
-    if (didSave) navigateTo("examLibrary");
+    if (didSave) {
+      showToast("Draft saved.", "success");
+      navigateTo("examLibrary");
+    } else {
+      showToast(statusError ?? "Could not save draft.", "error");
+    }
   };
 
   // marks the exam as draft but not yet visible to students
   const handleSaveExam = async (): Promise<boolean> => {
     if (!examData?.id) return false;
     const questionsOk = await persistAllQuestions();
-    if (!questionsOk) return false;
+    if (!questionsOk) {
+      showToast(saveAllError ?? "Could not save exam.", "error");
+      return false;
+    }
     const didSave = await saveExam(examData.id);
-    if (didSave) navigateTo("examLibrary");
+    if (didSave) {
+      showToast("Exam saved.", "success");
+      navigateTo("examLibrary");
+    } else {
+      showToast(statusError ?? "Could not save exam.", "error");
+    }
     return didSave;
   };
 
@@ -550,7 +575,11 @@ export function ExamBuilderScreen({
                       opacity: isSavingQuestion ? 0.6 : 1,
                     }}
                   >
-                    {isSavingQuestion ? "Saving..." : "Save Question"}
+                    {isSavingQuestion
+                      ? "Saving..."
+                      : activeQuestion && pendingBankSaveIds.has(activeQuestion.id)
+                        ? "Save to Question Bank"
+                        : "Save Edits"}
                   </button>
                 </div>
               </div>

@@ -1,15 +1,10 @@
-import { useState, useCallback } from "react";
-import type { ToastState } from "../components/shared/toast";
+import { useToastStore } from "../store/useToastStore";
 
-// Tracks one toast message at a time, for simple save/error feedback.
+// Thin wrapper kept for compatibility — actual state now lives in useToastStore,
+// so a toast survives navigation instead of unmounting with the screen that triggered it.
 export function useToast() {
-  const [toast, setToast] = useState<ToastState | null>(null);
-
-  const showToast = useCallback((message: string, type: "success" | "error" = "success") => {
-    setToast({ message, type }); // replaces any toast currently showing
-  }, []);
-
-  const dismissToast = useCallback(() => setToast(null), []);
-
+  const toast = useToastStore((state) => state.toast);
+  const showToast = useToastStore((state) => state.showToast);
+  const dismissToast = useToastStore((state) => state.dismissToast);
   return { toast, showToast, dismissToast };
 }
