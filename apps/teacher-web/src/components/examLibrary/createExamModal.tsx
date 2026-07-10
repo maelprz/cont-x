@@ -27,7 +27,7 @@ export function CreateExamModal({
   const canSubmit = trimmedTitle.length > 0 && totalMinutes > 0 && !isSubmitting; // blocks blank title or zero duration
 
   const handleSubmit = () => {
-    if (!canSubmit) return; // guard against invalid submit
+    if (!canSubmit) return;
     onSubmit({
       title: trimmedTitle,
       description: description.trim(),
@@ -46,7 +46,7 @@ export function CreateExamModal({
       {/* modal card itself, stops clicks from closing it */}
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[460px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]"
+        className="w-[440px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)] max-h-[85vh] overflow-y-auto"
       >
         <h2 className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">
           Name Your Assessment

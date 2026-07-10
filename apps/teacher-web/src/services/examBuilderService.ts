@@ -73,13 +73,13 @@ export async function createDraftExam(
   const { data, error } = await supabase
     .from("exams")
     .insert({
-      teacher_id: teacherId, // links exam to the teacher who made it
-      title: settings.title, // teacher-provided title from the create modal
-      description: settings.description, // empty string is fine, it's optional
-      duration_minutes: settings.durationMinutes, // required column, must be set here now
+      teacher_id: teacherId,
+      title: settings.title,
+      description: settings.description,
+      duration_minutes: settings.durationMinutes,
       max_attempts: settings.maxAttempts,
-      status: "draft", // new exams always start as draft
-      exam_code: generateExamCode(), // required unique code, students use to join later
+      status: "draft",
+      exam_code: generateExamCode(),
     })
     .select("id")
     .single();
@@ -347,18 +347,21 @@ export async function updateExamSettings(
     description: string;
     maxAttempts: number;
     durationMinutes: number;
-    verificationCode?: string; // only ever applied pre-publish
+    verificationCode?: string;
+    startsAt?: string | null;
+    endsAt?: string | null;
   },
 ): Promise<void> {
   const updatePayload: Record<string, unknown> = {
-    description: settings.description, // empty string is fine, it's optional
+    description: settings.description,
     max_attempts: settings.maxAttempts,
     duration_minutes: settings.durationMinutes,
   };
 
+  if (settings.startsAt !== undefined) updatePayload.starts_at = settings.startsAt;
+  if (settings.endsAt !== undefined) updatePayload.ends_at = settings.endsAt;
+
   if (settings.verificationCode !== undefined) {
-    // re-checks status right before writing, so a stale-open modal
-    // can't sneak in a code change after the exam gets published elsewhere
     const { data: examRow, error: statusError } = await supabase
       .from("exams")
       .select("status")
@@ -385,13 +388,15 @@ export interface ExamSettingsData {
   maxAttempts: number;
   verificationCode: string | null;
   status: "draft" | "saved" | "active" | "ended";
+  startsAt: string | null;
+  endsAt: string | null;
 }
 
 // fetches one exam's editable settings, including its current status
 export async function getExamSettings(examId: string): Promise<ExamSettingsData> {
   const { data, error } = await supabase
     .from("exams")
-    .select("description, duration_minutes, max_attempts, verification_code, status")
+    .select("description, duration_minutes, max_attempts, verification_code, status, starts_at, ends_at")
     .eq("id", examId)
     .single();
 
@@ -403,5 +408,7 @@ export async function getExamSettings(examId: string): Promise<ExamSettingsData>
     maxAttempts: data.max_attempts,
     verificationCode: data.verification_code,
     status: data.status,
+    startsAt: data.starts_at,
+    endsAt: data.ends_at,
   };
 }

@@ -13,6 +13,8 @@ export function useUpdateExamSettingsForm() {
       maxAttempts: number;
       durationMinutes: number;
       verificationCode?: string;
+      startsAt: string | null;
+      endsAt: string | null;
     },
   ): Promise<boolean> {
     setIsSaving(true);
