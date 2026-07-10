@@ -1,6 +1,7 @@
 import { useState, useEffect } from "react";
 import { useExamSettings } from "../../hooks/useExamSettings";
 import { useUpdateExamSettingsForm } from "../../hooks/useUpdateExamSettingsForm";
+import { isoToLocalInputValue, localInputValueToIso } from "../../lib/scheduleDateTime";
 
 export function EditSettingsModal({
   isOpen,
@@ -19,6 +20,9 @@ export function EditSettingsModal({
   const [description, setDescription] = useState("");
   const [durationHours, setDurationHours] = useState(0);
   const [durationMinutesInput, setDurationMinutesInput] = useState(0);
+  const [isScheduled, setIsScheduled] = useState(false);
+  const [startsAtInput, setStartsAtInput] = useState("");
+  const [endsAtInput, setEndsAtInput] = useState("");
   const [maxAttempts, setMaxAttempts] = useState(1);
   const [verificationCode, setVerificationCode] = useState("");
 
@@ -34,7 +38,10 @@ export function EditSettingsModal({
     setDurationMinutesInput(settings.durationMinutes % 60);
     setMaxAttempts(settings.maxAttempts);
     setVerificationCode(settings.verificationCode ?? "");
-    setShuffleQuestions(false); // always resets — this value is never persisted
+    setShuffleQuestions(false);
+    setIsScheduled(settings.startsAt !== null || settings.endsAt !== null);
+    setStartsAtInput(isoToLocalInputValue(settings.startsAt));
+    setEndsAtInput(isoToLocalInputValue(settings.endsAt));
   }, [settings]);
 
   if (!isOpen) return null; // render nothing when closed
@@ -51,9 +58,9 @@ export function EditSettingsModal({
       description: description.trim(),
       maxAttempts,
       durationMinutes: totalMinutes,
-      // only ever included when editing is allowed — omitted entirely otherwise,
-      // so a locked exam's code is never touched by this call
       ...(canEditVerificationCode ? { verificationCode: verificationCode.trim() } : {}),
+      startsAt: isScheduled ? localInputValueToIso(startsAtInput) : null,
+      endsAt: isScheduled ? localInputValueToIso(endsAtInput) : null,
     });
 
     if (didSave) {
@@ -123,6 +130,44 @@ export function EditSettingsModal({
               </div>
             </div>
 
+            <label className="flex items-center gap-2 mb-3 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={isScheduled}
+                onChange={(e) => setIsScheduled(e.target.checked)}
+              />
+              <span className="text-[13px] font-medium text-[var(--color-base-content)]">
+                Schedule this exam automatically
+              </span>
+            </label>
+
+            {isScheduled && (
+              <div className="flex flex-col gap-3 mb-4 pl-1">
+                <div>
+                  <label className="block text-[11px] mb-1 text-[var(--color-base-content)] opacity-60">
+                    Auto-publish at
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={startsAtInput}
+                    onChange={(e) => setStartsAtInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border text-[13px] bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
+                  />
+                </div>
+                <div>
+                  <label className="block text-[11px] mb-1 text-[var(--color-base-content)] opacity-60">
+                    Auto-end at
+                  </label>
+                  <input
+                    type="datetime-local"
+                    value={endsAtInput}
+                    onChange={(e) => setEndsAtInput(e.target.value)}
+                    className="w-full px-3 py-2 rounded-lg border text-[13px] bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
+                  />
+                </div>
+              </div>
+            )}
+            
             <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
               Allowed Attempts
             </label>
