@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import { Trash2 } from "lucide-react";
 import type {
   ExamBuilderScreenProps,
@@ -7,6 +7,7 @@ import type {
   CodingBuilderQuestion,
   QuestionType,
 } from "./examBuilderScreen.types";
+import type { ScreenName } from "../../router/route";
 import { useExamBuilder } from "../../hooks/useExamBuilder";
 import { useDeleteQuestion } from "../../hooks/useDeleteQuestion";
 import { useUpdateExamStatus } from "../../hooks/useUpdateExamStatus";
@@ -70,6 +71,13 @@ export function ExamBuilderScreen({
   const [isSavingAllQuestions, setIsSavingAllQuestions] = useState(false); // Save Draft / Save Exam's bulk persist in flight
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
 
+  const [pendingLeaveScreen, setPendingLeaveScreen] = useState<ScreenName | null>(null); // where the user tried to go, while we ask them to confirm
+  const setNavigationGuard = useRouterLogic((state) => state.setNavigationGuard);
+  const forceNavigateTo = useRouterLogic((state) => state.forceNavigateTo);
+
+  // true whenever the in-memory question list differs from what's actually persisted
+  const hasUnsavedChanges = JSON.stringify(questions) !== JSON.stringify(savedQuestions);
+  
   const { showToast } = useToast();
 
   // fills the builder with real questions once the exam finishes loading
@@ -84,11 +92,56 @@ export function ExamBuilderScreen({
     setEditorTab(firstQuestion?.type ?? "multiple-choice");
   }, [examData, externalQuestions]);
 
+  // guard against leaving the screen with unsaved changes, both via in-app navigation and browser refresh/close
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      setNavigationGuard(null); // nothing to protect, let navigation happen freely
+      return;
+    }
+
+    setNavigationGuard((nextScreen) => setPendingLeaveScreen(nextScreen)); // intercept, ask first
+
+    return () => setNavigationGuard(null); // always clear on unmount or before the next effect run
+  }, [hasUnsavedChanges, setNavigationGuard]);
+
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      e.preventDefault();
+      e.returnValue = ""; // required for the browser's native confirm dialog to appear
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
+
   const activeQuestion =
     questions.find((q) => q.id === activeId) ?? questions[0];
   const [editorTab, setEditorTab] = useState<QuestionType>(
     activeQuestion?.type ?? "multiple-choice",
   );
+
+  // teacher chose to save first, then continue to wherever they were headed
+  const handleSaveAndLeave = async () => {
+    const didSave = await handleSaveDraft(); // reuses the existing draft-save path, including its own toast
+    // handleSaveDraft already navigates to examLibrary on success — if they were headed
+    // somewhere else specifically, respect that instead once the save succeeds
+    if (pendingLeaveScreen && pendingLeaveScreen !== "examLibrary") {
+      setNavigationGuard(null);
+      forceNavigateTo(pendingLeaveScreen);
+    }
+    setPendingLeaveScreen(null);
+  };
+
+  // teacher chose to discard changes and leave anyway
+  const handleLeaveWithoutSaving = () => {
+    if (!pendingLeaveScreen) return;
+    setNavigationGuard(null);
+    forceNavigateTo(pendingLeaveScreen);
+    setPendingLeaveScreen(null);
+  };
+
+  // teacher chose to stay on this screen
+  const handleCancelLeave = () => setPendingLeaveScreen(null);
 
   // opens the Question Bank modal instead of creating a blank question directly
   const handleAddQuestion = () => {
@@ -303,19 +356,21 @@ export function ExamBuilderScreen({
   } = useUpdateExamStatus();
 
   // quick save — persists all question edits, marks the exam as draft, returns to the library
-  const handleSaveDraft = async () => {
+  const handleSaveDraft = async (): Promise<boolean> => {
     const questionsOk = await persistAllQuestions();
     if (!questionsOk || !examData?.id) {
       showToast(saveAllError ?? "Could not save draft.", "error");
-      return;
+      return false;
     }
 
     const didSave = await saveDraft(examData.id);
     if (didSave) {
       showToast("Draft saved.", "success");
       navigateTo("examLibrary");
+      return true;
     } else {
       showToast(statusError ?? "Could not save draft.", "error");
+      return false;
     }
   };
 
@@ -338,6 +393,52 @@ export function ExamBuilderScreen({
   };
 
   const isMCQ = editorTab === "multiple-choice";
+
+  function UnsavedChangesPrompt() {
+    if (!pendingLeaveScreen) return null;
+    return (
+      <div
+        onClick={handleCancelLeave}
+        className="fixed inset-0 flex items-center justify-center z-[60]"
+        style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+      >
+        <div
+          onClick={(e) => e.stopPropagation()}
+          className="w-[380px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]"
+        >
+          <h2 className="text-[17px] font-bold mb-1" style={{ color: "var(--color-base-content)" }}>
+            Unsaved Changes
+          </h2>
+          <p className="text-[13px] mb-5 opacity-60" style={{ color: "var(--color-base-content)" }}>
+            You have unsaved changes to this exam. Save before leaving?
+          </p>
+          <div className="flex flex-col gap-2.5">
+            <button
+              onClick={handleSaveAndLeave}
+              className="px-4 py-2.5 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
+            >
+              Save Changes
+            </button>
+            <button
+              onClick={handleLeaveWithoutSaving}
+              className="px-4 py-2.5 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
+              style={{ borderColor: "var(--color-base-300)", color: "var(--color-error)", backgroundColor: "transparent" }}
+            >
+              Leave Without Saving
+            </button>
+            <button
+              onClick={handleCancelLeave}
+              className="px-4 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
+              style={{ color: "var(--color-base-content)", opacity: 0.7 }}
+            >
+              Cancel
+            </button>
+          </div>
+        </div>
+      </div>
+    );
+  }
 
   return (
     <div
@@ -596,6 +697,8 @@ export function ExamBuilderScreen({
         onQuestionsAdded={handleQuestionsAddedFromBank}
         onCreateNewQuestion={handleCreateNewQuestionFromModal}
       />
+      
+      <UnsavedChangesPrompt />
     </div>
   );
 }
