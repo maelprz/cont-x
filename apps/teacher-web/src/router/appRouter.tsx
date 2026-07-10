@@ -11,6 +11,8 @@ import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamLibraryScreen } from "../screens/examLibrary/examLibraryScreen";
 import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 import { QuestionBankScreen } from "../screens/questionBank/questionBankScreen";
+import { Toast } from "../components/shared/toast";
+import { useToastStore } from "../store/useToastStore";
 
 const screenComponents: Record<ScreenName, ComponentType> = {
   login: LoginScreen,
@@ -28,6 +30,9 @@ export function AppRouter() {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const ScreenComponent = screenComponents[currentScreen];
   const { user, isLoading, setUser, setIsLoading } = useAuthStore();
+
+  const toast = useToastStore((state) => state.toast);
+  const dismissToast = useToastStore((state) => state.dismissToast);
 
   useEffect(() => {
     async function checkSession() {
@@ -84,6 +89,11 @@ export function AppRouter() {
       </div>
     );
   }
-
-  return <ScreenComponent />;
+  
+  return (
+    <>
+      <ScreenComponent />
+      <Toast toast={toast} onDismiss={dismissToast} />
+    </>
+  );
 }

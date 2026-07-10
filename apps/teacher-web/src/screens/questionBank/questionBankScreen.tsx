@@ -4,7 +4,6 @@ import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
 import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
-import { Toast } from "../../components/shared/toast";
 import { useToast } from "../../hooks/useToast";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { useSaveBankQuestion } from "../../hooks/useSaveBankQuestion";
@@ -34,7 +33,7 @@ export function QuestionBankScreen() {
   const teacherId = useAuthStore((state) => state.user?.id);
   const { questions, tags, isLoading, error, refetch } = useQuestionBank();
   const { saveQuestion, isSaving, error: saveError } = useSaveBankQuestion();
-  const { toast, showToast, dismissToast } = useToast();
+  const { showToast } = useToast();
 
   const [search, setSearch] = useState(""); // teacher-typed search text
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]); // tags currently filtering the table
@@ -402,7 +401,6 @@ export function QuestionBankScreen() {
         </main>
       </div>
 
-      <Toast toast={toast} onDismiss={dismissToast} />
       <NewQuestionModal
         isOpen={showNewQuestionModal}
         onClose={() => setShowNewQuestionModal(false)}

@@ -114,14 +114,6 @@ export function QuestionBankModal({
         {/* Body */}
         <div className="flex-1 overflow-y-auto px-6 py-4">
           <div className="flex items-center gap-2 mb-4">
-            <button
-              onClick={handleCreateNew}
-              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-              style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
-            >
-              <Plus size={14} />
-              Create New
-            </button>
             <div className="flex items-center gap-2 px-3 py-2 rounded-lg border flex-1 border-[var(--color-base-300)] bg-[var(--color-base-200)]">
               <Search size={13} style={{ opacity: 0.5 }} />
               <input
@@ -133,6 +125,14 @@ export function QuestionBankModal({
                 style={{ color: "var(--color-base-content)" }}
               />
             </div>
+            <button
+              onClick={handleCreateNew}
+              className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+              style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
+            >
+              <Plus size={14} />
+              Create New
+            </button>
           </div>
 
           {/* Type filter — same control as the bank screen */}
