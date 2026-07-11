@@ -4,13 +4,13 @@ import {
   Vault,
   LogOut,
   Shield,
+  FileText,
 } from "lucide-react";
 import type { TeacherSidebarProps } from "./teacherSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic";
 
 // Single shared sidebar for all teacher web screens.
 export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
-
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
   // shared base classes every nav item gets
@@ -72,6 +72,16 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
         >
           <Vault size={16} />
           {<span>Question Bank</span>}
+        </button>
+
+        <button
+          onClick={() => navigateTo("examResults")}
+          className={`${navItemBase} ${
+            activeItem === "examResults" ? navItemActive : navItemInactive
+          }`}
+        >
+          <FileText size={16} />
+          {<span>Exam Results</span>}
         </button>
       </nav>
 
