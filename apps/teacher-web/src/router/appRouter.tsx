@@ -13,6 +13,7 @@ import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 import { QuestionBankScreen } from "../screens/questionBank/questionBankScreen";
 import { Toast } from "../components/shared/toast";
 import { useToastStore } from "../store/useToastStore";
+import { ExamResultsScreen } from "../screens/examResult/examResultsScreen";
 
 const screenComponents: Record<ScreenName, ComponentType> = {
   login: LoginScreen,
@@ -23,6 +24,7 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   examLibrary: ExamLibraryScreen,
   examBuilder: ExamBuilderScreen, // TEMP placeholder until examBuilder screen is built
   questionBank: QuestionBankScreen,
+  examResults: ExamResultsScreen,
 };
 
 export function AppRouter() {
@@ -89,7 +91,7 @@ export function AppRouter() {
       </div>
     );
   }
-  
+
   return (
     <>
       <ScreenComponent />
