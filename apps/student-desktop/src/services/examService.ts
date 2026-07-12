@@ -241,28 +241,44 @@ export async function getExamQuestions(
           }))
         : undefined, // coding questions have no options
       starterCode: isCoding ? codingRow?.starter_code : undefined, // pre-filled editor code
-      language: isCoding ? mapToMonacoLanguage(codingRow?.program_type) : undefined, // Monaco language mode
+      language: isCoding
+        ? mapToMonacoLanguage(codingRow?.program_type)
+        : undefined, // Monaco language mode
     };
   });
 }
 
-// Marks a session as finished, either by manual submit or timeout.
-// Writes a placeholder total_score of 0 since real scoring isn't wired up yet —
-// this only exists so the session passes fetchExamHistory's not-null filter.
+export interface SubmittedAnswer {
+  question_id: string;
+  answer_text: string;
+}
+
+export interface SubmitExamSessionResult {
+  totalScore: number;
+  status: string;
+}
+
 export async function submitExamSession(
   sessionId: string, // which session to close out
   status: "submitted" | "timed_out", // how it ended
-): Promise<void> {
-  const { error } = await supabase
-    .from("exam_sessions")
-    .update({
-      status, // marks the session as finished
-      submitted_at: new Date().toISOString(), // real timestamp of when it ended
-      total_score: 0, // placeholder only, real grading isn't built yet
-    })
-    .eq("id", sessionId);
+  answers: SubmittedAnswer[], // the student's answers to all questions
+): Promise<SubmitExamSessionResult> {
+  const { data, error } = await supabase.rpc("submit_exam_session", {
+    p_session_id: sessionId, // matches the SQL function's first parameter
+    p_status: status, // matches the second parameter
+    p_answers: answers, // matches the third parameter, sent as JSON
+  });
 
-  if (error) throw new Error(error.message); // bubble up so the screen can decide what to do
+  if (error) throw new Error(error.message);
+
+  const result = data?.[0]; // rpc calls return an array, we only expect one row
+
+  if (!result) throw new Error("Submission failed. Please try again.");
+
+  return {
+    totalScore: result.total_score, // real graded score from the database
+    status: result.status, // confirms the session's final status
+  }; // bubble up so the screen can decide what to do
 }
 
 // Everything one Result screen needs for a single session, fetched by id.
@@ -275,6 +291,8 @@ export interface ExamResultDetails {
   submittedAt: string | null; // exam_sessions.submitted_at, null if somehow still open
   totalScore: number; // exam_sessions.total_score — still a placeholder until real grading exists
   maxScore: number; // sum of questions.max_points for this exam
+  totalQuestions: number; // count of every question in this exam, for the "X/Y Correct" metric
+  correctCount: number; //
 }
 
 // Fetches full result data for one specific session, used by the
@@ -305,10 +323,22 @@ export async function getExamResultDetails(
 
   const examRow = unwrapOne(data.exams as any); // handles the same array-or-object quirk as before
 
-  const maxScore = (examRow?.questions ?? []).reduce(
+  const questionList = examRow?.questions ?? []; // every question in this exam
+
+  const maxScore = questionList.reduce(
     (sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0),
     0,
   ); // total possible points across every question in this exam
+
+  // separate, real query: how many of this session's saved answers scored
+  // above zero — coding always scores 0, so only correctly-answered MCQs count
+  const { count: correctCount, error: correctError } = await supabase
+    .from("student_answers")
+    .select("id", { count: "exact", head: true }) // only need the count, not the rows
+    .eq("session_id", sessionId)
+    .gt("score", 0);
+
+  if (correctError) throw new Error(correctError.message); // bubble up, let the screen decide the fallback
 
   return {
     examTitle: examRow?.title ?? "Exam",
@@ -319,5 +349,7 @@ export async function getExamResultDetails(
     submittedAt: data.submitted_at,
     totalScore: data.total_score ?? 0,
     maxScore,
+    totalQuestions: questionList.length, // real count of questions in this exam
+    correctCount: correctCount ?? 0, // default to zero if the count came back null
   };
 }
