@@ -1,5 +1,13 @@
 import { supabase } from "./supabaseClient";
 
+// Safely unwraps a nested relation that Supabase may return as
+// either a single object or a one-item array, depending on how
+// it infers the one-to-one relationship. Same helper used in examService.ts.
+function unwrapOne<T>(value: T | T[] | null | undefined): T | undefined {
+  if (Array.isArray(value)) return value[0]; // take the first (and only) item
+  return value ?? undefined; // already a single object, or nothing at all
+}
+
 // Shape of one row in the Previous Exams table on the dashboard.
 export interface ExamHistoryEntry {
   id: string; // exam_sessions.id — unique key for React list rendering
@@ -42,16 +50,23 @@ export async function fetchExamHistory(): Promise<ExamHistoryEntry[]> {
 
   return data
     .map((session) => {
-      // Supabase returns joined relations as an array even for single rows —
-      // grab the first element since each session belongs to exactly one exam.
-      const examArray = session.exams as unknown as {
-        title: string;
-        exam_code: string;
-        pass_mark: number;
-        questions: { max_points: number }[];
-      }[];
-
-      const exam = examArray[0]; // the single exam this session belongs to
+      // Supabase may return this nested relation as a single object or a
+      // one-item array depending on how it infers the relationship — handle both.
+      const exam = unwrapOne(
+        session.exams as unknown as
+          | {
+              title: string;
+              exam_code: string;
+              pass_mark: number;
+              questions: { max_points: number }[];
+            }
+          | {
+              title: string;
+              exam_code: string;
+              pass_mark: number;
+              questions: { max_points: number }[];
+            }[],
+      );
 
       // Guard — shouldn't happen if RLS and foreign keys are correct,
       // but worth handling cleanly rather than crashing.
@@ -116,14 +131,23 @@ export async function fetchAllExamHistory(): Promise<ExamHistoryEntry[]> {
 
   return data
     .map((session) => {
-      const examArray = session.exams as unknown as {
-        title: string;
-        exam_code: string;
-        pass_mark: number;
-        questions: { max_points: number }[];
-      }[];
+      // Same fix as fetchExamHistory — handles both object and array shapes.
+      const exam = unwrapOne(
+        session.exams as unknown as
+          | {
+              title: string;
+              exam_code: string;
+              pass_mark: number;
+              questions: { max_points: number }[];
+            }
+          | {
+              title: string;
+              exam_code: string;
+              pass_mark: number;
+              questions: { max_points: number }[];
+            }[],
+      );
 
-      const exam = examArray[0];
       if (!exam) return null;
 
       const maxScore = exam.questions.reduce(

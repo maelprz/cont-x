@@ -5,7 +5,7 @@ import { useRouterLogic } from "../../router/routerLogic"; // store controlling 
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 import { useAuthStore } from "../../stores/useAuthStore"; // store controlling the user's auth state
-import { useExamSessionStore } from "../../stores/useExamSessionStore"; // carries exam to Confirmation
+import { useExamSessionStore } from "../../stores/useExamSessionStore"; // carries exam to Confirmation, and which session to view on Result
 import { useExamHistory } from "../../hooks/useExamHistory"; // custom hook for fetching exam history
 import { useVerifyExamCode } from "../../hooks/useVerifyExamCode"; // new hook for exam code lookup
 
@@ -21,6 +21,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
   } = useVerifyExamCode();
 
   const setExam = useExamSessionStore((state) => state.setExam); // saves exam into the shared store
+  const setSessionId = useExamSessionStore((state) => state.setSessionId); // saves which session to view on the Result screen
 
   function handleExamCodeChange(event: ChangeEvent<HTMLInputElement>) {
     setExamCodeInput(event.target.value);
@@ -33,6 +34,12 @@ export function DashboardScreen(_props: DashboardScreenProps) {
       setExam(exam); // hand the found exam off to the Confirmation screen via the store
       navigateTo("examConfirmation"); // only redirect if an exam was actually found
     }
+  }
+
+  // Sends the student to the Result screen for this specific past exam session.
+  function handleViewResult(sessionId: string) {
+    setSessionId(sessionId); // tell the Result screen which session to load
+    navigateTo("examResult");
   }
 
   return (
@@ -121,7 +128,11 @@ export function DashboardScreen(_props: DashboardScreenProps) {
               </thead>
               <tbody>
                 {examHistory.map((entry, index) => (
-                  <tr key={entry.id} className="hover:bg-white/[0.02]">
+                  <tr
+                    key={entry.id}
+                    onClick={() => handleViewResult(entry.id)}
+                    className="hover:bg-white/[0.02] cursor-pointer"
+                  >
                     <td
                       className={`py-4 px-5 text-[var(--text-primary)] text-sm ${
                         index < examHistory.length - 1
