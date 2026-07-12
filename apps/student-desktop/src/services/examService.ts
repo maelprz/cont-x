@@ -265,3 +265,59 @@ export async function submitExamSession(
   if (error) throw new Error(error.message); // bubble up so the screen can decide what to do
 }
 
+// Everything one Result screen needs for a single session, fetched by id.
+export interface ExamResultDetails {
+  examTitle: string; // exams.title
+  examCode: string; // exams.exam_code
+  durationMinutes: number; // exams.duration_minutes, the full allotted time
+  passMark: number; // exams.pass_mark
+  joinedAt: string; // exam_sessions.joined_at
+  submittedAt: string | null; // exam_sessions.submitted_at, null if somehow still open
+  totalScore: number; // exam_sessions.total_score — still a placeholder until real grading exists
+  maxScore: number; // sum of questions.max_points for this exam
+}
+
+// Fetches full result data for one specific session, used by the
+// Result screen whether it's just been taken or opened from history.
+export async function getExamResultDetails(
+  sessionId: string, // which session to load
+): Promise<ExamResultDetails> {
+  const { data, error } = await supabase
+    .from("exam_sessions")
+    .select(
+      `
+      joined_at,
+      submitted_at,
+      total_score,
+      exams (
+        title,
+        exam_code,
+        duration_minutes,
+        pass_mark,
+        questions ( max_points )
+      )
+    `,
+    )
+    .eq("id", sessionId)
+    .single(); // exactly one session row expected
+
+  if (error) throw new Error(error.message); // bubble up, let the screen decide the fallback
+
+  const examRow = unwrapOne(data.exams as any); // handles the same array-or-object quirk as before
+
+  const maxScore = (examRow?.questions ?? []).reduce(
+    (sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0),
+    0,
+  ); // total possible points across every question in this exam
+
+  return {
+    examTitle: examRow?.title ?? "Exam",
+    examCode: examRow?.exam_code ?? "—",
+    durationMinutes: examRow?.duration_minutes ?? 0,
+    passMark: examRow?.pass_mark ?? 0,
+    joinedAt: data.joined_at,
+    submittedAt: data.submitted_at,
+    totalScore: data.total_score ?? 0,
+    maxScore,
+  };
+}

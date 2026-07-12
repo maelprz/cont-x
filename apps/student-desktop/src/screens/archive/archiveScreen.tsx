@@ -3,11 +3,21 @@ import type { ArchiveScreenProps } from "./archiveScreen.types";
 import { AppHeader } from "../../components/layout/appHeader";
 import { useAllExamHistory } from "../../hooks/useAllExamHistory"; // real data hook
 import { ChevronLeft, ChevronRight } from "lucide-react";
+import { useRouterLogic } from "../../router/routerLogic";
+import { useExamSessionStore } from "../../stores/useExamSessionStore";
 
 const ROWS_PER_PAGE = 5; // how many exams to show per page
 
 export function ArchiveScreen(_props: ArchiveScreenProps) {
   const { examHistory, isLoading, error } = useAllExamHistory(); // fetches all exams from Supabase
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const setSessionId = useExamSessionStore((state) => state.setSessionId);
+
+  // Sends the student to the Result screen for this specific past exam session.
+  function handleViewResult(sessionId: string) {
+    setSessionId(sessionId); // tell the Result screen which session to load
+    navigateTo("examResult");
+  }
 
   const [statusFilter, setStatusFilter] = useState<"all" | "passed" | "failed">(
     "all",
@@ -147,7 +157,11 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                   {paginated.map((entry, index) => {
                     const isLastRow = index === paginated.length - 1;
                     return (
-                      <tr key={entry.id} className="hover:bg-white/[0.02]">
+                      <tr
+                        key={entry.id}
+                        onClick={() => handleViewResult(entry.id)}
+                        className="hover:bg-white/[0.02] cursor-pointer"
+                      >
                         {/* exam name + code */}
                         <td
                           className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
