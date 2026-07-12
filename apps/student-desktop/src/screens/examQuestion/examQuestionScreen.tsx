@@ -4,6 +4,7 @@ import { useExamSessionStore } from '../../stores/useExamSessionStore'; // real 
 import { useExamQuestions } from '../../hooks/useExamQuestions'; // real question fetch
 import { useExamTimer } from '../../hooks/useExamTimer'; // real countdown, based on real start time + duration
 import { CodeEditor } from '../../components/examQuestion/codeEditor';
+import { submitExamSession } from '../../services/examService';
 
 import type {
   ExamQuestionScreenProps,
@@ -157,7 +158,14 @@ export function ExamQuestionScreen({
 
   // When the real countdown hits zero, this fires exactly once and moves
   // the student to the Result screen, same as a manual submit would.
-  const handleTimeExpired = () => {
+  const handleTimeExpired = async () => {
+    if (sessionId) {
+      try {
+        await submitExamSession(sessionId, 'timed_out'); // real write, marks this session as timed out
+      } catch (err) {
+        console.error('Failed to mark session as timed out:', err); // don't block navigation on this failing
+      }
+    }
     navigateTo('examResult');
   };
 
@@ -285,10 +293,17 @@ export function ExamQuestionScreen({
     onNext?.();
   };
 
-  const handleOnSubmit = () => {
-    onSubmit?.();
-    navigateTo('examResult');
+  const handleOnSubmit = async () => {
+  if (sessionId) {
+    try {
+      await submitExamSession(sessionId, 'submitted'); // real write, marks this session done
+    } catch (err) {
+      console.error('Failed to submit exam session:', err); // don't block navigation on this failing
+    }
   }
+  onSubmit?.();
+  navigateTo('examResult');
+}
 
   // Show a simple loading state while questions are being fetched.
   if (isLoading) {
