@@ -245,3 +245,23 @@ export async function getExamQuestions(
     };
   });
 }
+
+// Marks a session as finished, either by manual submit or timeout.
+// Writes a placeholder total_score of 0 since real scoring isn't wired up yet —
+// this only exists so the session passes fetchExamHistory's not-null filter.
+export async function submitExamSession(
+  sessionId: string, // which session to close out
+  status: "submitted" | "timed_out", // how it ended
+): Promise<void> {
+  const { error } = await supabase
+    .from("exam_sessions")
+    .update({
+      status, // marks the session as finished
+      submitted_at: new Date().toISOString(), // real timestamp of when it ended
+      total_score: 0, // placeholder only, real grading isn't built yet
+    })
+    .eq("id", sessionId);
+
+  if (error) throw new Error(error.message); // bubble up so the screen can decide what to do
+}
+
