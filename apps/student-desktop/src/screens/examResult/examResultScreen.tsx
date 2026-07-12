@@ -1,23 +1,23 @@
 import { CheckCircle2, Clock, Award, LayoutDashboard } from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real sessionId, set either right after finishing or from clicking a history row
-import type { ExamResultScreenProps, ResultMetric } from "./examResultScreen.types"; // this screen's props contract
+import type {
+  ExamResultScreenProps,
+  ResultMetric,
+} from "./examResultScreen.types"; // this screen's props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
-import { useEffect, useState } from "react"; // needed to fetch and hold real data
-import { getExamResultDetails, type ExamResultDetails } from "../../services/examService"; // single real fetch for everything this screen needs
-
-// ---------------------------------------------------------------------------
-// Mock data — real grading isn't wired up yet, so the score card and
-// pass/fail badge stay as placeholders until a real grading feature exists.
-// ---------------------------------------------------------------------------
-const MOCK_FINAL_SCORE = 94; // no grading logic yet, still a placeholder
-const MOCK_VALIDATED_GRADE = "Excellent"; // no grading logic yet, still a placeholder
+import { useExamResultDetails } from "../../hooks/useExamResultDetails";
 
 // ---------------------------------------------------------------------------
 // Sub-component — small metric card, same role as DetailCard in examConfirmation
 // ---------------------------------------------------------------------------
 
-function MetricCard({ label, value, subtext, icon }: ResultMetric & { icon: React.ReactNode }) {
+function MetricCard({
+  label,
+  value,
+  subtext,
+  icon,
+}: ResultMetric & { icon: React.ReactNode }) {
   return (
     <div className="bg-[var(--bg-app)] border border-[var(--border-subtle)] rounded-xl p-5 flex-1 min-w-[180px]">
       <div className="flex items-center gap-2 mb-3">
@@ -29,9 +29,7 @@ function MetricCard({ label, value, subtext, icon }: ResultMetric & { icon: Reac
       <p className="text-[var(--text-primary)] text-2xl font-semibold mb-1">
         {value}
       </p>
-      <p className="text-xs text-[var(--text-secondary)]">
-        {subtext}
-      </p>
+      <p className="text-xs text-[var(--text-secondary)]">{subtext}</p>
     </div>
   );
 }
@@ -41,7 +39,7 @@ function formatDuration(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
-  return `${String(h).padStart(2, '0')}:${String(m).padStart(2, '0')}:${String(s).padStart(2, '0')}`;
+  return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
 // ---------------------------------------------------------------------------
@@ -54,8 +52,8 @@ export function ExamResultScreen({
   completedDate,
   sessionId,
   passed,
-  finalScore = MOCK_FINAL_SCORE,
-  validatedGrade = MOCK_VALIDATED_GRADE,
+  finalScore,
+  maxScore,
   metrics,
   onReturnToDashboard,
 }: ExamResultScreenProps) {
@@ -64,42 +62,11 @@ export function ExamResultScreen({
   const storeSessionId = useExamSessionStore((state) => state.sessionId); // set either right after finishing, or by clicking a history row
   const idToUse = sessionId ?? storeSessionId; // prop override wins, otherwise the real store value
 
-  const [details, setDetails] = useState<ExamResultDetails | null>(null); // holds everything fetched for this session
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const { details, isLoading, error } = useExamResultDetails(idToUse);
 
   // Fetches every real value this screen needs, in one call, keyed by
   // whichever session id is active — works the same whether the student
-  // just finished the exam or clicked an old row in Archive.
-  useEffect(() => {
-    if (!idToUse) {
-      setIsLoading(false);
-      return;
-    }
-
-    let isMounted = true;
-
-    async function loadDetails() {
-      setIsLoading(true);
-      setError(null);
-      try {
-        const result = await getExamResultDetails(idToUse!);
-        if (isMounted) setDetails(result);
-      } catch (err) {
-        if (isMounted) {
-          setError(err instanceof Error ? err.message : "Could not load exam result.");
-        }
-      } finally {
-        if (isMounted) setIsLoading(false);
-      }
-    }
-
-    loadDetails();
-
-    return () => {
-      isMounted = false;
-    };
-  }, [idToUse]);
+  // just finished the exam or clicked an old row in Archive
 
   // returns to dashboard — calls optional prop callback first, then switches screen
   function handleReturnToDashboard() {
@@ -138,30 +105,34 @@ export function ExamResultScreen({
   const allocationSeconds = details.durationMinutes * 60;
   const rawElapsed = details.submittedAt
     ? Math.floor(
-        (new Date(details.submittedAt).getTime() - new Date(details.joinedAt).getTime()) / 1000,
+        (new Date(details.submittedAt).getTime() -
+          new Date(details.joinedAt).getTime()) /
+          1000,
       )
     : 0;
   const timeTakenSeconds = Math.max(Math.min(rawElapsed, allocationSeconds), 0);
 
-  // Real "Total Score" metric, using the actual stored value (still 0 until real grading exists).
-  const displayMetrics: ResultMetric[] =
-    metrics ?? [
-      {
-        label: "Time Taken",
-        value: formatDuration(timeTakenSeconds),
-        subtext: `Allocation: ${formatDuration(allocationSeconds)} max`,
-      },
-      {
-        label: "Total Score",
-        value: `${details.totalScore}/${details.maxScore} Correct`,
-        subtext: `Total Points: ${details.maxScore}`,
-      },
-    ];
+  const displayMetrics: ResultMetric[] = metrics ?? [
+    {
+      label: "Time Taken",
+      value: formatDuration(timeTakenSeconds),
+      subtext: `Allocation: ${formatDuration(allocationSeconds)} max`,
+    },
+    {
+      label: "Total Score",
+      value: `${details.correctCount}/${details.totalQuestions} Correct`,
+      subtext: `Total Points: ${details.maxScore}`,
+    },
+  ];
 
-  // Pass/fail still not real grading — no formula exists yet to compare
-  // totalScore against passMark meaningfully while totalScore is a placeholder.
-  const displayPassed = passed ?? true;
+  const displayFinalScore = finalScore ?? details.totalScore;
+  const displayMaxScore = maxScore ?? details.maxScore;
 
+  // Real pass/fail: percentage of points earned vs. the exam's pass_mark.
+  const displayPassed =
+    passed ??
+    (details.maxScore > 0 &&
+      (details.totalScore / details.maxScore) * 100 >= details.passMark);
   return (
     // flex flex-col: stacks header, summary heading, and cards vertically
     <div className="flex flex-col h-screen overflow-y-auto bg-[var(--bg-app)] text-[var(--text-primary)]">
@@ -174,11 +145,11 @@ export function ExamResultScreen({
             {displayExamTitle}
           </h1>
           <p className="font-[var(--font-label)] text-xs uppercase tracking-wide text-[var(--text-secondary)]">
-            {displayCourseCode} &middot; Completed on {displayCompletedDate} &middot; Session ID: {displaySessionId}
+            {displayCourseCode} &middot; Completed on {displayCompletedDate}{" "}
+            &middot; Session ID: {displaySessionId}
           </p>
         </div>
 
-        {/* pass/fail badge — colored using existing accent tokens. Still hardcoded, real grading isn't wired up yet. */}
         <span
           className={`flex items-center gap-1.5 font-[var(--font-label)] text-[11px] uppercase tracking-wide rounded-full px-3 py-1.5 whitespace-nowrap ${
             displayPassed
@@ -192,7 +163,6 @@ export function ExamResultScreen({
       </div>
 
       <main className="flex flex-col gap-8 px-8 pb-20 pt-20">
-
         {/* ── Score card ── */}
         <section className="bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-app)] border border-[var(--accent-blue)]/40 shadow-[0_8px_32px_rgba(0,0,0,0.35)] rounded-2xl p-7 flex flex-col gap-5">
           <div className="flex items-center gap-2">
@@ -204,16 +174,12 @@ export function ExamResultScreen({
 
           <div>
             <span className="text-[var(--text-primary)] text-5xl font-bold">
-              {finalScore}
+              {displayFinalScore}
             </span>
             <span className="text-[var(--text-secondary)] text-lg ml-1">
-              /100
+              /{displayMaxScore}
             </span>
           </div>
-
-          <p className="font-[var(--font-label)] text-xs uppercase tracking-wide text-[var(--accent-blue)]">
-            Validated Grade: {validatedGrade}
-          </p>
         </section>
 
         {/* ── Metric cards row ── */}
@@ -223,9 +189,11 @@ export function ExamResultScreen({
               key={metric.label}
               {...metric}
               icon={
-                metric.label === "Time Taken"
-                  ? <Clock size={14} className="text-[var(--text-secondary)]" />
-                  : <Award size={14} className="text-[var(--text-secondary)]" />
+                metric.label === "Time Taken" ? (
+                  <Clock size={14} className="text-[var(--text-secondary)]" />
+                ) : (
+                  <Award size={14} className="text-[var(--text-secondary)]" />
+                )
               }
             />
           ))}
