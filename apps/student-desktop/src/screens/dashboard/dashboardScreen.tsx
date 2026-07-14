@@ -1,6 +1,6 @@
 import { useState } from "react"; // remembers values across re-renders
 import type { ChangeEvent } from "react"; // type of the event fired when the input's text changes
-import { ArrowRight, TrendingUp } from "lucide-react"; // pre-made icon components
+import { ArrowRight } from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
@@ -180,10 +180,16 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                           : ""
                       }`}
                     >
-                      <TrendingUp
-                        size={16}
-                        className="text-[var(--text-primary)]"
-                      />
+                      <button
+                        type="button"
+                        onClick={(e) => {
+                          e.stopPropagation(); // prevent the row's own onClick from firing too
+                          handleViewResult(entry.id);
+                        }}
+                        className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-primary)] text-xs font-normal cursor-pointer hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] transition-colors duration-150"
+                      >
+                        View Results
+                      </button>
                     </td>
                   </tr>
                 ))}
