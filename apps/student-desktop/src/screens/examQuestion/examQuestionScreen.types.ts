@@ -36,6 +36,9 @@ export interface CodingQuestion extends BaseQuestion {
   starterCode?: string;          // pre-filled code in the editor
   filename?: string;             // e.g. 'solution.js'
   language?: string;             // Monaco language mode, e.g. 'c'
+  programType?: 'function' | 'program'; // NEW — needed by the compiler IPC call
+  mainCode?: string;                     // NEW — hidden main for "function" type
+  checkPenaltyPerAttempt?: number;       // NEW — used by Run Code scoring
 }
 
 // Multiple-choice question extras

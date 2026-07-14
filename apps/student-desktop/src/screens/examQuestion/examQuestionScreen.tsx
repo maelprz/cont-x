@@ -3,6 +3,7 @@ import { useRouterLogic } from "../../router/routerLogic";
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real examId/sessionId from Confirmation
 import { useExamQuestions } from "../../hooks/useExamQuestions"; // real question fetch
 import { useExamTimer } from "../../hooks/useExamTimer"; // real countdown, based on real start time + duration
+import { useCodeExecution } from "../../hooks/useCodeExecution"; // NEW — real Run Tests / Run Code wiring
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SubmittedAnswer } from "../../services/examService";
@@ -150,8 +151,6 @@ export function ExamQuestionScreen({
   onFlag,
   onAnswerSelect,
   onCodeChange,
-  onRunTests,
-  onRunCode,
   onPrevious,
   onNext,
   onSubmit,
@@ -180,6 +179,17 @@ export function ExamQuestionScreen({
   };
 
   const timeLeftSeconds = useExamTimer(sessionId, handleTimeExpired); // real countdown, ticks every second
+
+  // NEW — real Run Tests / Run Code state and actions
+  const {
+    isRunning,
+    testsResult,
+    codeResult,
+    runError,
+    handleRunTests: runTests,
+    handleRunCode: runCode,
+    clearResults,
+  } = useCodeExecution();
 
   // Tracks which question is currently shown, by position in the loaded list.
   const [currentIndex, setCurrentIndex] = useState(0);
@@ -227,6 +237,9 @@ export function ExamQuestionScreen({
         type: "coding",
         starterCode: raw.starterCode ?? "",
         language: raw.language ?? "c",
+        programType: raw.programType ?? "program", // NEW
+        mainCode: raw.mainCode ?? undefined, // NEW
+        checkPenaltyPerAttempt: raw.checkPenaltyPerAttempt ?? 0, // NEW
       } as CodingQuestion;
     }
 
@@ -262,6 +275,7 @@ export function ExamQuestionScreen({
     setLocalCode(
       question.type === "coding" ? (question.starterCode ?? "") : "",
     );
+    clearResults(); // NEW — don't show the previous question's Run Tests/Run Code output
   }, [question]);
 
   const handleOptionSelect = (id: string) => {
@@ -293,6 +307,28 @@ export function ExamQuestionScreen({
       [fetchedQuestions[currentIndex].id]: code,
     })); // remember this code
     onCodeChange?.(question.number, code);
+  };
+
+  // NEW — runs only the visible test cases, pure feedback, no writes.
+  const handleRunTests = () => {
+    const raw = fetchedQuestions[currentIndex];
+    if (!raw || raw.type !== "coding") return; // guard, only coding questions can run tests
+    runTests(raw.id, localCode, raw.programType ?? "program", raw.mainCode ?? undefined);
+  };
+
+  // NEW — runs every test case, writes logs, and updates the real running score.
+  const handleRunCode = () => {
+    const raw = fetchedQuestions[currentIndex];
+    if (!raw || raw.type !== "coding" || !sessionId) return; // guard, needs a real session to attribute the answer to
+    runCode(
+      sessionId,
+      raw.id,
+      localCode,
+      raw.programType ?? "program",
+      raw.mainCode ?? undefined,
+      raw.maxPoints,
+      raw.checkPenaltyPerAttempt ?? 0,
+    );
   };
 
   const handleFlag = () => {
@@ -548,8 +584,12 @@ export function ExamQuestionScreen({
               code={localCode}
               language={codingQ.language ?? "c"}
               onChange={handleCodeChange}
-              onRunTests={onRunTests}
-              onRunCode={onRunCode}
+              onRunTests={handleRunTests}
+              onRunCode={handleRunCode}
+              isRunning={isRunning}
+              testsResult={testsResult}
+              codeResult={codeResult}
+              runError={runError}
             />
           </section>
         )}
