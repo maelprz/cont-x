@@ -180,6 +180,9 @@ export interface FetchedQuestion {
   options?: FetchedMCQOption[]; // present only when type is "mcq"
   starterCode?: string | null; // present only when type is "coding"
   language?: string; // coding_question.program_type, passed to Monaco as its language mode
+  programType?: "function" | "program"; // NEW — raw program_type, needed by the compiler IPC call
+  mainCode?: string | null; // NEW — coding_question.main_code, hidden main for "function" type
+  checkPenaltyPerAttempt?: number; // NEW — coding_question.check_penalty_per_attempt, used by Run Code scoring
 }
 
 // Converts the teacher-facing program_type label into a real Monaco
@@ -192,6 +195,13 @@ function mapToMonacoLanguage(programType: string | undefined): string {
     default:
       return "c"; // safe fallback if the value is missing or unrecognized
   }
+}
+
+// NEW — converts the stored program_type into the shape the compiler IPC
+// call expects: "function" means student code + hidden main are combined,
+// "program" means the student wrote their own main() already.
+function mapToProgramType(programType: string | undefined): "function" | "program" {
+  return programType === "cFunction" ? "function" : "program";
 }
 
 // Fetches every question for one exam, in the order the teacher set,
@@ -210,7 +220,7 @@ export async function getExamQuestions(
       type,
       max_points,
       mcq_question ( mc_options ( id, option_text, is_correct ) ),
-      coding_question ( starter_code, program_type )
+      coding_question ( starter_code, program_type, main_code, check_penalty_per_attempt )
     `,
     ) // pull matching child rows in the same call
     .eq("exam_id", examId) // only this exam's questions
@@ -244,6 +254,9 @@ export async function getExamQuestions(
       language: isCoding
         ? mapToMonacoLanguage(codingRow?.program_type)
         : undefined, // Monaco language mode
+      programType: isCoding ? mapToProgramType(codingRow?.program_type) : undefined, // NEW — compiler IPC shape
+      mainCode: isCoding ? codingRow?.main_code : undefined, // NEW — hidden main for "function" type
+      checkPenaltyPerAttempt: isCoding ? codingRow?.check_penalty_per_attempt ?? 0 : undefined, // NEW — Run Code scoring penalty
     };
   });
 }
