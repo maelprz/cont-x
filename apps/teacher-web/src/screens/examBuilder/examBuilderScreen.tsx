@@ -122,10 +122,22 @@ export function ExamBuilderScreen({
 
   // teacher chose to save first, then continue to wherever they were headed
   const handleSaveAndLeave = async () => {
-    if (pendingLeaveScreen && pendingLeaveScreen !== "examLibrary") {
-      setNavigationGuard(null);
-      forceNavigateTo(pendingLeaveScreen);
+    if (!pendingLeaveScreen || !examData?.id) return;
+
+    const questionsOk = await persistAllQuestions();
+    if (!questionsOk) {
+      showToast(saveAllError ?? "Could not save changes.", "error");
+      return;
     }
+
+    const didSave = await saveDraft(examData.id);
+    if (!didSave) {
+      showToast(statusError ?? "Could not save changes.", "error");
+      return;
+    }
+
+    setNavigationGuard(null);
+    forceNavigateTo(pendingLeaveScreen);
     setPendingLeaveScreen(null);
   };
 
@@ -278,6 +290,7 @@ export function ExamBuilderScreen({
             programType: defaultProgramType,
             mainCode: mainCodeFor(defaultProgramType),
             deductionPerAttempt: 0,
+            referenceSolution: "",
           };
 
     setQuestions((prev) =>
@@ -596,6 +609,7 @@ export function ExamBuilderScreen({
                                 programType: "cProgram",
                                 mainCode: mainCodeFor("cProgram"),
                                 deductionPerAttempt: 0,
+                                referenceSolution: "",
                               } as CodingBuilderQuestion)
                         }
                         onChange={handleQuestionChange}
