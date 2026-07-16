@@ -1,11 +1,14 @@
 #include <napi.h>
 #include <windows.h>
-#include <windows.h>
+#include <string>
 
 // the hook handle — kept global so we can unhook it later
 static HHOOK g_hook = NULL;
 
-static Napi::ThreadSafeFunction g_tsfn;
+static void CallJs(Napi::Env env, Napi::Function jsCallback, std::nullptr_t*, std::string* data);
+
+using ViolationTSFN = Napi::TypedThreadSafeFunction<std::nullptr_t, std::string, CallJs>;
+static ViolationTSFN g_tsfn;
 
 
 // list of virtual key codes to block
@@ -43,13 +46,18 @@ static std::string labelFor(DWORD vkCode, bool isAltTab, bool isWinShifS){
   }
 }
 
-static void reportViolation(const std::string& label){
-  if (g_tsfn == nullptr) return;
-  std::string* data = new std::string(label);
-  g_tsfn.NonBlockingCall(data, [](Napi::Env env, Napi::Function jsCallback,  st::string* data) {
-    jsCallback.Call({Napi::String::New(env, *data)});
-    delete data;
-  });
+static void CallJs(Napi::Env env, Napi::Function jsCallback, std::nullptr_t*, std::string* data) {
+  // env/jsCallback can be null during shutdown — guard against that
+  if (env != nullptr && jsCallback != nullptr) {
+    jsCallback.Call({ Napi::String::New(env, *data) });
+  }
+  delete data; // free the heap copy now that JS has read it (or we're shutting down)
+}
+
+static void reportViolation(const std::string& label) {
+  if (g_tsfn == nullptr) return; // nothing to report to if not started
+  std::string* data = new std::string(label); // copy so it survives until JS reads it
+  g_tsfn.NonBlockingCall(data); // queues the call — CallJs (already wired via ViolationTSFN) handles it on the JS thread
 }
 
 // this function runs for every keypress on the entire system
@@ -79,8 +87,18 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
 Napi::Value StartHook(const Napi::CallbackInfo& info) {
   Napi::Env env = info.Env();
   if (g_hook != NULL) {
-    return env.Undefined(); // already hooked — don't double-hook
+    return env.Undefined();
   }
+
+  Napi::Function callback = info[0].As<Napi::Function>();
+  g_tsfn = ViolationTSFN::New(
+    env,
+    callback,
+    "ViolationCallback",  // internal name, for debugging only
+    0,                     // unlimited queue size
+    1                      // only one thread will use this
+  );
+
   g_hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
   if (g_hook == NULL) {
     Napi::Error::New(env, "Failed to install keyboard hook").ThrowAsJavaScriptException();
@@ -88,11 +106,15 @@ Napi::Value StartHook(const Napi::CallbackInfo& info) {
   return env.Undefined();
 }
 
+
 // called from JS: removes the keyboard hook
 Napi::Value StopHook(const Napi::CallbackInfo& info) {
   if (g_hook != NULL) {
-    UnhookWindowsHookEx(g_hook); // releases the hook
+    UnhookWindowsHookEx(g_hook);
     g_hook = NULL;
+  }
+  if (g_tsfn) {
+    g_tsfn.Release();
   }
   return info.Env().Undefined();
 }
