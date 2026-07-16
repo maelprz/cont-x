@@ -20,6 +20,16 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
     const [channel, ...omit] = args;
     return ipcRenderer.invoke(channel, ...omit);
   },
+  onViolation: (
+    callback: (payload: { violationType: string; occurredAt: string }) => void,
+  ) => {
+    const listener = (
+      _event: unknown,
+      payload: { violationType: string; occurredAt: string },
+    ) => callback(payload);
+    ipcRenderer.on("violation-detected", listener);
+    return () => ipcRenderer.off("violation-detected", listener); // cleanup for React
+  },
 
   exitApp: () => ipcRenderer.send("exit-app"),
 });
