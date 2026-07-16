@@ -1,4 +1,4 @@
-import { useState, useEffect, useRef } from "react";
+import { useState, useEffect } from "react";
 import { Trash2 } from "lucide-react";
 import type {
   ExamBuilderScreenProps,
@@ -122,9 +122,6 @@ export function ExamBuilderScreen({
 
   // teacher chose to save first, then continue to wherever they were headed
   const handleSaveAndLeave = async () => {
-    const didSave = await handleSaveDraft(); // reuses the existing draft-save path, including its own toast
-    // handleSaveDraft already navigates to examLibrary on success — if they were headed
-    // somewhere else specifically, respect that instead once the save succeeds
     if (pendingLeaveScreen && pendingLeaveScreen !== "examLibrary") {
       setNavigationGuard(null);
       forceNavigateTo(pendingLeaveScreen);

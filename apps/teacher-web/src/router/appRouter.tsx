@@ -20,9 +20,8 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   userManagement: UserManagementScreen,
   auditLogs: AuditLogsScreen,
   dashboard: DashboardScreen,
-  exams: DashboardScreen, // TEMP placeholder until exams screen is built
   examLibrary: ExamLibraryScreen,
-  examBuilder: ExamBuilderScreen, // TEMP placeholder until examBuilder screen is built
+  examBuilder: ExamBuilderScreen,
   questionBank: QuestionBankScreen,
   examResults: ExamResultsScreen,
 };
