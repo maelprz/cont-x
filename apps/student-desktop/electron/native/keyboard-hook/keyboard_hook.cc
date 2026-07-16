@@ -1,8 +1,12 @@
 #include <napi.h>
 #include <windows.h>
+#include <windows.h>
 
 // the hook handle — kept global so we can unhook it later
 static HHOOK g_hook = NULL;
+
+static Napi::ThreadSafeFunction g_tsfn;
+
 
 // list of virtual key codes to block
 static bool shouldBlock(DWORD vkCode, DWORD flags) {
@@ -21,6 +25,31 @@ static bool shouldBlock(DWORD vkCode, DWORD flags) {
     default:
       return false;
   }
+}
+
+static std::string labelFor(DWORD vkCode, bool isAltTab, bool isWinShifS){
+  if (isAltTab) return "alt_tab";
+  if (isWinShifS) return "win_shift_s";
+
+  switch(vkCode){
+    case VK_LWIN: 
+    case VK_RWIN: return "win_key";
+    case VK_ESCAPE: return "ctrl_esc";
+    case VK_SNAPSHOT: return "print_screen";
+    case 'C': return "ctrl_c";
+    case 'V': return "ctrl_v";
+    case 'X': return "ctrl_x";
+    default: return "unknown";
+  }
+}
+
+static void reportViolation(const std::string& label){
+  if (g_tsfn == nullptr) return;
+  std::string* data = new std::string(label);
+  g_tsfn.NonBlockingCall(data, [](Napi::Env env, Napi::Function jsCallback,  st::string* data) {
+    jsCallback.Call({Napi::String::New(env, *data)});
+    delete data;
+  });
 }
 
 // this function runs for every keypress on the entire system

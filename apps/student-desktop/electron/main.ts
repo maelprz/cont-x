@@ -20,7 +20,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
 // type definition for every function exported by the C++ native module
 // setTaskbarVisible is now included — was missing before
 let keyboardHook: {
-  startHook: () => void;
+  startHook: (onViolation: (label: string) => void) => void;
   stopHook: () => void;
   setTaskManagerDisabled: (disable: boolean) => void;
   setLockWorkstationDisabled: (disable: boolean) => void;
@@ -63,7 +63,12 @@ function cleanupStaleLockdownState() {
 // installs the WH_KEYBOARD_LL hook and applies all OS-level restrictions
 function registerLockdown() {
   try {
-    keyboardHook?.startHook();
+    keyboardHook?.startHook((violationType: string) => {
+      win?.webContents.send("violation-detected", {
+        violationType, // which combo was blocked, e.g. 'alt_tab'
+        occurredAt: new Date().toISOString(), // when main process saw it
+      });
+    });
     keyboardHook?.setTaskManagerDisabled(true);
     keyboardHook?.setLockWorkstationDisabled(true);
     keyboardHook?.setChangePasswordDisabled(true);

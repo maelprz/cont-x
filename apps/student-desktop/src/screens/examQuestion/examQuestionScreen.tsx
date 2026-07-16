@@ -7,6 +7,7 @@ import { useCodeExecution } from "../../hooks/useCodeExecution"; // NEW — real
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SubmittedAnswer } from "../../services/examService";
+import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — logs violations to the database
 
 import type {
   ExamQuestionScreenProps,
@@ -159,6 +160,7 @@ export function ExamQuestionScreen({
   const examId = useExamSessionStore((state) => state.examId); // real exam id from Confirmation
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
+  useViolationLogger(sessionId);
   const {
     questions: fetchedQuestions,
     isLoading,
@@ -313,7 +315,12 @@ export function ExamQuestionScreen({
   const handleRunTests = () => {
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding") return; // guard, only coding questions can run tests
-    runTests(raw.id, localCode, raw.programType ?? "program", raw.mainCode ?? undefined);
+    runTests(
+      raw.id,
+      localCode,
+      raw.programType ?? "program",
+      raw.mainCode ?? undefined,
+    );
   };
 
   // NEW — runs every test case, writes logs, and updates the real running score.
