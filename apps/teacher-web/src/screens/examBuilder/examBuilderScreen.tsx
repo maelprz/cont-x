@@ -1,10 +1,7 @@
 import { useState, useEffect } from "react";
-import { Trash2 } from "lucide-react";
 import type {
   ExamBuilderScreenProps,
   BuilderQuestion,
-  MCQBuilderQuestion,
-  CodingBuilderQuestion,
   QuestionType,
 } from "./examBuilderScreen.types";
 import type { ScreenName } from "../../router/route";
@@ -18,9 +15,9 @@ import { saveQuestion as persistExamQuestion } from "../../services/examBuilderS
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
-import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
-import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
 import { QuestionBankModal } from "../../components/examBuilder/questionBankModal";
+import { UnsavedChangesPrompt } from "../../components/examBuilder/unsavedChangesPrompt";
+import { ExamBuilderEditorPanel } from "../../components/examBuilder/examBuilderEditorPanel";
 import {
   createBlankMCQuestion,
   createBlankCodingQuestion,
@@ -49,18 +46,15 @@ export function ExamBuilderScreen({
   );
   const [activeId, setActiveId] = useState<string>(externalActiveId ?? "");
 
-  // mirrors what's been locally "confirmed" via Save & Continue — used as the Discard baseline
-  // for pre-existing/previously-confirmed questions. Actual exam persistence is separate (see below).
+  // snapshot of the last confirmed save for each question — used to detect unsaved changes
   const [savedQuestions, setSavedQuestions] = useState<BuilderQuestion[]>(
     externalQuestions ?? [],
   );
 
-  // ids of brand-new questions (created via "+ Create New") that still need their one-time
-  // reusable copy written to question_bank — cleared once that write succeeds.
+  // tracks which questions are brand-new and need a bank copy saved before the exam can be saved
   const [pendingBankSaveIds, setPendingBankSaveIds] = useState<Set<string>>(new Set());
 
-  // snapshot of each bank-derived question exactly as it was when added — Discard always
-  // reverts to this, regardless of any edits made afterward.
+  // tracks the original bank version of each question, so we can revert to it if the user discards changes
   const [bankOriginSnapshots, setBankOriginSnapshots] = useState<Map<string, BuilderQuestion>>(new Map());
 
   const [showQuestionBankModal, setShowQuestionBankModal] = useState(false); // true when the "+" modal is open
@@ -122,10 +116,22 @@ export function ExamBuilderScreen({
 
   // teacher chose to save first, then continue to wherever they were headed
   const handleSaveAndLeave = async () => {
-    if (pendingLeaveScreen && pendingLeaveScreen !== "examLibrary") {
-      setNavigationGuard(null);
-      forceNavigateTo(pendingLeaveScreen);
+    if (!pendingLeaveScreen || !examData?.id) return;
+
+    const questionsOk = await persistAllQuestions();
+    if (!questionsOk) {
+      showToast(saveAllError ?? "Could not save changes.", "error");
+      return;
     }
+
+    const didSave = await saveDraft(examData.id);
+    if (!didSave) {
+      showToast(statusError ?? "Could not save changes.", "error");
+      return;
+    }
+
+    setNavigationGuard(null);
+    forceNavigateTo(pendingLeaveScreen);
     setPendingLeaveScreen(null);
   };
 
@@ -173,8 +179,7 @@ export function ExamBuilderScreen({
     }
   };
 
-  // reverts the active question to: its bank original (if bank-derived), its last confirmed
-  // save (if pre-existing/previously confirmed), or a blank template (if brand new, never confirmed).
+  // reverts the active question to its last confirmed version, or a blank if it was never saved
   const handleDiscard = () => {
     if (!activeQuestion) return; // nothing selected, nothing to discard
 
@@ -278,6 +283,7 @@ export function ExamBuilderScreen({
             programType: defaultProgramType,
             mainCode: mainCodeFor(defaultProgramType),
             deductionPerAttempt: 0,
+            referenceSolution: "",
           };
 
     setQuestions((prev) =>
@@ -285,8 +291,7 @@ export function ExamBuilderScreen({
     );
   };
 
-  // saves a brand-new question's reusable bank copy (once), and marks it locally confirmed.
-  // NEVER writes to the exam's questions table — that only happens via Save Draft / Save Exam.
+  // saves the active question to the bank (if new) and updates the savedQuestions snapshot
   const handleSaveAndContinue = async () => {
     if (!activeQuestion) return; // nothing selected, nothing to save
 
@@ -320,9 +325,7 @@ export function ExamBuilderScreen({
     }
   };
 
-
-  // bulk-persists every current question into the exam — the ONLY place that writes to
-  // the exam's questions table. Also catches any bank writes that were never confirmed individually.
+  // saves all questions to the exam (and any new ones to the bank) used by Save Draft and Save Exam
   const persistAllQuestions = async (): Promise<boolean> => {
     if (!examData?.id) return false;
 
@@ -389,54 +392,6 @@ export function ExamBuilderScreen({
     return didSave;
   };
 
-  const isMCQ = editorTab === "multiple-choice";
-
-  function UnsavedChangesPrompt() {
-    if (!pendingLeaveScreen) return null;
-    return (
-      <div
-        onClick={handleCancelLeave}
-        className="fixed inset-0 flex items-center justify-center z-[60]"
-        style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-      >
-        <div
-          onClick={(e) => e.stopPropagation()}
-          className="w-[380px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]"
-        >
-          <h2 className="text-[17px] font-bold mb-1" style={{ color: "var(--color-base-content)" }}>
-            Unsaved Changes
-          </h2>
-          <p className="text-[13px] mb-5 opacity-60" style={{ color: "var(--color-base-content)" }}>
-            You have unsaved changes to this exam. Save before leaving?
-          </p>
-          <div className="flex flex-col gap-2.5">
-            <button
-              onClick={handleSaveAndLeave}
-              className="px-4 py-2.5 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-              style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
-            >
-              Save Changes
-            </button>
-            <button
-              onClick={handleLeaveWithoutSaving}
-              className="px-4 py-2.5 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
-              style={{ borderColor: "var(--color-base-300)", color: "var(--color-error)", backgroundColor: "transparent" }}
-            >
-              Leave Without Saving
-            </button>
-            <button
-              onClick={handleCancelLeave}
-              className="px-4 py-2.5 rounded-lg text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
-              style={{ color: "var(--color-base-content)", opacity: 0.7 }}
-            >
-              Cancel
-            </button>
-          </div>
-        </div>
-      </div>
-    );
-  }
-
   return (
     <div
       className="flex h-screen overflow-hidden"
@@ -457,232 +412,29 @@ export function ExamBuilderScreen({
             onReorderQuestions={onReorderQuestions}
           />
 
-          {/* Right: editor */}
-          <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-            {/* Editor top bar */}
-            <div
-              className="relative flex items-start justify-between px-7 py-4 border-b flex-shrink-0"
-              style={{ borderColor: "var(--color-base-300)" }}
-            >
-              <div>
-                <h1
-                  className="text-[24px] font-bold leading-tight mb-0.5"
-                  style={{ color: "var(--color-base-content)" }}
-                >
-                  Edit Question
-                </h1>
-                <p
-                  className="text-[13px]"
-                  style={{ color: "var(--color-base-content)", opacity: 0.6 }}
-                >
-                  {isMCQ
-                    ? "Configure your multiple choice question and correct options."
-                    : "Configure your coding challenge requirements and test cases."}
-                </p>
-              </div>
-              <div className="flex items-center gap-3 flex-shrink-0">
-                <button
-                  onClick={handleSaveDraft}
-                  disabled={isSavingAllQuestions}
-                  className="px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 disabled:opacity-60"
-                  style={{
-                    borderColor: "var(--color-base-300)",
-                    color: "var(--color-base-content)",
-                    backgroundColor: "var(--color-base-100)",
-                  }}
-                >
-                  {isSavingAllQuestions ? "Saving..." : "Save Draft"}
-                </button>
-                <button
-                  onClick={handleSaveExam}
-                  className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-90 border-none"
-                  style={{
-                    backgroundColor: "var(--color-primary)",
-                    color: "var(--color-primary-content)",
-                  }}
-                >
-                  Save Exam
-                </button>
-              </div>
-              {statusError && (
-                <p
-                  className="absolute top-full right-7 mt-2 text-[13px]"
-                  style={{ color: "var(--color-error)" }}
-                >
-                  {statusError}
-                </p>
-              )}
-            </div>
-
-            {/* Scrollable body */}
-            <div className="flex-1 overflow-y-auto px-7 py-5">
-              {isLoading && (
-                <p
-                  className="text-[13px]"
-                  style={{ color: "var(--color-base-content)", opacity: 0.6 }}
-                >
-                  Loading exam...
-                </p>
-              )}
-              {error && (
-                <p
-                  className="text-[13px]"
-                  style={{ color: "var(--color-error)" }}
-                >
-                  {error}
-                </p>
-              )}
-
-              {!isLoading && !error && (
-                <>
-                  {/* Type toggle */}
-                  <div
-                    className="inline-flex rounded-lg p-0.5 mb-6"
-                    style={{ backgroundColor: "var(--color-base-300)" }}
-                  >
-                    {(["multiple-choice", "coding"] as QuestionType[]).map(
-                      (tab) => (
-                        <button
-                          key={tab}
-                          onClick={() => handleTabSwitch(tab)}
-                          className="px-4 py-1.5 rounded-md text-[13px] font-mono font-semibold cursor-pointer border-none transition-colors duration-150"
-                          style={{
-                            backgroundColor:
-                              editorTab === tab
-                                ? "var(--color-base-100)"
-                                : "transparent",
-                            color:
-                              editorTab === tab
-                                ? "var(--color-secondary)"
-                                : "var(--color-base-content)",
-                            opacity: editorTab === tab ? 1 : 0.6,
-                          }}
-                        >
-                          {tab === "multiple-choice"
-                            ? "Multiple Choice"
-                            : "Coding Question"}
-                        </button>
-                      ),
-                    )}
-                  </div>
-
-                  {/* Editor panel */}
-                  {activeQuestion &&
-                    (isMCQ ? (
-                      <MCQEditorPanel
-                        question={
-                          activeQuestion.type === "multiple-choice"
-                            ? (activeQuestion as MCQBuilderQuestion)
-                            : ({
-                                ...activeQuestion,
-                                type: "multiple-choice",
-                                options: [],
-                              } as MCQBuilderQuestion)
-                        }
-                        onChange={handleQuestionChange}
-                        onPreviewRendered={onPreviewRendered}
-                      />
-                    ) : (
-                      <CodingEditorPanel
-                        question={
-                          activeQuestion.type === "coding"
-                            ? (activeQuestion as CodingBuilderQuestion)
-                            : ({
-                                ...activeQuestion,
-                                type: "coding",
-                                starterCode: starterCodeFor("cProgram"),
-                                filename: "main.py",
-                                testCases: [],
-                                programType: "cProgram",
-                                mainCode: mainCodeFor("cProgram"),
-                                deductionPerAttempt: 0,
-                              } as CodingBuilderQuestion)
-                        }
-                        onChange={handleQuestionChange}
-                        onPreviewRendered={onPreviewRendered}
-                      />
-                    ))}
-                </>
-              )}
-
-              {bankSaveError && (
-                <p
-                  className="text-[13px] mb-2"
-                  style={{ color: "var(--color-error)" }}
-                >
-                  {bankSaveError}
-                </p>
-              )}
-
-              {saveAllError && (
-                <p
-                  className="text-[13px] mb-2"
-                  style={{ color: "var(--color-error)" }}
-                >
-                  {saveAllError}
-                </p>
-              )}
-
-              {deleteError && (
-                <p
-                  className="text-[13px] mb-2"
-                  style={{ color: "var(--color-error)" }}
-                >
-                  {deleteError}
-                </p>
-              )}
-
-              {/* Bottom action row */}
-              <div
-                className="flex items-center justify-between mt-8 pt-5 border-t"
-                style={{ borderColor: "var(--color-base-300)" }}
-              >
-                <button
-                  onClick={() =>
-                    handleDeleteQuestion(activeQuestion?.id ?? "")
-                  }
-                  disabled={isDeleting}
-                  className="flex items-center gap-1.5 text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
-                  style={{
-                    color: "var(--color-error)",
-                    opacity: isDeleting ? 0.6 : 1,
-                  }}
-                >
-                  <Trash2 size={14} />
-                  {isDeleting ? "Deleting..." : "Delete Question"}
-                </button>
-                <div className="flex items-center gap-3">
-                  <button
-                    onClick={handleDiscard}
-                    className="px-5 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
-                    style={{
-                      borderColor: "var(--color-base-300)",
-                      color: "var(--color-base-content)",
-                      backgroundColor: "transparent",
-                    }}
-                  >
-                    Discard
-                  </button>
-                  <button
-                    onClick={handleSaveAndContinue}
-                    disabled={isSavingQuestion}
-                    className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-                    style={{
-                      backgroundColor: "var(--color-primary)",
-                      color: "var(--color-primary-content)",
-                      opacity: isSavingQuestion ? 0.6 : 1,
-                    }}
-                  >
-                    {isSavingQuestion
-                      ? "Saving..."
-                      : activeQuestion && pendingBankSaveIds.has(activeQuestion.id)
-                        ? "Save to Question Bank"
-                        : "Save Edits"}
-                  </button>
-                </div>
-              </div>
-            </div>
-          </main>
+          <ExamBuilderEditorPanel
+            isLoading={isLoading}
+            error={error}
+            activeQuestion={activeQuestion}
+            editorTab={editorTab}
+            isMCQ={editorTab === "multiple-choice"}
+            isSavingAllQuestions={isSavingAllQuestions}
+            statusError={statusError}
+            bankSaveError={bankSaveError}
+            saveAllError={saveAllError}
+            deleteError={deleteError}
+            isDeleting={isDeleting}
+            isSavingQuestion={isSavingQuestion}
+            pendingBankSaveIds={pendingBankSaveIds}
+            onTabSwitch={handleTabSwitch}
+            onQuestionChange={handleQuestionChange}
+            onPreviewRendered={onPreviewRendered}
+            onSaveDraft={handleSaveDraft}
+            onSaveExam={handleSaveExam}
+            onDeleteQuestion={() => handleDeleteQuestion(activeQuestion?.id ?? "")}
+            onDiscard={handleDiscard}
+            onSaveAndContinue={handleSaveAndContinue}
+          />
         </div>
       </div>
 
@@ -695,7 +447,12 @@ export function ExamBuilderScreen({
         onCreateNewQuestion={handleCreateNewQuestionFromModal}
       />
       
-      <UnsavedChangesPrompt />
+      <UnsavedChangesPrompt
+        isOpen={Boolean(pendingLeaveScreen)}
+        onSave={handleSaveAndLeave}
+        onLeaveWithoutSaving={handleLeaveWithoutSaving}
+        onCancel={handleCancelLeave}
+      />
     </div>
   );
 }
