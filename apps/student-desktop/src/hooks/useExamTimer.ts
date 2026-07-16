@@ -10,6 +10,15 @@ export function useExamTimer(
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null); // null while still loading
   const hasExpiredRef = useRef(false); // guards against calling onExpire more than once
 
+  // FIX — always holds the *latest* onExpire, so the interval below never
+  // calls a stale version closed over from the first render (which would
+  // otherwise submit whatever answers existed when the timer first started,
+  // i.e. none, instead of the student's real current answers).
+  const onExpireRef = useRef(onExpire);
+  useEffect(() => {
+    onExpireRef.current = onExpire;
+  }, [onExpire]);
+
   useEffect(() => {
     if (!sessionId) return; // nothing to time yet
 
@@ -35,7 +44,7 @@ export function useExamTimer(
               if (intervalId) clearInterval(intervalId); // stop ticking once we hit zero
               if (!hasExpiredRef.current) {
                 hasExpiredRef.current = true; // only fire the callback once
-                onExpire();
+                onExpireRef.current(); // FIX — always the latest onExpire, never stale
               }
               return 0;
             }
@@ -58,4 +67,3 @@ export function useExamTimer(
 
   return secondsLeft;
 }
-
