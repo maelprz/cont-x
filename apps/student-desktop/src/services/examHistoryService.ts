@@ -20,7 +20,7 @@ export interface ExamHistoryEntry {
   passed: boolean; // derived: totalScore >= passmark
 }
 
-// Fetches the 3 most recently submitted exam sessions for the logged-in student.
+// Fetches the 3 most recently completed exam sessions for the logged-in student.
 // Data chain: exam_sessions → exams → questions (for max_points sum)
 export async function fetchExamHistory(): Promise<ExamHistoryEntry[]> {
   const { data, error } = await supabase
@@ -40,7 +40,7 @@ export async function fetchExamHistory(): Promise<ExamHistoryEntry[]> {
       )
     `,
     )
-    .eq("status", "submitted") // only completed exams
+    .in("status", ["submitted", "timed_out"]) // both count as a completed attempt
     .not("total_score", "is", null) // only sessions that have been scored
     .order("submitted_at", { ascending: false }) // newest first
     .limit(3); // only the latest 3
@@ -102,7 +102,7 @@ export async function fetchExamHistory(): Promise<ExamHistoryEntry[]> {
   // filter(Boolean) typed version — removes any null entries from the guard above
 }
 
-// Fetches ALL submitted exam sessions for the logged-in student.
+// Fetches ALL completed exam sessions for the logged-in student.
 // Same data shape as fetchExamHistory but no .limit(3)
 export async function fetchAllExamHistory(): Promise<ExamHistoryEntry[]> {
   const { data, error } = await supabase
@@ -122,7 +122,7 @@ export async function fetchAllExamHistory(): Promise<ExamHistoryEntry[]> {
       )
     `,
     )
-    .eq("status", "submitted")
+    .in("status", ["submitted", "timed_out"]) // both count as a completed attempt
     .not("total_score", "is", null)
     .order("submitted_at", { ascending: false }); // no .limit() — returns everything
 
