@@ -1,4 +1,3 @@
-import { Plus } from "lucide-react";
 import type {
   DashboardScreenProps,
   ExamSummaryCard,
@@ -8,7 +7,6 @@ import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
-import { ExamBuilderScreen } from "../examBuilder/examBuilderScreen";
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -51,7 +49,7 @@ export function DashboardScreen({}: DashboardScreenProps) {
   const user = useAuthStore((state) => state.user);
   const firstName = user?.fullName?.split(" ")[0] ?? "Teacher";
 
-  const { data, isLoading, error } = useTeacherDashboard(user?.id);
+  const { data, isLoading } = useTeacherDashboard(user?.id);
 
   const summaryCards: ExamSummaryCard[] = [
     {

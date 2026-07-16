@@ -41,6 +41,7 @@ type QuestionBankRow = {
     program_type: CodingProgramType;
     main_code: string | null;
     check_penalty_per_attempt: number;
+    reference_solution: string | null; // teacher's own solution, validation-only
     test_case_bank: TestCaseBankRow[];
   } | null;
   question_bank_tag_links: { question_bank_tags: BankTag }[];
@@ -93,6 +94,7 @@ function mapBankRowToBuilderQuestion(row: QuestionBankRow): BuilderQuestion | nu
       programType: row.coding_bank_question.program_type,
       mainCode: row.coding_bank_question.main_code ?? "",
       deductionPerAttempt: row.coding_bank_question.check_penalty_per_attempt,
+      referenceSolution: row.coding_bank_question.reference_solution ?? "", // load saved reference solution
     };
   }
 
@@ -131,6 +133,7 @@ const BANK_SELECT = `
     program_type,
     main_code,
     check_penalty_per_attempt,
+    reference_solution,
     test_case_bank ( id, input, expected_output, is_hidden )
   ),
   question_bank_tag_links (
@@ -256,6 +259,7 @@ export async function saveBankQuestion(teacherId: string, question: BuilderQuest
       program_type: question.programType,
       main_code: question.mainCode,
       check_penalty_per_attempt: question.deductionPerAttempt,
+      reference_solution: question.referenceSolution,
     });
     if (codingError) throw codingError;
 
