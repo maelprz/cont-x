@@ -37,6 +37,7 @@ export interface CodingBuilderQuestion extends BaseBuilderQuestion {
   programType: CodingProgramType;
   mainCode: string;
   deductionPerAttempt: number;
+  referenceSolution: string;
 }
 
 export type BuilderQuestion = MCQBuilderQuestion | CodingBuilderQuestion;

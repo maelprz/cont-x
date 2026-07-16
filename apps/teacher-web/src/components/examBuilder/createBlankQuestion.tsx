@@ -74,5 +74,6 @@ export function createBlankCodingQuestion(
     programType,
     mainCode: mainCodeFor(programType),
     deductionPerAttempt: 0,
+    referenceSolution: "",
   };
 }
