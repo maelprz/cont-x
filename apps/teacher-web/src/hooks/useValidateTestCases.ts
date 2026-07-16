@@ -42,8 +42,11 @@ export function useValidateTestCases() {
           timeLimitMs: DEFAULT_TIME_LIMIT_MS,
         });
 
-        if (response.compileError) {
-          setOneResult(testCase.id, { status: "error", message: response.compileError });
+        if (response.compileError !== null) {
+          setOneResult(testCase.id, {
+            status: "error",
+            message: response.compileError || "Compilation failed — check that GCC_PATH is set correctly on the compiler-server.",
+          });
         } else if (response.timedOut) {
           setOneResult(testCase.id, { status: "error", message: "Timed out — check for an infinite loop." });
         } else if (response.passed) {

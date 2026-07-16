@@ -41,6 +41,7 @@ type QuestionRow = {
     program_type: CodingProgramType;
     main_code: string | null;
     check_penalty_per_attempt: number;
+    reference_solution: string | null;
     test_cases: TestCaseRow[];
   } | null;
 };
@@ -141,6 +142,7 @@ function mapCodingRow(row: QuestionRow): CodingBuilderQuestion | null {
     programType: row.coding_question.program_type,
     mainCode: row.coding_question.main_code ?? "",
     deductionPerAttempt: row.coding_question.check_penalty_per_attempt,
+    referenceSolution: row.coding_question.reference_solution ?? ""
   };
 }
 
@@ -179,6 +181,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
           program_type,
           main_code,
           check_penalty_per_attempt,
+          reference_solution,
           test_cases ( id, input, expected_output, is_hidden )
         )
       )
@@ -313,6 +316,7 @@ export async function saveQuestion(
         program_type: question.programType,
         main_code: question.mainCode,
         check_penalty_per_attempt: question.deductionPerAttempt,
+        reference_solution: question.referenceSolution,
       });
     if (codingError) throw codingError;
 
