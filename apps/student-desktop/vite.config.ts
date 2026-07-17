@@ -13,6 +13,15 @@ export default defineConfig({
       main: {
         // Shortcut of `build.lib.entry`.
         entry: 'electron/main.ts',
+        // nested vite config, only applies to the main process build
+        vite: {
+          build: {
+            rollupOptions: {
+              // keep these as real require() calls instead of bundling them
+              external: ['win-audio', 'events'],
+            },
+          },
+        },
       },
       preload: {
         // Shortcut of `build.rollupOptions.input`.
