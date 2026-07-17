@@ -180,7 +180,7 @@ export interface FetchedQuestion {
   options?: FetchedMCQOption[]; // present only when type is "mcq"
   starterCode?: string | null; // present only when type is "coding"
   language?: string; // coding_question.program_type, passed to Monaco as its language mode
-  programType?: "function" | "program"; // NEW — raw program_type, needed by the compiler IPC call
+  programType?: "cFunction" | "cProgram"; // NEW — raw program_type, needed by the compiler IPC call
   mainCode?: string | null; // NEW — coding_question.main_code, hidden main for "function" type
   checkPenaltyPerAttempt?: number; // NEW — coding_question.check_penalty_per_attempt, used by Run Code scoring
 }
@@ -254,7 +254,7 @@ export async function getExamQuestions(
       language: isCoding
         ? mapToMonacoLanguage(codingRow?.program_type)
         : undefined, // Monaco language mode
-      programType: isCoding ? mapToProgramType(codingRow?.program_type) : undefined, // NEW — compiler IPC shape
+      programType: isCoding ? codingRow?.program_type : undefined, // CHANGED — pass through directly, no translation needed
       mainCode: isCoding ? codingRow?.main_code : undefined, // NEW — hidden main for "function" type
       checkPenaltyPerAttempt: isCoding ? codingRow?.check_penalty_per_attempt ?? 0 : undefined, // NEW — Run Code scoring penalty
     };

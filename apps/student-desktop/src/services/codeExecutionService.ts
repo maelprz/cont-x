@@ -72,7 +72,7 @@ async function ensureAnswerRow(
 export async function runVisibleTests(
   questionId: string,
   code: string,
-  programType: 'function' | 'program',
+  programType: 'cFunction' | 'cProgram',
   mainCode: string | undefined
 ): Promise<RunOutcome> {
   const { data: testCases, error } = await supabase
@@ -106,7 +106,7 @@ export async function runAllTestsAndScore(
   sessionId: string,
   questionId: string,
   code: string,
-  programType: 'function' | 'program',
+  programType: 'cFunction' | 'cProgram',
   mainCode: string | undefined,
   maxPoints: number,
   checkPenaltyPerAttempt: number

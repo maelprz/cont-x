@@ -14,7 +14,7 @@ interface TestCasePayload {
 // The only difference is which test cases the renderer includes
 interface RunTestCasesPayload {
   code: string;
-  programType: 'function' | 'program';
+  programType: 'cFunction' | 'cProgram'; // CHANGED — matches compiler-server naming now
   mainCode?: string;
   testCases: TestCasePayload[];
 }
@@ -23,10 +23,10 @@ interface RunTestCasesPayload {
 // For function type, student code is combined with the hidden main
 function buildSource(
   code: string,
-  programType: 'function' | 'program',
+  programType: 'cFunction' | 'cProgram',
   mainCode?: string
 ): string {
-  if (programType === 'program') {
+  if (programType === 'cProgram') {
     // Student already wrote their own main function
     return code;
   }
@@ -53,17 +53,21 @@ export function registerCompilerHandlers() {
         testCase.timeLimitMs
       );
 
-      // Exact match comparison, per your grading rule
+      // CHANGED — trim both sides before comparing, matches compiler-server's
+      // rule, so a trailing newline from printf doesn't cause a false FAIL
+      const actualTrimmed = runResult.stdout.trim();
+      const expectedTrimmed = testCase.expectedOutput.trim();
+
       const passed =
         !runResult.timedOut &&
         runResult.exitCode === 0 &&
-        runResult.stdout === testCase.expectedOutput;
+        actualTrimmed === expectedTrimmed; // CHANGED — was exact stdout match
 
       results.push({
         testCaseId: testCase.id,
         passed,
         actualOutput: runResult.stdout,
-        executionTimeMs: null, // add real timing later if needed
+        executionTimeMs: null,
         timedOut: runResult.timedOut,
       });
     }
