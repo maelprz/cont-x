@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { registerCompilerHandlers } from "./ipc/compilerHandlers";
+import { muteSystemAudio, unmuteSystemAudio } from "./native/audioControl"; // audio mute/unmute, sits next to keyboard-hook folder
 import path from "node:path";
 
 const require = createRequire(import.meta.url);
@@ -18,7 +19,6 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   : RENDERER_DIST;
 
 // type definition for every function exported by the C++ native module
-// setTaskbarVisible is now included — was missing before
 let keyboardHook: {
   startHook: (onViolation: (label: string) => void) => void;
   stopHook: () => void;
@@ -26,7 +26,7 @@ let keyboardHook: {
   setLockWorkstationDisabled: (disable: boolean) => void;
   setChangePasswordDisabled: (disable: boolean) => void;
   setFastUserSwitchingDisabled: (disable: boolean) => void;
-  setTaskbarVisible: (visible: boolean) => void; // added — was missing from the type
+  setTaskbarVisible: (visible: boolean) => void;
 } | null = null;
 
 try {
@@ -54,6 +54,7 @@ function cleanupStaleLockdownState() {
     keyboardHook?.setChangePasswordDisabled(false);
     keyboardHook?.setFastUserSwitchingDisabled(false);
     keyboardHook?.setTaskbarVisible(true); // restore taskbar if it was hidden by a crash
+    unmuteSystemAudio(); // restore audio in case last run crashed while muted
     console.log("[lockdown] cleared any leftover state from last run");
   } catch (err) {
     console.error("[lockdown] cleanup failed:", err);
@@ -74,6 +75,7 @@ function registerLockdown() {
     keyboardHook?.setChangePasswordDisabled(true);
     keyboardHook?.setFastUserSwitchingDisabled(true);
     keyboardHook?.setTaskbarVisible(false); // hide taskbar so student can't close app from it
+    muteSystemAudio(); // mute system audio the moment lockdown begins
     console.log("[lockdown] hook registered, taskbar hidden");
   } catch (err) {
     console.error("[lockdown] failed to register hook:", err);
@@ -89,6 +91,7 @@ function unregisterLockdown() {
     keyboardHook?.setChangePasswordDisabled(false);
     keyboardHook?.setFastUserSwitchingDisabled(false);
     keyboardHook?.setTaskbarVisible(true); // always restore taskbar before exit
+    unmuteSystemAudio(); // restore audio when exam ends or app exits normally
     console.log("[lockdown] hook unregistered, taskbar restored");
   } catch (err) {
     console.error("[lockdown] failed to unregister hook:", err);
@@ -142,7 +145,7 @@ function createWindow() {
 // called when the student clicks logout — the only valid exit path
 ipcMain.on("exit-app", () => {
   isExiting = true; // tell the close handler to allow the next close
-  unregisterLockdown(); // restore taskbar, remove hooks, re-enable task manager
+  unregisterLockdown(); // restore taskbar, remove hooks, re-enable task manager, unmute audio
   if (win) {
     win.setAlwaysOnTop(false); // release always-on-top before quitting
   }
@@ -150,7 +153,7 @@ ipcMain.on("exit-app", () => {
 });
 
 // last-resort cleanup if the process exits unexpectedly
-// restores the taskbar even if unregisterLockdown() was never called
+// restores the taskbar and audio even if unregisterLockdown() was never called
 process.on("exit", () => {
   try {
     keyboardHook?.stopHook();
@@ -159,6 +162,7 @@ process.on("exit", () => {
     keyboardHook?.setChangePasswordDisabled(false);
     keyboardHook?.setFastUserSwitchingDisabled(false);
     keyboardHook?.setTaskbarVisible(true); // critical — stuck hidden taskbar is very bad UX
+    unmuteSystemAudio(); // critical — stuck muted audio is very bad UX
   } catch {
     // silently ignore — process is already exiting
   }

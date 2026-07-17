@@ -20,6 +20,7 @@
     "react": "^18.2.0",
     "react-dom": "^18.2.0",
     "tailwindcss": "^4.3.1",
+    "win-audio": "^3.0.5",
     "zustand": "^5.0.14"
   },
   "devDependencies": {
