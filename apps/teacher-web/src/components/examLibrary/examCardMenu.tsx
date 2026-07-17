@@ -9,6 +9,7 @@ type ExamCardMenuProps = {
   onEnd: () => void;
   onDelete: () => void;
   onEditSettings: () => void; // opens the Edit Settings modal
+  onEditExam: () => void; // opens Exam Builder, only shown while active
 };
 
 export function ExamCardMenu({
@@ -18,12 +19,18 @@ export function ExamCardMenu({
   onEnd,
   onDelete,
   onEditSettings,
+  onEditExam,
 }: ExamCardMenuProps) {
   const [isOpen, setIsOpen] = useState(false); // whether the dropdown is showing
 
-  const canPublish = status === "draft" || status === "saved";
-  const canEnd = status === "active";
+  // exams already live can only be ended, everything earlier can only be published
+  const isActive = status === "active";
+  const canPublishOrEnd = status === "draft" || status === "saved" || status === "active";
   const canDelete = status === "draft" || status === "saved"; // never published yet
+
+  // one button does double duty — label and action both depend on status
+  const publishOrEndLabel = isActive ? "End Exam" : "Publish Exam";
+  const publishOrEndAction = isActive ? onEnd : onPublish;
 
   // opens or closes the dropdown without triggering the card's own click
   const handleToggle = (event: React.MouseEvent) => {
@@ -68,24 +75,28 @@ export function ExamCardMenu({
             >
               Edit Settings
             </button>
+
+            {/* only shown while the exam is live, lets a teacher fix mistakes mid-exam */}
+            {isActive && (
+              <button
+                onClick={(event) => !isProcessing && runAndClose(event, onEditExam)}
+                disabled={isProcessing}
+                className="w-full text-left px-3 py-2 text-[13px] cursor-pointer border-none bg-transparent transition-colors duration-150 hover:bg-[var(--color-base-200)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-base-content)]"
+              >
+                Edit Exam
+              </button>
+            )}
+
             <button
               onClick={(event) =>
-                canPublish && !isProcessing && runAndClose(event, onPublish)
+                canPublishOrEnd && !isProcessing && runAndClose(event, publishOrEndAction)
               }
-              disabled={!canPublish || isProcessing}
+              disabled={!canPublishOrEnd || isProcessing}
               className="w-full text-left px-3 py-2 text-[13px] cursor-pointer border-none bg-transparent transition-colors duration-150 hover:bg-[var(--color-base-200)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-base-content)]"
             >
-              Publish Exam
+              {publishOrEndLabel}
             </button>
-            <button
-              onClick={(event) =>
-                canEnd && !isProcessing && runAndClose(event, onEnd)
-              }
-              disabled={!canEnd || isProcessing}
-              className="w-full text-left px-3 py-2 text-[13px] cursor-pointer border-none bg-transparent transition-colors duration-150 hover:bg-[var(--color-base-200)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-base-content)]"
-            >
-              End Exam
-            </button>
+
             <button
               onClick={(event) =>
                 canDelete && !isProcessing && runAndClose(event, onDelete)

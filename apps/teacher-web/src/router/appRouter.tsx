@@ -11,11 +11,13 @@ import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamLibraryScreen } from "../screens/examLibrary/examLibraryScreen";
 import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 import { QuestionBankScreen } from "../screens/questionBank/questionBankScreen";
+import { ExamResultsScreen } from "../screens/examResult/examResultsScreen";
+import { ViolationMonitoringScreen } from "../screens/violationLogs/violationMonitoringScreen";
+
 import { Toast } from "../components/shared/toast";
 import { useToastStore } from "../store/useToastStore";
-import { ExamResultsScreen } from "../screens/examResult/examResultsScreen";
 
-const screenComponents: Record<ScreenName, ComponentType> = {
+const screenComponents: Record<ScreenName, ComponentType<any>> = {
   login: LoginScreen,
   userManagement: UserManagementScreen,
   auditLogs: AuditLogsScreen,
@@ -24,6 +26,7 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   examBuilder: ExamBuilderScreen,
   questionBank: QuestionBankScreen,
   examResults: ExamResultsScreen,
+  violationMonitoring: ViolationMonitoringScreen,
 };
 
 export function AppRouter() {
