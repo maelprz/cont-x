@@ -7,5 +7,6 @@ export type ScreenName =
   | "examLibrary"
   | "examBuilder"
   | "questionBank"
+  | "examResultsList"
   | "examResults"
   | "violationMonitoring";

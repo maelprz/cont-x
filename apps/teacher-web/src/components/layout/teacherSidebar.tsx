@@ -75,9 +75,9 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
         </button>
 
         <button
-          onClick={() => navigateTo("examResults")}
+          onClick={() => navigateTo("examResultsList")}
           className={`${navItemBase} ${
-            activeItem === "examResults" ? navItemActive : navItemInactive
+            activeItem === "examResultsList" ? navItemActive : navItemInactive
           }`}
         >
           <FileText size={16} />

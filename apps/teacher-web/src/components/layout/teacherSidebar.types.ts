@@ -5,6 +5,7 @@ export type TeacherScreenName =
   | "examLibrary"
   | "examBuilder"
   | "questionBank"
+  | "examResultsList"
   | "examResults";
 
 export interface TeacherSidebarProps {
