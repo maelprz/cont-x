@@ -1,6 +1,6 @@
 import { useState } from "react";
 import { Filter, LayoutGrid } from "lucide-react";
-import type { ExamLibraryScreenProps } from "./examLibraryScreen.types";
+import type { ExamCard, ExamLibraryScreenProps } from "./examLibraryScreen.types";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { ExamCardTile } from "../../components/examLibrary/examCardTile";
@@ -17,6 +17,7 @@ import { useCreateExam } from "../../hooks/useCreateExam";
 import { useExamCardActions } from "../../hooks/useExamCardActions";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import type { NewExamSettings } from "../../services/examBuilderService";
+import { getExamCardNavigation } from "../../router/examCardNavigation";
 
 export function ExamLibraryScreen({
   exams: examsProp,
@@ -59,11 +60,6 @@ export function ExamLibraryScreen({
   const [settingsExamId, setSettingsExamId] = useState<string | null>(null); // which exam's settings modal is open
   
   const [publishTarget, setPublishTarget] = useState<{ examId: string; examCode: string } | null>(null); // exam awaiting a session code before it can publish
-
-  const openExamBuilder = (examId: string) => {
-    setCurrentExamId(examId);
-    navigateTo("examBuilder");
-  };
 
   const handleCreateExam = async (settings: NewExamSettings) => {
     const newExamId = await createExam(settings);
@@ -129,6 +125,12 @@ export function ExamLibraryScreen({
       e.title.toLowerCase().includes(search.toLowerCase()) ||
       e.code.toLowerCase().includes(search.toLowerCase()),
   );
+
+  const openExamByStatus = (examId: string, status: ExamCard["status"]) => {
+    const { targetScreen } = getExamCardNavigation(status);
+    setCurrentExamId(examId);
+    navigateTo(targetScreen);
+  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
@@ -210,26 +212,32 @@ export function ExamLibraryScreen({
 
           <div className="grid grid-cols-3 gap-5">
             <CreateNewCard onClick={() => setIsCreateModalOpen(true)} />
-            {filtered.map((exam) => (
-              <ExamCardTile
-                key={exam.id}
-                exam={{
-                  ...exam,
-                  onCta: () => openExamBuilder(exam.id),
-                }}
-                onClick={() => openExamBuilder(exam.id)}
-                menu={
-                  <ExamCardMenu
-                    status={exam.status}
-                    isProcessing={isProcessing}
-                    onPublish={() => requestPublish(exam.id, exam.code)}
-                    onEnd={() => requestEnd(exam.id)}
-                    onDelete={() => requestDelete(exam.id)}
-                    onEditSettings={() => setSettingsExamId(exam.id)}
-                  />
-                }
-              />
-            ))}
+            {filtered.map((exam) => {
+              const { ctaLabel } = getExamCardNavigation(exam.status);
+
+              return (
+                <ExamCardTile
+                  key={exam.id}
+                  exam={{
+                    ...exam,
+                    ctaLabel,
+                    onCta: () => openExamByStatus(exam.id, exam.status),
+                  }}
+                  onClick={() => openExamByStatus(exam.id, exam.status)} // card body follows the same destination
+                  menu={
+                    <ExamCardMenu
+                      status={exam.status}
+                      isProcessing={isProcessing}
+                      onPublish={() => requestPublish(exam.id, exam.code)}
+                      onEnd={() => requestEnd(exam.id)}
+                      onDelete={() => requestDelete(exam.id)}
+                      onEditSettings={() => setSettingsExamId(exam.id)}
+                      onEditExam={() => openExamByStatus(exam.id, "saved")} // reuses the same builder destination
+                    />
+                  }
+                />
+              );
+            })}
             <CreateExamModal
               isOpen={isCreateModalOpen}
               onClose={() => setIsCreateModalOpen(false)}

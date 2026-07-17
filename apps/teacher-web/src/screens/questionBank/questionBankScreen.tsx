@@ -1,13 +1,15 @@
-import { useState, useMemo } from "react";
+import { useState, useMemo, useEffect } from "react";
 import { Search, Plus, Tag as TagIcon, ArrowLeft, Trash2, X } from "lucide-react";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
 import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
+import { UnsavedChangesPrompt } from "../../components/examBuilder/unsavedChangesPrompt";
 import { useToast } from "../../hooks/useToast";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { useSaveBankQuestion } from "../../hooks/useSaveBankQuestion";
 import { useAuthStore } from "../../store/useAuthStore";
+import { useRouterLogic } from "../../router/routerLogic";
 import {
   getBankQuestionById,
   deleteBankQuestion,
@@ -35,41 +37,74 @@ export function QuestionBankScreen() {
   const { saveQuestion, isSaving, error: saveError } = useSaveBankQuestion();
   const { showToast } = useToast();
 
-  const [search, setSearch] = useState(""); // teacher-typed search text
-  const [activeTagIds, setActiveTagIds] = useState<string[]>([]); // tags currently filtering the table
-  const [originalTagIds, setOriginalTagIds] = useState<string[]>([]); // tags as they exist on the server, for diffing on save
-  const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding">("all"); // narrows the table by type
-  const [showNewQuestionModal, setShowNewQuestionModal] = useState(false); // shows the type-choice modal
-  const [newTagNameInEditor, setNewTagNameInEditor] = useState(""); // teacher-typed tag name, while editing a question
+  const [search, setSearch] = useState("");
+  const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
+  const [originalTagIds, setOriginalTagIds] = useState<string[]>([]);
+  const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding">("all");
+  const [showNewQuestionModal, setShowNewQuestionModal] = useState(false);
+  const [newTagNameInEditor, setNewTagNameInEditor] = useState("");
 
-  const [editingQuestion, setEditingQuestion] = useState<BuilderQuestion | null>(null); // null = showing the table
-  const [editingTagIds, setEditingTagIds] = useState<string[]>([]); // tags attached to the question being edited
+  const [editingQuestion, setEditingQuestion] = useState<BuilderQuestion | null>(null);
+  const [editingTagIds, setEditingTagIds] = useState<string[]>([]);
 
-  // true only for a question that hasn't been saved to the bank yet
+  // last confirmed-saved version of the question being edited, null while creating brand new —
+  // used the same way examBuilderScreen uses savedQuestions, just for a single question at a time
+  const [savedQuestionSnapshot, setSavedQuestionSnapshot] = useState<BuilderQuestion | null>(null);
+
+  // holds a callback for wherever the user tried to go, while we ask them to confirm —
+  // works for both router navigation (sidebar) and the in-screen "Back" button
+  const [pendingLeaveAction, setPendingLeaveAction] = useState<(() => void) | null>(null);
+  const setNavigationGuard = useRouterLogic((state) => state.setNavigationGuard);
+  const forceNavigateTo = useRouterLogic((state) => state.forceNavigateTo);
+
   const isNewQuestion = editingQuestion != null && !questions.some((q) => q.id === editingQuestion.id);
 
-  // narrows the table down by typed search text and any active tag filters
+  // true while editing and either the question content or its tag selection differs from what's saved
+  const hasUnsavedChanges =
+    editingQuestion !== null &&
+    (JSON.stringify(editingQuestion) !== JSON.stringify(savedQuestionSnapshot) ||
+      JSON.stringify([...editingTagIds].sort()) !== JSON.stringify([...originalTagIds].sort()));
+
+  // guards router-level navigation (e.g. clicking the sidebar) while there are unsaved changes
+  useEffect(() => {
+    if (!hasUnsavedChanges) {
+      setNavigationGuard(null);
+      return;
+    }
+    setNavigationGuard((nextScreen) => setPendingLeaveAction(() => () => forceNavigateTo(nextScreen)));
+    return () => setNavigationGuard(null);
+  }, [hasUnsavedChanges, setNavigationGuard]);
+
+  // warns on browser refresh/close too, same as Exam Builder
+  useEffect(() => {
+    const handler = (e: BeforeUnloadEvent) => {
+      if (!hasUnsavedChanges) return;
+      e.preventDefault();
+      e.returnValue = "";
+    };
+    window.addEventListener("beforeunload", handler);
+    return () => window.removeEventListener("beforeunload", handler);
+  }, [hasUnsavedChanges]);
+
   const filteredQuestions = useMemo(() => {
     return questions.filter((q) => {
       const matchesSearch = q.title.toLowerCase().includes(search.toLowerCase());
       const matchesTags =
         activeTagIds.length === 0 || activeTagIds.every((tagId) => q.tags.some((t) => t.id === tagId));
-      const matchesType = activeTypeFilter === "all" || q.type === activeTypeFilter; // combines with search and tags
+      const matchesType = activeTypeFilter === "all" || q.type === activeTypeFilter;
       return matchesSearch && matchesTags && matchesType;
     });
   }, [questions, search, activeTagIds, activeTypeFilter]);
 
-  // toggles one tag chip on/off in the filter row
   const toggleTagFilter = (tagId: string) => {
     setActiveTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
     );
   };
 
-  // creates a tag directly from inside the editor, same behavior as the table's tag creation
   const handleCreateTagInEditor = async () => {
     const trimmed = newTagNameInEditor.trim();
-    if (!trimmed || !teacherId) return; // ignore empty submissions
+    if (!trimmed || !teacherId) return;
     try {
       await createBankTag(teacherId, trimmed);
       setNewTagNameInEditor("");
@@ -79,7 +114,6 @@ export function QuestionBankScreen() {
     }
   };
 
-  // permanently deletes a tag everywhere it's used — confirms first, since this can't be undone
   const handleDeleteTag = async (tagId: string) => {
     const confirmed = window.confirm(
       "Delete this tag? It will be removed from every question that uses it. This cannot be undone.",
@@ -89,7 +123,7 @@ export function QuestionBankScreen() {
     try {
       await deleteBankTag(tagId);
       setEditingTagIds((prev) => prev.filter((id) => id !== tagId));
-      setOriginalTagIds((prev) => prev.filter((id) => id !== tagId)); // keep the diff baseline honest
+      setOriginalTagIds((prev) => prev.filter((id) => id !== tagId));
       setActiveTagIds((prev) => prev.filter((id) => id !== tagId));
       showToast("Tag deleted.", "success");
       await refetch();
@@ -98,45 +132,52 @@ export function QuestionBankScreen() {
     }
   };
 
-  // opens the editor for an existing bank question, fetching its full data
+  // opens the editor for an existing bank question, and snapshots it as the saved baseline
   const handleSelectQuestion = async (id: string) => {
     try {
       const question = await getBankQuestionById(id);
       setEditingQuestion(question);
+      setSavedQuestionSnapshot(question); // this is what "saved" means until the next edit
       const row = questions.find((q) => q.id === id);
       const tagIds = row?.tags.map((t) => t.id) ?? [];
-      setEditingTagIds(tagIds); // pending selection, starts equal to saved state
-      setOriginalTagIds(tagIds); // snapshot to diff against when saving
+      setEditingTagIds(tagIds);
+      setOriginalTagIds(tagIds);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Could not load this question.", "error");
     }
   };
 
-  // starts a brand new blank question in the editor, not yet saved
+  // starts a brand new blank question — no saved snapshot yet, so it's immediately "unsaved"
   const handleCreateNew = (type: QuestionType) => {
     const blank =
       type === "multiple-choice"
         ? createBlankMCQuestion(crypto.randomUUID(), 0)
         : createBlankCodingQuestion(crypto.randomUUID(), 0);
     setEditingQuestion(blank);
-    setEditingTagIds([]); // no tags yet — pending selection starts empty
-    setOriginalTagIds([]); // nothing saved yet either
+    setSavedQuestionSnapshot(null); // nothing saved yet — matches the "not yet persisted" state
+    setEditingTagIds([]);
+    setOriginalTagIds([]);
   };
 
-  // returns to the table view without saving
-  const handleBackToList = () => setEditingQuestion(null);
+  // leaves the editor — but if there are unsaved changes, asks first instead of leaving immediately
+  const handleBackToList = () => {
+    if (hasUnsavedChanges) {
+      setPendingLeaveAction(() => () => setEditingQuestion(null));
+    } else {
+      setEditingQuestion(null);
+    }
+  };
 
-  // saves the question currently open in the editor, shows a toast either way
-  // saves the question, then applies any pending tag changes, all in one action
-  const handleSave = async () => {
-    if (!editingQuestion) return;
+  // saves the currently open question — now returns whether it actually succeeded,
+  // so the leave-prompt knows whether it's safe to continue navigating afterward
+  const handleSave = async (): Promise<boolean> => {
+    if (!editingQuestion) return false;
     const didSave = await saveQuestion(editingQuestion);
     if (!didSave) {
       showToast(saveError ?? "Could not save this question.", "error");
-      return;
+      return false;
     }
 
-    // figure out which tags were added or removed since this question was loaded
     const tagsToAdd = editingTagIds.filter((id) => !originalTagIds.includes(id));
     const tagsToRemove = originalTagIds.filter((id) => !editingTagIds.includes(id));
 
@@ -148,16 +189,35 @@ export function QuestionBankScreen() {
       showToast("Question saved to bank.", "success");
       await refetch();
       setEditingQuestion(null);
+      return true;
     } catch (err) {
-      // question itself saved fine, but a tag link failed — say so precisely
       showToast(
         err instanceof Error ? `Question saved, but tags failed: ${err.message}` : "Question saved, but tags failed to update.",
         "error",
       );
+      return false; // tag sync failed — don't treat this as a clean save for leave-prompt purposes
     }
   };
 
-  // permanently removes a bank question
+  // teacher chose "Save" from the leave prompt — save first, then continue leaving only if it worked
+  const handleSaveAndLeave = async () => {
+    const didSave = await handleSave();
+    if (!didSave) return; // stay put, error toast already shown by handleSave
+    pendingLeaveAction?.();
+    setNavigationGuard(null);
+    setPendingLeaveAction(null);
+  };
+
+  // teacher chose to discard changes and leave anyway
+  const handleLeaveWithoutSaving = () => {
+    setNavigationGuard(null);
+    pendingLeaveAction?.();
+    setPendingLeaveAction(null);
+  };
+
+  // teacher chose to stay
+  const handleCancelLeave = () => setPendingLeaveAction(null);
+
   const handleDelete = async (id: string) => {
     try {
       await deleteBankQuestion(id);
@@ -169,8 +229,6 @@ export function QuestionBankScreen() {
     }
   };
 
-  // attaches or detaches a tag on the question currently being edited
-  // toggles a tag in the pending selection only — nothing persists until Save Question
   const handleToggleQuestionTag = (tagId: string) => {
     setEditingTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
@@ -187,7 +245,6 @@ export function QuestionBankScreen() {
         <main className="flex-1 overflow-y-auto px-8 py-6" style={{ color: "var(--color-base-content)" }}>
           {editingQuestion ? (
             <>
-              {/* Editor top bar */}
               <div className="flex items-center justify-between mb-5">
                 <button
                   onClick={handleBackToList}
@@ -223,7 +280,6 @@ export function QuestionBankScreen() {
                 </div>
               </div>
 
-              {/* Tag assignment — pending until Save Question is clicked, same as every other field */}
               <div className="flex flex-wrap items-center gap-2 mb-5">
                 <TagIcon size={14} style={{ opacity: 0.5 }} />
                 {tags.map((tag) => (
@@ -237,13 +293,13 @@ export function QuestionBankScreen() {
                     }}
                   >
                     <button
-                      onClick={() => handleToggleQuestionTag(tag.id)} // pending only, applied on Save Question
+                      onClick={() => handleToggleQuestionTag(tag.id)}
                       className="cursor-pointer border-none bg-transparent p-0 text-inherit"
                     >
                       {tag.name}
                     </button>
                     <button
-                      onClick={() => handleDeleteTag(tag.id)} // this one IS immediate — deletes the tag everywhere
+                      onClick={() => handleDeleteTag(tag.id)}
                       title="Delete this tag everywhere"
                       className="cursor-pointer border-none bg-transparent p-0.5 opacity-60 hover:opacity-100"
                     >
@@ -296,7 +352,6 @@ export function QuestionBankScreen() {
                 </div>
               </div>
 
-              {/* Search bar */}
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border w-full max-w-md mb-3 border-[var(--color-base-300)] bg-[var(--color-base-100)]">
                 <Search size={14} style={{ opacity: 0.5, flexShrink: 0 }} />
                 <input
@@ -308,7 +363,6 @@ export function QuestionBankScreen() {
                 />
               </div>
 
-              {/* Type filter — combines with search and tag filters below */}
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-[12px] opacity-60 font-medium">Type:</span>
                 {(["all", "multiple-choice", "coding"] as const).map((type) => (
@@ -327,7 +381,6 @@ export function QuestionBankScreen() {
                 ))}
               </div>
 
-              {/* Tag filters + inline tag creation */}
               <div className="flex flex-wrap items-center gap-2 mb-6">
                 <TagIcon size={14} style={{ opacity: 0.5 }} />
                 {tags.map((tag) => (
@@ -408,6 +461,13 @@ export function QuestionBankScreen() {
           setShowNewQuestionModal(false);
           handleCreateNew(type);
         }}
+      />
+
+      <UnsavedChangesPrompt
+        isOpen={pendingLeaveAction !== null}
+        onSave={handleSaveAndLeave}
+        onLeaveWithoutSaving={handleLeaveWithoutSaving}
+        onCancel={handleCancelLeave}
       />
     </div>
   );

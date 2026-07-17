@@ -7,6 +7,9 @@ import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
+import { getExamCardNavigation } from "../../router/examCardNavigation";
+import { useExamBuilderStore } from "../../store/useExamBuilderStore";
+import type { ExamCard } from "../examLibrary/examLibraryScreen.types";
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -44,6 +47,14 @@ function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
 
 export function DashboardScreen({}: DashboardScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
+
+  // navigates to wherever this exam's current status says it should go
+  const openExamByStatus = (examId: string, status: ExamCard["status"]) => {
+    const { targetScreen } = getExamCardNavigation(status);
+    setCurrentExamId(examId);
+    navigateTo(targetScreen);
+  };
 
   // pulls the logged in user's name directly from the auth store
   const user = useAuthStore((state) => state.user);
@@ -154,62 +165,66 @@ export function DashboardScreen({}: DashboardScreenProps) {
                 </tr>
               </thead>
               <tbody>
-                {recentExams.map((exam, index) => (
-                  <tr
-                    key={exam.id}
-                    className={`hover:opacity-80 ${
-                      index < recentExams.length - 1 ? "border-b" : ""
-                    }`}
-                    style={{ borderColor: "var(--color-base-300)" }}
-                  >
-                    <td className="py-3.5 px-5 text-sm font-medium">
-                      {exam.title}
-                    </td>
-                    <td className="py-3.5 px-5 text-sm font-mono opacity-70">
-                      {exam.code}
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <span
-                        className="text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full"
-                        style={{
-                          backgroundColor:
-                            exam.status === "active"
-                              ? "var(--color-success)"
-                              : exam.status === "draft"
-                                ? "var(--color-base-300)"
-                                : "var(--color-warning)",
-                          color:
-                            exam.status === "active"
-                              ? "var(--color-success-content)"
-                              : exam.status === "draft"
-                                ? "var(--color-base-content)"
-                                : "var(--color-warning-content)",
-                        }}
-                      >
-                        {exam.status}
-                      </span>
-                    </td>
-                    <td className="py-3.5 px-5 text-sm opacity-70">
-                      {exam.studentCount ?? 0}
-                    </td>
-                    <td className="py-3.5 px-5 text-sm opacity-70">
-                      {exam.createdAt}
-                    </td>
-                    <td className="py-3.5 px-5">
-                      <button
-                        onClick={() => navigateTo("examBuilder")}
-                        className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80"
-                        style={{
-                          borderColor: "var(--color-base-300)",
-                          color: "var(--color-base-content)",
-                          backgroundColor: "transparent",
-                        }}
-                      >
-                        View
-                      </button>
-                    </td>
-                  </tr>
-                ))}
+                {recentExams.map((exam, index) => {
+                  const { ctaLabel } = getExamCardNavigation(exam.status); // status-driven label for this row
+
+                  return (
+                    <tr
+                      key={exam.id}
+                      className={`hover:opacity-80 ${
+                        index < recentExams.length - 1 ? "border-b" : ""
+                      }`}
+                      style={{ borderColor: "var(--color-base-300)" }}
+                    >
+                      <td className="py-3.5 px-5 text-sm font-medium">
+                        {exam.title}
+                      </td>
+                      <td className="py-3.5 px-5 text-sm font-mono opacity-70">
+                        {exam.code}
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <span
+                          className="text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full"
+                          style={{
+                            backgroundColor:
+                              exam.status === "active"
+                                ? "var(--color-success)"
+                                : exam.status === "draft"
+                                  ? "var(--color-base-300)"
+                                  : "var(--color-warning)",
+                            color:
+                              exam.status === "active"
+                                ? "var(--color-success-content)"
+                                : exam.status === "draft"
+                                  ? "var(--color-base-content)"
+                                  : "var(--color-warning-content)",
+                          }}
+                        >
+                          {exam.status}
+                        </span>
+                      </td>
+                      <td className="py-3.5 px-5 text-sm opacity-70">
+                        {exam.studentCount ?? 0}
+                      </td>
+                      <td className="py-3.5 px-5 text-sm opacity-70">
+                        {exam.createdAt}
+                      </td>
+                      <td className="py-3.5 px-5">
+                        <button
+                          onClick={() => openExamByStatus(exam.id, exam.status)}
+                          className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80"
+                          style={{
+                            borderColor: "var(--color-base-300)",
+                            color: "var(--color-base-content)",
+                            backgroundColor: "transparent",
+                          }}
+                        >
+                          {ctaLabel}
+                        </button>
+                      </td>
+                    </tr>
+                  );
+                })}
               </tbody>
             </table>
           </div>
