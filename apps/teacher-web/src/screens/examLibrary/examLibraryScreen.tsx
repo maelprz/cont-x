@@ -22,6 +22,7 @@ import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import type { NewExamSettings } from "../../services/examBuilderService";
 import { getExamCardNavigation } from "../../router/examCardNavigation";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which exam Violation Monitoring shows
 
 export function ExamLibraryScreen({
   exams: examsProp,
@@ -46,6 +47,10 @@ export function ExamLibraryScreen({
   );
 
   const setCurrentExamIdResult = useExamResultsStore(
+    (state) => state.setCurrentExamId,
+  );
+
+  const setCurrentExamIdViolation = useViolationMonitoringStore(
     (state) => state.setCurrentExamId,
   );
 
@@ -141,6 +146,8 @@ export function ExamLibraryScreen({
     const { targetScreen } = getExamCardNavigation(status);
     if (targetScreen === "examResults") {
       setCurrentExamIdResult(examId);
+    } else if (targetScreen === "violationMonitoring") {
+      setCurrentExamIdViolation(examId); // violation screen reads from here
     } else {
       setCurrentExamId(examId);
     }

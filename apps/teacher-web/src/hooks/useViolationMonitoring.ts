@@ -9,7 +9,7 @@ import type {
 } from "../screens/violationLogs/violationMonitoringScreen.types";
 
 // holds all state needed by the Violation Monitoring screen
-export function useViolationMonitoring(examId: string) {
+export function useViolationMonitoring(examId: string | null) {
   const [sessions, setSessions] = useState<ViolationSessionRow[]>([]);
   const [isLoading, setIsLoading] = useState(true); // true while the session list loads
   const [error, setError] = useState<string | null>(null);
@@ -23,6 +23,14 @@ export function useViolationMonitoring(examId: string) {
 
   // loads every session for this exam from the service
   const fetchSessions = useCallback(async () => {
+    // nothing selected yet — skip the query, show empty state instead
+    if (examId === null) {
+      setSessions([]); // clear out any stale rows
+      setError(null); // this isn't an error, just nothing to show
+      setIsLoading(false); // stop the loading spinner
+      return;
+    }
+
     setIsLoading(true);
     setError(null);
     try {

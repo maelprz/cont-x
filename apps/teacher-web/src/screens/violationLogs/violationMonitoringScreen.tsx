@@ -1,6 +1,7 @@
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useViolationMonitoring } from "../../hooks/useViolationMonitoring";
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // reads which exam is selected
 import type {
   ViolationDetailRow,
   ViolationMonitoringScreenProps,
@@ -125,9 +126,9 @@ function ViolationDetailModal({
 }
 
 export function ViolationMonitoringScreen({
-  examId,
   examTitle,
 }: ViolationMonitoringScreenProps) {
+  const examId = useViolationMonitoringStore((state) => state.currentExamId);
   const {
     sessions,
     isLoading,
@@ -197,7 +198,18 @@ export function ViolationMonitoringScreen({
                 </tr>
               </thead>
               <tbody>
-                {isLoading && (
+                {examId === null && (
+                  <tr>
+                    <td
+                      colSpan={7}
+                      className="px-5 py-6 text-center opacity-60"
+                    >
+                      No exam selected. Open this screen from an exam card.
+                    </td>
+                  </tr>
+                )}
+
+                {examId !== null && isLoading && (
                   <tr>
                     <td
                       colSpan={7}
@@ -208,7 +220,7 @@ export function ViolationMonitoringScreen({
                   </tr>
                 )}
 
-                {!isLoading && sessions.length === 0 && (
+                {examId !== null && !isLoading && sessions.length === 0 && (
                   <tr>
                     <td
                       colSpan={7}
@@ -219,7 +231,8 @@ export function ViolationMonitoringScreen({
                   </tr>
                 )}
 
-                {!isLoading &&
+                {examId !== null &&
+                  !isLoading &&
                   sessions.map((session) => (
                     <tr
                       key={session.id}
