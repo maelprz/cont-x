@@ -10,6 +10,7 @@ import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { getExamCardNavigation } from "../../router/examCardNavigation";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import type { ExamCard } from "../examLibrary/examLibraryScreen.types";
+import { useExamResultsStore } from "../../store/useExamResultsStore";
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -47,12 +48,22 @@ function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
 
 export function DashboardScreen({}: DashboardScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
-  const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
+  const setCurrentExamId = useExamBuilderStore(
+    (state) => state.setCurrentExamId,
+  );
+  const setCurrentExamIdResult = useExamResultsStore(
+    (state) => state.setCurrentExamId,
+  );
 
   // navigates to wherever this exam's current status says it should go
   const openExamByStatus = (examId: string, status: ExamCard["status"]) => {
     const { targetScreen } = getExamCardNavigation(status);
-    setCurrentExamId(examId);
+
+    if (targetScreen === "examResults") {
+      setCurrentExamIdResult(examId);
+    } else {
+      setCurrentExamId(examId);
+    }
     navigateTo(targetScreen);
   };
 
