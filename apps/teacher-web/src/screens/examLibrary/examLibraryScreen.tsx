@@ -1,6 +1,9 @@
 import { useState } from "react";
 import { Filter, LayoutGrid } from "lucide-react";
-import type { ExamCard, ExamLibraryScreenProps } from "./examLibraryScreen.types";
+import type {
+  ExamCard,
+  ExamLibraryScreenProps,
+} from "./examLibraryScreen.types";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { ExamCardTile } from "../../components/examLibrary/examCardTile";
@@ -18,6 +21,7 @@ import { useExamCardActions } from "../../hooks/useExamCardActions";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import type { NewExamSettings } from "../../services/examBuilderService";
 import { getExamCardNavigation } from "../../router/examCardNavigation";
+import { useExamResultsStore } from "../../store/useExamResultsStore";
 
 export function ExamLibraryScreen({
   exams: examsProp,
@@ -41,6 +45,10 @@ export function ExamLibraryScreen({
     (state) => state.setCurrentExamId,
   );
 
+  const setCurrentExamIdResult = useExamResultsStore(
+    (state) => state.setCurrentExamId,
+  );
+
   const {
     handlePublish,
     handleEnd,
@@ -58,8 +66,11 @@ export function ExamLibraryScreen({
   // holds the code to show after a successful publish, null when no overlay is open
   const [publishedCode, setPublishedCode] = useState<string | null>(null);
   const [settingsExamId, setSettingsExamId] = useState<string | null>(null); // which exam's settings modal is open
-  
-  const [publishTarget, setPublishTarget] = useState<{ examId: string; examCode: string } | null>(null); // exam awaiting a session code before it can publish
+
+  const [publishTarget, setPublishTarget] = useState<{
+    examId: string;
+    examCode: string;
+  } | null>(null); // exam awaiting a session code before it can publish
 
   const handleCreateExam = async (settings: NewExamSettings) => {
     const newExamId = await createExam(settings);
@@ -128,7 +139,11 @@ export function ExamLibraryScreen({
 
   const openExamByStatus = (examId: string, status: ExamCard["status"]) => {
     const { targetScreen } = getExamCardNavigation(status);
-    setCurrentExamId(examId);
+    if (targetScreen === "examResults") {
+      setCurrentExamIdResult(examId);
+    } else {
+      setCurrentExamId(examId);
+    }
     navigateTo(targetScreen);
   };
 
@@ -267,7 +282,7 @@ export function ExamLibraryScreen({
         onConfirm={confirmPendingAction}
         onCancel={() => setConfirmAction(null)}
       />
-      
+
       {/* Overlay / Modals */}
       <EditSettingsModal
         isOpen={settingsExamId !== null}
