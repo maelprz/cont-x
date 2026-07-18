@@ -17,6 +17,11 @@ electron.contextBridge.exposeInMainWorld("ipcRenderer", {
 		const [channel, ...omit] = args;
 		return electron.ipcRenderer.invoke(channel, ...omit);
 	},
+	onViolation: (callback) => {
+		const listener = (_event, payload) => callback(payload);
+		electron.ipcRenderer.on("violation-detected", listener);
+		return () => electron.ipcRenderer.off("violation-detected", listener);
+	},
 	exitApp: () => electron.ipcRenderer.send("exit-app")
 });
 //#endregion

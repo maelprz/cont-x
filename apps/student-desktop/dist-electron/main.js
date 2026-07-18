@@ -5,6 +5,7 @@ import { spawn, spawnSync } from "child_process";
 import { mkdtempSync, rmSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { tmpdir } from "os";
+import winAudio from "win-audio";
 import path from "node:path";
 //#region electron/compiler/compilerService.ts
 var GCC_PATH = join(process.env.APP_ROOT ?? "", "electron", "native", "mingw", "bin", "gcc.exe");
@@ -102,6 +103,25 @@ function registerCompilerHandlers() {
 	});
 }
 //#endregion
+//#region electron/native/audioControl.ts
+var speaker = winAudio.speaker;
+function muteSystemAudio() {
+	try {
+		speaker.mute();
+		console.log("[audio] system muted");
+	} catch (err) {
+		console.error("[audio] failed to mute:", err);
+	}
+}
+function unmuteSystemAudio() {
+	try {
+		speaker.unmute();
+		console.log("[audio] system unmuted");
+	} catch (err) {
+		console.error("[audio] failed to unmute:", err);
+	}
+}
+//#endregion
 //#region electron/main.ts
 var require = createRequire(import.meta.url);
 var __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -127,6 +147,7 @@ function cleanupStaleLockdownState() {
 		keyboardHook?.setChangePasswordDisabled(false);
 		keyboardHook?.setFastUserSwitchingDisabled(false);
 		keyboardHook?.setTaskbarVisible(true);
+		unmuteSystemAudio();
 		console.log("[lockdown] cleared any leftover state from last run");
 	} catch (err) {
 		console.error("[lockdown] cleanup failed:", err);
@@ -134,12 +155,18 @@ function cleanupStaleLockdownState() {
 }
 function registerLockdown() {
 	try {
-		keyboardHook?.startHook();
+		keyboardHook?.startHook((violationType) => {
+			win?.webContents.send("violation-detected", {
+				violationType,
+				occurredAt: (/* @__PURE__ */ new Date()).toISOString()
+			});
+		});
 		keyboardHook?.setTaskManagerDisabled(true);
 		keyboardHook?.setLockWorkstationDisabled(true);
 		keyboardHook?.setChangePasswordDisabled(true);
 		keyboardHook?.setFastUserSwitchingDisabled(true);
 		keyboardHook?.setTaskbarVisible(false);
+		muteSystemAudio();
 		console.log("[lockdown] hook registered, taskbar hidden");
 	} catch (err) {
 		console.error("[lockdown] failed to register hook:", err);
@@ -153,6 +180,7 @@ function unregisterLockdown() {
 		keyboardHook?.setChangePasswordDisabled(false);
 		keyboardHook?.setFastUserSwitchingDisabled(false);
 		keyboardHook?.setTaskbarVisible(true);
+		unmuteSystemAudio();
 		console.log("[lockdown] hook unregistered, taskbar restored");
 	} catch (err) {
 		console.error("[lockdown] failed to unregister hook:", err);
@@ -197,6 +225,7 @@ process.on("exit", () => {
 		keyboardHook?.setChangePasswordDisabled(false);
 		keyboardHook?.setFastUserSwitchingDisabled(false);
 		keyboardHook?.setTaskbarVisible(true);
+		unmuteSystemAudio();
 	} catch {}
 });
 app.on("window-all-closed", () => {

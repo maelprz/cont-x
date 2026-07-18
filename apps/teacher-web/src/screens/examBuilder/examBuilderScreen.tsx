@@ -62,7 +62,8 @@ export function ExamBuilderScreen({
   const [isSavingQuestion, setIsSavingQuestion] = useState(false); // Save & Continue's own bank-write in flight
   const [bankSaveError, setBankSaveError] = useState<string | null>(null);
 
-  const [isSavingAllQuestions, setIsSavingAllQuestions] = useState(false); // Save Draft / Save Exam's bulk persist in flight
+  const [isSavingDraftState, setIsSavingDraftState] = useState(false);
+  const [isSavingExamState, setIsSavingExamState] = useState(false); // Save Draft / Save Exam's bulk persist in flight
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
 
   const [pendingLeaveScreen, setPendingLeaveScreen] = useState<ScreenName | null>(null); // where the user tried to go, while we ask them to confirm
@@ -118,13 +119,16 @@ export function ExamBuilderScreen({
   const handleSaveAndLeave = async () => {
     if (!pendingLeaveScreen || !examData?.id) return;
 
+    setIsSavingDraftState(true);
     const questionsOk = await persistAllQuestions();
     if (!questionsOk) {
       showToast(saveAllError ?? "Could not save changes.", "error");
+      setIsSavingDraftState(false);
       return;
     }
 
     const didSave = await saveDraft(examData.id);
+    setIsSavingDraftState(false);
     if (!didSave) {
       showToast(statusError ?? "Could not save changes.", "error");
       return;
@@ -329,7 +333,6 @@ export function ExamBuilderScreen({
   const persistAllQuestions = async (): Promise<boolean> => {
     if (!examData?.id) return false;
 
-    setIsSavingAllQuestions(true);
     setSaveAllError(null);
     try {
       for (const q of questions) {
@@ -338,14 +341,12 @@ export function ExamBuilderScreen({
         }
         await persistExamQuestion(examData.id, q); // upserts this question into the exam
       }
-      setSavedQuestions(questions); // now mirrors exactly what's persisted
+      setSavedQuestions(questions);
       setPendingBankSaveIds(new Set());
       return true;
     } catch (err) {
       setSaveAllError(err instanceof Error ? err.message : "Could not save all questions.");
       return false;
-    } finally {
-      setIsSavingAllQuestions(false);
     }
   };
 
@@ -357,6 +358,7 @@ export function ExamBuilderScreen({
 
   // quick save — persists all question edits, marks the exam as draft, returns to the library
   const handleSaveDraft = async (): Promise<boolean> => {
+    setIsSavingDraftState(true);
     const questionsOk = await persistAllQuestions();
     if (!questionsOk || !examData?.id) {
       showToast(saveAllError ?? "Could not save draft.", "error");
@@ -364,6 +366,8 @@ export function ExamBuilderScreen({
     }
 
     const didSave = await saveDraft(examData.id);
+    setIsSavingDraftState(false);
+    
     if (didSave) {
       showToast("Draft saved.", "success");
       navigateTo("examLibrary");
@@ -377,12 +381,16 @@ export function ExamBuilderScreen({
   // marks the exam as draft but not yet visible to students
   const handleSaveExam = async (): Promise<boolean> => {
     if (!examData?.id) return false;
+    
+    setIsSavingExamState(true);
     const questionsOk = await persistAllQuestions();
     if (!questionsOk) {
       showToast(saveAllError ?? "Could not save exam.", "error");
+      setIsSavingExamState(false);
       return false;
     }
     const didSave = await saveExam(examData.id);
+    setIsSavingExamState(false);
     if (didSave) {
       showToast("Exam saved.", "success");
       navigateTo("examLibrary");
@@ -418,7 +426,8 @@ export function ExamBuilderScreen({
             activeQuestion={activeQuestion}
             editorTab={editorTab}
             isMCQ={editorTab === "multiple-choice"}
-            isSavingAllQuestions={isSavingAllQuestions}
+            isSavingDraft={isSavingDraftState}
+            isSavingExam={isSavingExamState}
             statusError={statusError}
             bankSaveError={bankSaveError}
             saveAllError={saveAllError}

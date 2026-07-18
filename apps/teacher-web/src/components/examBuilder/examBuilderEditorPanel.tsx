@@ -15,7 +15,8 @@ interface ExamBuilderEditorPaneProps {
   activeQuestion?: BuilderQuestion;
   editorTab: QuestionType;
   isMCQ: boolean;
-  isSavingAllQuestions: boolean;
+  isSavingDraft: boolean;
+  isSavingExam: boolean;
   statusError: string | null;
   bankSaveError: string | null;
   saveAllError: string | null;
@@ -39,7 +40,8 @@ export function ExamBuilderEditorPanel({
   activeQuestion,
   editorTab,
   isMCQ,
-  isSavingAllQuestions,
+  isSavingDraft,
+  isSavingExam,
   statusError,
   bankSaveError,
   saveAllError,
@@ -81,7 +83,7 @@ export function ExamBuilderEditorPanel({
         <div className="flex items-center gap-3 flex-shrink-0">
           <button
             onClick={onSaveDraft}
-            disabled={isSavingAllQuestions}
+            disabled={isSavingDraft}
             className="px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 disabled:opacity-60"
             style={{
               borderColor: "var(--color-base-300)",
@@ -89,17 +91,18 @@ export function ExamBuilderEditorPanel({
               backgroundColor: "var(--color-base-100)",
             }}
           >
-            {isSavingAllQuestions ? "Saving..." : "Save Draft"}
+            {isSavingDraft ? "Saving..." : "Save Draft"}
           </button>
           <button
             onClick={onSaveExam}
+            disabled={isSavingExam}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-90 border-none"
             style={{
               backgroundColor: "var(--color-primary)",
               color: "var(--color-primary-content)",
             }}
           >
-            Save Exam
+            {isSavingExam ? "Saving..." : "Save Exam"}
           </button>
         </div>
         {statusError && (
