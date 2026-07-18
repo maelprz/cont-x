@@ -239,7 +239,7 @@ export function ExamQuestionScreen({
         type: "coding",
         starterCode: raw.starterCode ?? "",
         language: raw.language ?? "c",
-        programType: raw.programType ?? "program", // NEW
+        programType: raw.programType ?? "cProgram", // NEW
         mainCode: raw.mainCode ?? undefined, // NEW
         checkPenaltyPerAttempt: raw.checkPenaltyPerAttempt ?? 0, // NEW
       } as CodingQuestion;
@@ -318,7 +318,7 @@ export function ExamQuestionScreen({
     runTests(
       raw.id,
       localCode,
-      raw.programType ?? "program",
+      raw.programType ?? "cProgram",
       raw.mainCode ?? undefined,
     );
   };
@@ -331,7 +331,7 @@ export function ExamQuestionScreen({
       sessionId,
       raw.id,
       localCode,
-      raw.programType ?? "program",
+      raw.programType ?? "cProgram",
       raw.mainCode ?? undefined,
       raw.maxPoints,
       raw.checkPenaltyPerAttempt ?? 0,

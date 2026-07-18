@@ -13,7 +13,7 @@ export function useCodeExecution() {
   const handleRunTests = async (
     questionId: string,
     code: string,
-    programType: 'function' | 'program',
+    programType: 'cFunction' | 'cProgram',
     mainCode: string | undefined
   ) => {
     setIsRunning(true);
@@ -35,7 +35,7 @@ export function useCodeExecution() {
     sessionId: string,
     questionId: string,
     code: string,
-    programType: 'function' | 'program',
+    programType: 'cFunction' | 'cProgram',
     mainCode: string | undefined,
     maxPoints: number,
     checkPenaltyPerAttempt: number

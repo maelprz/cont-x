@@ -2,7 +2,6 @@ import { ipcMain } from 'electron';
 import { compileSource, runBinary, cleanupDir } from '../compiler/compilerService';
 import { dirname } from 'path';
 
-// Shape of a single test case coming from the renderer
 interface TestCasePayload {
   id: string;
   input: string;
@@ -10,31 +9,24 @@ interface TestCasePayload {
   timeLimitMs: number;
 }
 
-// Payload sent for either Run Tests or Run Code
-// The only difference is which test cases the renderer includes
 interface RunTestCasesPayload {
   code: string;
-  programType: 'function' | 'program';
+  programType: 'cFunction' | 'cProgram';
   mainCode?: string;
   testCases: TestCasePayload[];
 }
 
-// Builds the final source string to compile
-// For function type, student code is combined with the hidden main
 function buildSource(
   code: string,
-  programType: 'function' | 'program',
+  programType: 'cFunction' | 'cProgram',
   mainCode?: string
 ): string {
-  if (programType === 'program') {
-    // Student already wrote their own main function
+  if (programType === 'cProgram') {
     return code;
   }
-  // Function type, append hidden main below student's functions
   return `${code}\n\n${mainCode ?? ''}`;
 }
 
-// Registers the single compiler IPC channel
 export function registerCompilerHandlers() {
   ipcMain.handle('run-test-cases', async (_event, payload: RunTestCasesPayload) => {
     const source = buildSource(payload.code, payload.programType, payload.mainCode);
@@ -44,7 +36,6 @@ export function registerCompilerHandlers() {
       return { compileError: compileResult.stderr, results: [] };
     }
 
-    // Run every given test case against the same compiled binary
     const results = [];
     for (const testCase of payload.testCases) {
       const runResult = await runBinary(
@@ -53,17 +44,19 @@ export function registerCompilerHandlers() {
         testCase.timeLimitMs
       );
 
-      // Exact match comparison, per your grading rule
+      const actualTrimmed = runResult.stdout.trim();
+      const expectedTrimmed = testCase.expectedOutput.trim();
+
       const passed =
         !runResult.timedOut &&
         runResult.exitCode === 0 &&
-        runResult.stdout === testCase.expectedOutput;
+        actualTrimmed === expectedTrimmed;
 
       results.push({
         testCaseId: testCase.id,
         passed,
         actualOutput: runResult.stdout,
-        executionTimeMs: null, // add real timing later if needed
+        executionTimeMs: null,
         timedOut: runResult.timedOut,
       });
     }
