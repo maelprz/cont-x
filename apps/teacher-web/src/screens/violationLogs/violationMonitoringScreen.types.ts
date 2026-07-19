@@ -17,6 +17,5 @@ export type ViolationDetailRow = {
 };
 
 export type ViolationMonitoringScreenProps = {
-  examId: string;
   examTitle?: string;
 };

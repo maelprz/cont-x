@@ -11,6 +11,7 @@ import { getExamCardNavigation } from "../../router/examCardNavigation";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import type { ExamCard } from "../examLibrary/examLibraryScreen.types";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which exam Violation Monitoring shows
 
 // ---------------------------------------------------------------------------
 // ---------------------------------------------------------------------------
@@ -55,12 +56,18 @@ export function DashboardScreen({}: DashboardScreenProps) {
     (state) => state.setCurrentExamId,
   );
 
+  const setCurrentExamIdViolation = useViolationMonitoringStore(
+    (state) => state.setCurrentExamId,
+  );
+
   // navigates to wherever this exam's current status says it should go
   const openExamByStatus = (examId: string, status: ExamCard["status"]) => {
     const { targetScreen } = getExamCardNavigation(status);
 
     if (targetScreen === "examResults") {
       setCurrentExamIdResult(examId);
+    } else if (targetScreen === "violationMonitoring") {
+      setCurrentExamIdViolation(examId); // violation screen reads from here
     } else {
       setCurrentExamId(examId);
     }
