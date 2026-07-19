@@ -47,7 +47,10 @@ function TestCaseRow({
         {timedOut ? (
           <p className="text-[#ef4444] mt-0.5">Timed out</p>
         ) : (
-          <p className="text-[var(--text-primary)] mt-0.5 break-words whitespace-pre-wrap">
+          // CHANGED — was text-[var(--text-primary)], rendered as unreadable
+          // dark blue against the dark output panel background. Switched to
+          // a light near-white so actual output is always legible.
+          <p className="text-[#e5e7eb] mt-0.5 break-words whitespace-pre-wrap">
             {actualOutput || '(no output)'}
           </p>
         )}
@@ -73,28 +76,23 @@ function OutputPanel({
   codeResult?: RunOutcome | null;
   runError?: string | null;
 }) {
-  const activeResult = codeResult ?? testsResult; // whichever ran most recently
+  const activeResult = codeResult ?? testsResult;
   const activeLabel = codeResult ? 'Run Code Result' : testsResult ? 'Run Tests Result' : null;
 
   return (
     <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-sidebar)] flex-shrink-0">
-      {/* Toggle bar, always visible */}
+      {/* CHANGED — toggle bar no longer shows the label text, just the
+          running state (if active) and the expand/collapse arrow */}
       <button
         type="button"
         onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-2 text-[12px] font-mono font-semibold text-[var(--text-inverted-secondary)] cursor-pointer"
+        className="w-full flex items-center justify-between px-4 py-1 text-[11px] font-mono font-medium text-[var(--text-inverted)] cursor-pointer bg-[var(--bg-sidebar)] hover:bg-white/5 transition-colors duration-150"
       >
-        <span>
-          {isRunning
-            ? 'Running...'
-            : activeLabel ?? 'Output'}
-        </span>
-        <span>{isOpen ? '▾' : '▸'}</span>
+        <span className="text-[10px] ml-auto">{isOpen ? '▾' : '▸'}</span>
       </button>
 
-      {/* Panel body, only rendered when expanded */}
       {isOpen && (
-        <div className="px-4 pb-4 max-h-[220px] overflow-y-auto flex flex-col gap-2">
+        <div className="px-4 pb-4 pt-3 border-t border-[var(--border-subtle)] bg-[var(--bg-sidebar)] max-h-[220px] overflow-y-auto flex flex-col gap-2">
           {isRunning && (
             <p className="text-[12px] font-mono text-[var(--text-inverted-secondary)]">
               Compiling and running...
@@ -113,6 +111,12 @@ function OutputPanel({
 
           {!isRunning && !runError && activeResult && !activeResult.compileError && (
             <>
+              {/* NEW — label now shown here, above the results, instead of in the toggle bar */}
+              {activeLabel && (
+                <p className="text-[11px] font-mono font-semibold text-[var(--text-inverted-secondary)] mb-1">
+                  {activeLabel}
+                </p>
+              )}
               {activeResult.results.length === 0 && (
                 <p className="text-[12px] font-mono text-[var(--text-inverted-secondary)]">
                   No test cases to run.
