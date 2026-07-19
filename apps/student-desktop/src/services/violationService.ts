@@ -18,7 +18,7 @@ type ViolationType = "alt_tab" | "windows" | "screenshot" | "copy_paste";
 function mapRawViolation(raw: RawViolation): {
   type: ViolationType;
   details: string | null;
-} {
+} | null {
   switch (raw) {
     case "alt_tab":
       return { type: "alt_tab", details: "Alt+Tab pressed" };
@@ -39,6 +39,10 @@ function mapRawViolation(raw: RawViolation): {
       return { type: "copy_paste", details: "Ctrl+V (paste) pressed" };
     case "ctrl_x":
       return { type: "copy_paste", details: "Ctrl+X (cut) pressed" };
+    default:
+      // an unexpected value reached here — skip logging instead of crashing
+      console.warn("[violationService] unrecognized raw violation:", raw);
+      return null;
   }
 }
 
@@ -47,16 +51,60 @@ export async function logViolation(
   sessionId: string,
   raw: RawViolation,
 ): Promise<void> {
-  const { type, details } = mapRawViolation(raw); // convert raw signal to allowed enum
+  console.log("========== VIOLATION ==========");
+  console.log("sessionId:", sessionId);
 
-  const { error } = await supabase.from("violation_logs").insert({
-    session_id: sessionId, // ties this violation to the current attempt
-    violation_type: type, // must match the CHECK constraint values
-    details, // human-readable specifics, nullable
-  });
+  const {
+    data: { user },
+  } = await supabase.auth.getUser();
+
+  console.log("Logged in user:", user);
+
+  const mapped = mapRawViolation(raw);
+  if (!mapped) return; // unrecognized signal — nothing safe to log
+
+  const { type, details } = mapped;
+
+  console.log("sessionId:", sessionId);
+
+  console.log("Logged in user:", user?.id);
+
+  const { data: session } = await supabase
+    .from("exam_sessions")
+    .select("id, student_id, status")
+    .eq("id", sessionId)
+    .single();
+
+  console.log("Exam session from DB:", session);
+  console.log("Current auth uid:", user?.id);
+
+  const { data: sessionData, error: sessionError } = await supabase
+    .from("exam_sessions")
+    .select("*")
+    .eq("id", sessionId)
+    .single();
+
+  console.log("Exam Session:", sessionData);
+  console.log("Exam Session Error:", sessionError);
+
+  console.log(
+    "[violationService] current auth user:",
+    user?.id ?? "NOT AUTHENTICATED",
+  );
+
+  const payload = {
+    session_id: sessionId,
+    violation_type: type,
+    details,
+  };
+
+  console.log("Insert payload:", payload);
+
+  const { error } = await supabase.from("violation_logs").insert(payload);
+
+  console.log("Insert error:", error);
 
   if (error) {
-    // logged only — a failed violation write must never interrupt the exam
     console.error("[violationService] failed to log violation:", error);
   }
 }

@@ -13,10 +13,14 @@ export function useViolationLogger(sessionId: string | null) {
       violationType: string;
       occurredAt: string;
     }) => {
+      console.log("Hook received violation");
+      console.log("Current sessionId:", sessionId);
+      console.log(payload);
       const now = Date.now();
       const lastTime = lastLoggedAt.current[payload.violationType] ?? 0;
 
-      if (now - lastTime >= DEBOUNCE_MS) return;
+      // too soon since the last log of this same type — skip it
+      if (now - lastTime < DEBOUNCE_MS) return;
 
       lastLoggedAt.current[payload.violationType] = now;
       logViolation(sessionId, payload.violationType as RawViolation);

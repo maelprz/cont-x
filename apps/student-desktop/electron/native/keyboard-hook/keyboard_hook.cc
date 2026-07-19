@@ -76,6 +76,10 @@ static LRESULT CALLBACK LowLevelKeyboardProc(int nCode, WPARAM wParam, LPARAM lP
                        (GetAsyncKeyState(VK_SHIFT) & 0x8000);
 
     if (shouldBlock(kb->vkCode, kb->flags) || isAltTab || isWinShiftS) {
+      // build the readable label for whichever key combo just fired
+      std::string label = labelFor(kb->vkCode, isAltTab, isWinShiftS);
+      // send that label to the JS side so it can be logged
+      reportViolation(label);
       return 1; // returning 1 swallows the keypress — nothing else receives it
     }
   }
