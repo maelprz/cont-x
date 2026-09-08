@@ -62,12 +62,14 @@ export function QuestionListPanel({
   activeId,
   onSelectQuestion,
   onAddQuestion,
+  hideAddButton = false,
 }: {
   questions: BuilderQuestion[];
   activeId: string;
   onSelectQuestion: (id: string) => void;
   onAddQuestion?: () => void;
   onReorderQuestions?: () => void;
+  hideAddButton?: boolean;
 }) {
   return (
     <aside
@@ -82,13 +84,15 @@ export function QuestionListPanel({
         <h2 className="text-[15px] font-bold" style={{ color: "var(--color-base-content)" }}>
           Questions
         </h2>
-        <button
-          onClick={onAddQuestion}
-          className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer border-none transition-opacity hover:opacity-80"
-          style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
-        >
-          <Plus size={15} />
-        </button>
+        {!hideAddButton && (
+          <button
+            onClick={onAddQuestion}
+            className="w-7 h-7 rounded-lg flex items-center justify-center cursor-pointer border-none transition-opacity hover:opacity-80"
+            style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
+          >
+            <Plus size={15} />
+          </button>
+        )}
       </div>
 
       {/* Question list */}

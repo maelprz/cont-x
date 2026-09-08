@@ -9,6 +9,7 @@ import { useExamBuilder } from "../../hooks/useExamBuilder";
 import { useDeleteQuestion } from "../../hooks/useDeleteQuestion";
 import { useUpdateExamStatus } from "../../hooks/useUpdateExamStatus";
 import { useAuthStore } from "../../store/useAuthStore";
+import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { useRouterLogic } from "../../router/routerLogic";
 import { saveBankQuestion } from "../../services/questionBankService";
 import { saveQuestion as persistExamQuestion } from "../../services/examBuilderService";
@@ -39,6 +40,9 @@ export function ExamBuilderScreen({
 }: ExamBuilderScreenProps) {
   const { examData, isLoading, error } = useExamBuilder();
   const teacherId = useAuthStore((state) => state.user?.id);
+  const openedFromEditExam = useExamBuilderStore(
+    (state) => state.openedFromEditExam,
+  );
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
   const [questions, setQuestions] = useState<BuilderQuestion[]>(
@@ -353,6 +357,7 @@ export function ExamBuilderScreen({
   const {
     saveDraft,
     saveExam,
+    saveExamEdit,
     error: statusError,
   } = useUpdateExamStatus();
 
@@ -390,9 +395,13 @@ export function ExamBuilderScreen({
       return false;
     }
     const didSave = await saveExam(examData.id);
+    const didSaveEdit = await saveExamEdit(examData.id);
     setIsSavingExamState(false);
     if (didSave) {
       showToast("Exam saved.", "success");
+      navigateTo("examLibrary");
+    } else if (examData.status === "active" && didSaveEdit) {
+      showToast("Exam updated.", "success");
       navigateTo("examLibrary");
     } else {
       showToast(statusError ?? "Could not save exam.", "error");
@@ -418,6 +427,7 @@ export function ExamBuilderScreen({
             onSelectQuestion={handleSelectQuestion}
             onAddQuestion={handleAddQuestion}
             onReorderQuestions={onReorderQuestions}
+            hideAddButton={openedFromEditExam}
           />
 
           <ExamBuilderEditorPanel

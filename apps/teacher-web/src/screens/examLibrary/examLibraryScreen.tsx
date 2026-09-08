@@ -45,6 +45,9 @@ export function ExamLibraryScreen({
   const setCurrentExamId = useExamBuilderStore(
     (state) => state.setCurrentExamId,
   );
+  const setOpenedFromEditExam = useExamBuilderStore(
+    (state) => state.setOpenedFromEditExam,
+  );
 
   const setCurrentExamIdResult = useExamResultsStore(
     (state) => state.setCurrentExamId,
@@ -81,6 +84,7 @@ export function ExamLibraryScreen({
     const newExamId = await createExam(settings);
     if (newExamId) {
       setCurrentExamId(newExamId);
+      setOpenedFromEditExam(false);
       setIsCreateModalOpen(false);
       onCreateNewAssessment?.();
       navigateTo("examBuilder");
@@ -150,6 +154,7 @@ export function ExamLibraryScreen({
       setCurrentExamIdViolation(examId); // violation screen reads from here
     } else {
       setCurrentExamId(examId);
+      setOpenedFromEditExam(false);
     }
     navigateTo(targetScreen);
   };
@@ -254,7 +259,11 @@ export function ExamLibraryScreen({
                       onEnd={() => requestEnd(exam.id)}
                       onDelete={() => requestDelete(exam.id)}
                       onEditSettings={() => setSettingsExamId(exam.id)}
-                      onEditExam={() => openExamByStatus(exam.id, "saved")} // reuses the same builder destination
+                      onEditExam={() => {
+                        setCurrentExamId(exam.id);
+                        setOpenedFromEditExam(true);
+                        navigateTo("examBuilder");
+                      }}
                     />
                   }
                 />

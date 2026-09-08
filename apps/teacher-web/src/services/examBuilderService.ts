@@ -335,7 +335,7 @@ export async function deleteQuestion(questionId: string): Promise<void> {
 
 export async function updateExamStatus(
   examId: string,
-  status: "draft" | "saved",
+  status: "draft" | "saved" | "active",
 ): Promise<void> {
   const { error } = await supabase
     .from("exams")

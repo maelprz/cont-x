@@ -52,6 +52,9 @@ export function DashboardScreen({}: DashboardScreenProps) {
   const setCurrentExamId = useExamBuilderStore(
     (state) => state.setCurrentExamId,
   );
+  const setOpenedFromEditExam = useExamBuilderStore(
+    (state) => state.setOpenedFromEditExam,
+  );
   const setCurrentExamIdResult = useExamResultsStore(
     (state) => state.setCurrentExamId,
   );
@@ -70,6 +73,7 @@ export function DashboardScreen({}: DashboardScreenProps) {
       setCurrentExamIdViolation(examId); // violation screen reads from here
     } else {
       setCurrentExamId(examId);
+      setOpenedFromEditExam(false);
     }
     navigateTo(targetScreen);
   };
