@@ -1,6 +1,9 @@
 import { supabase } from "./supabaseClient";
-import type { ExamStatus } from "../screens/examLibrary/examLibraryScreen.types";
-import type { ExamCard } from "../screens/examLibrary/examLibraryScreen.types";
+import type {
+  ExamStatus,
+  ExamCard,
+  ClassExamStatus,
+} from "../screens/examLibrary/examLibraryScreen.types";
 
 // shape of one row coming straight back from supabase
 type ExamRow = {
@@ -8,28 +11,34 @@ type ExamRow = {
   exam_code: string;
   title: string;
   description: string | null;
-  status: ExamStatus; // matches the db check constraint exactly
+  status: ExamStatus; // 'draft' | 'saved'
   created_at: string;
-  questions: { count: number }[]; // embedded count from questions table
-  exam_sessions: { count: number }[]; // embedded count from exam_sessions table
+  questions: { count: number }[]; // count from questions table
+  class_exams: {
+    id: string;
+    status: ClassExamStatus;
+    classes: { id: string; name: string } | null;
+    exam_sessions: { count: number }[];
+  }[];
 };
 
-// decides which button text to show based on the exam's real status
-function getCtaLabel(status: ExamRow["status"]): string {
-  switch (status) {
-    case "draft":
-      return "Continue Building"; // still being built, not published
-    case "saved":
-      return "Continue Building"; // saved but not yet published, same as draft
-    case "active":
-      return "Edit Exam"; // published and students can join
-    case "ended":
-      return "View Results"; // submissions closed, show outcomes
-  }
+// decides which button text to show based on authoring status + whether it's been published anywhere
+function getCtaLabel(status: ExamRow["status"], hasAttachments: boolean): string {
+  if (status === "draft") return "Continue Building"; // still being built, not published
+  // status === "saved"
+  return hasAttachments ? "Manage Classes" : "Publish to a Class";
 }
 
 // turns a raw database row into the shape the UI card expects
 function mapExamRowToCard(row: ExamRow): ExamCard {
+  const classAttachments = row.class_exams.map((ce) => ({
+    classExamId: ce.id,
+    classId: ce.classes?.id ?? "",
+    className: ce.classes?.name ?? "Unknown class",
+    status: ce.status,
+    studentCount: ce.exam_sessions[0]?.count ?? 0,
+  }));
+
   return {
     id: row.id,
     code: row.exam_code,
@@ -42,12 +51,13 @@ function mapExamRowToCard(row: ExamRow): ExamCard {
       day: "2-digit",
       year: "numeric",
     }),
-    studentCount: row.exam_sessions[0]?.count ?? 0,
-    ctaLabel: getCtaLabel(row.status),
+    classAttachments,
+    ctaLabel: getCtaLabel(row.status, classAttachments.length > 0),
   };
 }
 
-// fetches all exams belonging to one teacher, with question and student counts
+// fetches all exams belonging to one teacher, with question counts and every
+// class this exam has been attached to (each with its own status + headcount)
 export async function getExamsByTeacherId(
   teacherId: string,
 ): Promise<ExamCard[]> {
@@ -62,7 +72,12 @@ export async function getExamsByTeacherId(
       status,
       created_at,
       questions(count),
-      exam_sessions(count)
+      class_exams(
+        id,
+        status,
+        classes(id, name),
+        exam_sessions(count)
+      )
     `,
     )
     .eq("teacher_id", teacherId)
@@ -73,64 +88,19 @@ export async function getExamsByTeacherId(
   return (data as unknown as ExamRow[]).map(mapExamRowToCard);
 }
 
-// distinct message so the UI can tell "needs a code" apart from a real failure
-export const SESSION_CODE_REQUIRED_MESSAGE =
-  "This exam needs a session code before it can be published.";
-
-// publishes an exam. If a code is given, sets it and publishes together.
-// If no code is given, publishes only if one was already set (via Edit Settings) —
-// otherwise throws SESSION_CODE_REQUIRED_MESSAGE so the caller can prompt for one.
-export async function publishExam(
-  examId: string,
-  verificationCode?: string,
-): Promise<void> {
-  if (verificationCode) {
-    const { error } = await supabase
-      .from("exams")
-      .update({ status: "active", verification_code: verificationCode })
-      .eq("id", examId);
-    if (error) throw error;
-    return;
-  }
-
-  const { data, error: fetchError } = await supabase
-    .from("exams")
-    .select("verification_code")
-    .eq("id", examId)
-    .single();
-
-  if (fetchError || !data) throw fetchError ?? new Error("Exam not found.");
-
-  if (!data.verification_code) {
-    throw new Error(SESSION_CODE_REQUIRED_MESSAGE); // caller shows a prompt, not a dead-end error
-  }
-
-  const { error } = await supabase
-    .from("exams")
-    .update({ status: "active" })
-    .eq("id", examId);
-  if (error) throw error;
-}
-
-export async function endExam(examId: string): Promise<void> {
-  const { error } = await supabase
-    .from("exams")
-    .update({ status: "ended" })
-    .eq("id", examId);
-  if (error) throw error;
-}
-
+// don't let a teacher delete an exam that's attached to any class
 export async function deleteExam(examId: string): Promise<void> {
-  const { data, error: fetchError } = await supabase
-    .from("exams")
-    .select("status")
-    .eq("id", examId)
-    .single(); // get the current status of the exam
+  const { count, error: countError } = await supabase
+    .from("class_exams")
+    .select("id", { count: "exact", head: true })
+    .eq("exam_id", examId);
 
-  if (fetchError || !data) throw fetchError || new Error("Exam not found");
+  if (countError) throw countError;
 
-  if (data.status !== "draft" && data.status !== "saved") {
-    throw new Error("Only exams in draft or saved status can be deleted");
+  if ((count ?? 0) > 0) {
+    throw new Error(
+      "This exam has been published to a class and can't be deleted. Remove it from every class first.",
+    );
   }
 
   const { error: deleteError } = await supabase

@@ -46,24 +46,21 @@ type QuestionRow = {
   } | null;
 };
 
-// the exam row plus all of its questions, exactly as fetched
+// the exam row plus all of its questions, exactly as fetched.
 type ExamBuilderRow = {
   id: string;
   title: string;
   exam_code: string | null;
-  status: "draft" | "active" | "ended";
-  duration_minutes: number;
+  status: "draft" | "saved";
   description: string | null;
-  max_attempts: number;
   questions: QuestionRow[];
 };
 
-// shape of the initial settings collected when creating a new exam
+// shape of the initial settings collected when creating a new exam.
 export interface NewExamSettings {
   title: string;
   description: string;
-  durationMinutes: number;
-  maxAttempts: number;
+  subjectId: string; // every exam must live under a subject
 }
 
 // creates a new draft exam with all its initial settings already set, returns its new id
@@ -75,10 +72,9 @@ export async function createDraftExam(
     .from("exams")
     .insert({
       teacher_id: teacherId,
+      subject_id: settings.subjectId,
       title: settings.title,
       description: settings.description,
-      duration_minutes: settings.durationMinutes,
-      max_attempts: settings.maxAttempts,
       status: "draft",
       exam_code: generateExamCode(),
     })
@@ -95,10 +91,8 @@ export interface ExamBuilderData {
   id: string;
   title: string;
   examCode: string | null;
-  status: "draft" | "active" | "ended";
-  durationMinutes: number;
+  status: "draft" | "saved";
   description: string; // empty string when not set, never null in the UI
-  maxAttempts: number;
   questions: BuilderQuestion[];
 }
 
@@ -163,9 +157,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
       title,
       exam_code,
       status,
-       duration_minutes,
-       description,
-       max_attempts,
+      description,
       questions (
         id,
         title,
@@ -200,9 +192,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
     title: row.title,
     examCode: row.exam_code,
     status: row.status,
-    durationMinutes: row.duration_minutes,
     description: row.description ?? "",
-    maxAttempts: row.max_attempts,
     questions: row.questions
       .map(mapQuestionRow)
       .filter((q): q is BuilderQuestion => q !== null), // drop unsupported/bad rows
@@ -335,7 +325,7 @@ export async function deleteQuestion(questionId: string): Promise<void> {
 
 export async function updateExamStatus(
   examId: string,
-  status: "draft" | "saved" | "active",
+  status: "draft" | "saved",
 ): Promise<void> {
   const { error } = await supabase
     .from("exams")
@@ -345,74 +335,14 @@ export async function updateExamStatus(
   if (error) throw error;
 }
 
-export async function updateExamSettings(
+// Updates just the exam-level fields without touching any questions or child rows.
+export async function updateExamDetails(
   examId: string,
-  settings: {
-    description: string;
-    maxAttempts: number;
-    durationMinutes: number;
-    verificationCode?: string;
-    startsAt?: string | null;
-    endsAt?: string | null;
-  },
+  details: { title: string; description: string },
 ): Promise<void> {
-  const updatePayload: Record<string, unknown> = {
-    description: settings.description,
-    max_attempts: settings.maxAttempts,
-    duration_minutes: settings.durationMinutes,
-  };
-
-  if (settings.startsAt !== undefined) updatePayload.starts_at = settings.startsAt;
-  if (settings.endsAt !== undefined) updatePayload.ends_at = settings.endsAt;
-
-  if (settings.verificationCode !== undefined) {
-    const { data: examRow, error: statusError } = await supabase
-      .from("exams")
-      .select("status")
-      .eq("id", examId)
-      .single();
-
-    if (statusError || !examRow) throw statusError ?? new Error("Exam not found.");
-
-    if (examRow.status !== "draft" && examRow.status !== "saved") {
-      throw new Error("Session code can only be changed before an exam is published.");
-    }
-
-    updatePayload.verification_code = settings.verificationCode;
-  }
-
-  const { error } = await supabase.from("exams").update(updatePayload).eq("id", examId);
-  if (error) throw error;
-}
-
-// full settings snapshot for the Edit Settings modal
-export interface ExamSettingsData {
-  description: string;
-  durationMinutes: number;
-  maxAttempts: number;
-  verificationCode: string | null;
-  status: "draft" | "saved" | "active" | "ended";
-  startsAt: string | null;
-  endsAt: string | null;
-}
-
-// fetches one exam's editable settings, including its current status
-export async function getExamSettings(examId: string): Promise<ExamSettingsData> {
-  const { data, error } = await supabase
+  const { error } = await supabase
     .from("exams")
-    .select("description, duration_minutes, max_attempts, verification_code, status, starts_at, ends_at")
-    .eq("id", examId)
-    .single();
-
-  if (error || !data) throw error ?? new Error("Exam not found.");
-
-  return {
-    description: data.description ?? "",
-    durationMinutes: data.duration_minutes,
-    maxAttempts: data.max_attempts,
-    verificationCode: data.verification_code,
-    status: data.status,
-    startsAt: data.starts_at,
-    endsAt: data.ends_at,
-  };
+    .update({ title: details.title, description: details.description })
+    .eq("id", examId);
+  if (error) throw error;
 }

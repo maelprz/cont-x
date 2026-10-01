@@ -1,17 +1,18 @@
 import { useState } from "react";
-import { updateExamSettings } from "../services/examBuilderService";
+import { updateClassExamSettings } from "../services/classExamService";
 
-// Saves edited settings from the Edit Settings modal.
+// saves changes to an existing class_exam's settings
 export function useUpdateExamSettingsForm() {
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   async function saveSettings(
-    examId: string,
+    classExamId: string,
     settings: {
-      description: string;
-      maxAttempts: number;
       durationMinutes: number;
+      maxAttempts: number;
+      passMark: number | null;
+      randomizeOrder: boolean;
       verificationCode?: string;
       startsAt: string | null;
       endsAt: string | null;
@@ -20,7 +21,7 @@ export function useUpdateExamSettingsForm() {
     setIsSaving(true);
     setError(null);
     try {
-      await updateExamSettings(examId, settings);
+      await updateClassExamSettings(classExamId, settings);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save settings.");

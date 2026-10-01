@@ -1,15 +1,15 @@
 import { useState, useEffect } from "react";
-import { getExamSettings } from "../services/examBuilderService";
-import type { ExamSettingsData } from "../services/examBuilderService";
+import { getClassExamSettings } from "../services/classExamService";
+import type { ClassExamSettingsData } from "../services/classExamService";
 
-// Loads one exam's current settings, whenever examId changes.
-export function useExamSettings(examId: string | null) {
-  const [settings, setSettings] = useState<ExamSettingsData | null>(null);
+// Fetches and manages the settings for a specific class_exam
+export function useExamSettings(classExamId: string | null) {
+  const [settings, setSettings] = useState<ClassExamSettingsData | null>(null);
   const [isLoading, setIsLoading] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
   useEffect(() => {
-    if (!examId) {
+    if (!classExamId) {
       setSettings(null); // nothing to load, clear any stale data
       return;
     }
@@ -20,7 +20,7 @@ export function useExamSettings(examId: string | null) {
       setIsLoading(true);
       setError(null);
       try {
-        const data = await getExamSettings(examId!);
+        const data = await getClassExamSettings(classExamId!);
         if (isMounted) setSettings(data);
       } catch (err) {
         if (isMounted) {
@@ -36,7 +36,7 @@ export function useExamSettings(examId: string | null) {
     return () => {
       isMounted = false; // cleanup if the modal closes mid-fetch
     };
-  }, [examId]);
+  }, [classExamId]);
 
   return { settings, isLoading, error };
 }
