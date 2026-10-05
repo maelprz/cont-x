@@ -1,9 +1,6 @@
 import { useState } from "react";
 import { Filter, LayoutGrid } from "lucide-react";
-import type {
-  ExamCard,
-  ExamLibraryScreenProps,
-} from "./examLibraryScreen.types";
+import type { ExamLibraryScreenProps } from "./examLibraryScreen.types";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { ExamCardTile } from "../../components/examLibrary/examCardTile";
@@ -14,15 +11,21 @@ import { SetSessionCodeModal } from "../../components/examLibrary/setSessionCode
 import { EditSettingsModal } from "../../components/examLibrary/editSettingsModal";
 import { CreateExamModal } from "../../components/examLibrary/createExamModal";
 import { CreateNewCard } from "../../components/examLibrary/createNewCard";
+import { ManageClassesModal } from "../../components/examLibrary/manageClassesModal";
+import { AttachClassModal } from "../../components/examLibrary/attachClassModal";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamLibrary } from "../../hooks/useExamLibrary";
 import { useCreateExam } from "../../hooks/useCreateExam";
 import { useExamCardActions } from "../../hooks/useExamCardActions";
+import { useClassExamActions } from "../../hooks/useClassExamActions";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import type { NewExamSettings } from "../../services/examBuilderService";
-import { getExamCardNavigation } from "../../router/examCardNavigation";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which exam Violation Monitoring shows
+
+type ConfirmAction =
+  | { type: "endClassExam"; classExamId: string }
+  | { type: "deleteExam"; examId: string };
 
 export function ExamLibraryScreen({
   exams: examsProp,
@@ -42,49 +45,37 @@ export function ExamLibraryScreen({
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { createExam, isCreating, error: createError } = useCreateExam();
-  const setCurrentExamId = useExamBuilderStore(
-    (state) => state.setCurrentExamId,
-  );
-  const setOpenedFromEditExam = useExamBuilderStore(
-    (state) => state.setOpenedFromEditExam,
-  );
+  const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
+  const setCurrentExamIdResult = useExamResultsStore((state) => state.setCurrentExamId);
+  const setCurrentExamIdViolation = useViolationMonitoringStore((state) => state.setCurrentExamId);
 
-  const setCurrentExamIdResult = useExamResultsStore(
-    (state) => state.setCurrentExamId,
-  );
-
-  const setCurrentExamIdViolation = useViolationMonitoringStore(
-    (state) => state.setCurrentExamId,
-  );
-
+  const { handleDelete, isProcessing: isDeleting, error: deleteError } = useExamCardActions();
   const {
     handlePublish,
     handleEnd,
-    handleDelete,
-    isProcessing,
-    error: actionError,
-  } = useExamCardActions();
+    handleRemove,
+    isProcessing: isClassExamProcessing,
+    error: classExamError,
+  } = useClassExamActions();
 
-  // tracks which exam's confirmation dialog is open, and which action it's for
-  const [confirmAction, setConfirmAction] = useState<{
-    examId: string;
-    type: "end" | "delete";
-  } | null>(null);
+  const isProcessing = isDeleting || isClassExamProcessing;
+  const actionError = deleteError ?? classExamError;
 
-  // holds the code to show after a successful publish, null when no overlay is open
-  const [publishedCode, setPublishedCode] = useState<string | null>(null);
-  const [settingsExamId, setSettingsExamId] = useState<string | null>(null); // which exam's settings modal is open
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [publishedCode, setPublishedCode] = useState<string | null>(null); // shown after a successful activation
+  const [settingsClassExamId, setSettingsClassExamId] = useState<string | null>(null);
+  const [manageClassesExamId, setManageClassesExamId] = useState<string | null>(null);
+  const [attachClassExamId, setAttachClassExamId] = useState<string | null>(null);
 
-  const [publishTarget, setPublishTarget] = useState<{
-    examId: string;
-    examCode: string;
-  } | null>(null); // exam awaiting a session code before it can publish
+  // exam awaiting a session code before its class attachment can go active
+  const [activateTarget, setActivateTarget] = useState<{ classExamId: string; examCode: string } | null>(null);
+
+  const manageClassesExam = exams.find((e) => e.id === manageClassesExamId) ?? null;
 
   const handleCreateExam = async (settings: NewExamSettings) => {
     const newExamId = await createExam(settings);
     if (newExamId) {
       setCurrentExamId(newExamId);
-      setOpenedFromEditExam(false);
       setIsCreateModalOpen(false);
       onCreateNewAssessment?.();
       navigateTo("examBuilder");
@@ -96,42 +87,52 @@ export function ExamLibraryScreen({
     onSearchChange?.(q);
   };
 
-  // tries to publish immediately; if the exam has no session code yet, opens the prompt instead
-  const requestPublish = async (examId: string, examCode: string) => {
-    const result = await handlePublish(examId);
+  // routes the user depending on the exam's status and whether it has any class attachments yet
+  const handleCardCta = (examId: string, status: "draft" | "saved", hasAttachments: boolean) => {
+    if (status === "draft") {
+      setCurrentExamId(examId);
+      navigateTo("examBuilder");
+      return;
+    }
+    if (hasAttachments) {
+      setManageClassesExamId(examId);
+    } else {
+      setAttachClassExamId(examId);
+    }
+  };
+
+  // tries to activate immediately; if this class has no session code yet, opens the prompt instead
+  const requestActivate = async (classExamId: string, examCode: string) => {
+    const result = await handlePublish(classExamId);
     if (result === "success") {
       setPublishedCode(examCode);
       refetch();
     } else if (result === "needsCode") {
-      setPublishTarget({ examId, examCode }); // same behavior stays for exams that already have a code
+      setActivateTarget({ classExamId, examCode });
     }
     // "error" case falls through — actionError is already set and shown via the existing banner
   };
 
-  // runs after the teacher enters a code in the prompt — sets it and publishes together
-  const confirmPublishWithCode = async (code: string) => {
-    if (!publishTarget) return;
-    const result = await handlePublish(publishTarget.examId, code);
+  // runs after the teacher enters a code in the prompt — sets it and activates together
+  const confirmActivateWithCode = async (code: string) => {
+    if (!activateTarget) return;
+    const result = await handlePublish(activateTarget.classExamId, code);
     if (result === "success") {
-      setPublishedCode(publishTarget.examCode);
-      setPublishTarget(null);
+      setPublishedCode(activateTarget.examCode);
+      setActivateTarget(null);
       refetch();
     }
     // "error" case: actionError is shown inside the modal itself, modal stays open
   };
 
-  // opens the confirmation dialog instead of acting immediately
-  const requestEnd = (examId: string) =>
-    setConfirmAction({ examId, type: "end" });
-  const requestDelete = (examId: string) =>
-    setConfirmAction({ examId, type: "delete" });
+  const requestEnd = (classExamId: string) => setConfirmAction({ type: "endClassExam", classExamId });
+  const requestDelete = (examId: string) => setConfirmAction({ type: "deleteExam", examId });
 
-  // runs whichever action the teacher confirmed, then refreshes the list
   const confirmPendingAction = async () => {
     if (!confirmAction) return;
     const didSucceed =
-      confirmAction.type === "end"
-        ? await handleEnd(confirmAction.examId)
+      confirmAction.type === "endClassExam"
+        ? await handleEnd(confirmAction.classExamId)
         : await handleDelete(confirmAction.examId);
 
     if (didSucceed) {
@@ -140,24 +141,31 @@ export function ExamLibraryScreen({
     }
   };
 
+  const handleRemoveAttachment = async (classExamId: string) => {
+    // low-risk action (only ever enabled for not-yet-live attachments) — no confirmation dialog
+    const didSucceed = await handleRemove(classExamId);
+    if (didSucceed) refetch();
+  };
+
+  // routes the user to either Violation Monitoring or Exam Results
+  const handleNavigateFromClassExam = (
+    _classExamId: string,
+    targetScreen: "violationMonitoring" | "examResults",
+    examId: string,
+  ) => {
+    if (targetScreen === "examResults") {
+      setCurrentExamIdResult(examId);
+    } else {
+      setCurrentExamIdViolation(examId);
+    }
+    navigateTo(targetScreen);
+  };
+
   const filtered = exams.filter(
     (e) =>
       e.title.toLowerCase().includes(search.toLowerCase()) ||
       e.code.toLowerCase().includes(search.toLowerCase()),
   );
-
-  const openExamByStatus = (examId: string, status: ExamCard["status"]) => {
-    const { targetScreen } = getExamCardNavigation(status);
-    if (targetScreen === "examResults") {
-      setCurrentExamIdResult(examId);
-    } else if (targetScreen === "violationMonitoring") {
-      setCurrentExamIdViolation(examId); // violation screen reads from here
-    } else {
-      setCurrentExamId(examId);
-      setOpenedFromEditExam(false);
-    }
-    navigateTo(targetScreen);
-  };
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
@@ -240,28 +248,27 @@ export function ExamLibraryScreen({
           <div className="grid grid-cols-3 gap-5">
             <CreateNewCard onClick={() => setIsCreateModalOpen(true)} />
             {filtered.map((exam) => {
-              const { ctaLabel } = getExamCardNavigation(exam.status);
+              const hasAttachments = exam.classAttachments.length > 0;
+              const hasActiveAttachment = exam.classAttachments.some((a) => a.status === "active");
 
               return (
                 <ExamCardTile
                   key={exam.id}
                   exam={{
                     ...exam,
-                    ctaLabel,
-                    onCta: () => openExamByStatus(exam.id, exam.status),
+                    onCta: () => handleCardCta(exam.id, exam.status, hasAttachments),
                   }}
-                  onClick={() => openExamByStatus(exam.id, exam.status)} // card body follows the same destination
+                  onClick={() => handleCardCta(exam.id, exam.status, hasAttachments)}
                   menu={
                     <ExamCardMenu
                       status={exam.status}
+                      hasClassAttachments={hasAttachments}
+                      hasActiveClassAttachment={hasActiveAttachment}
                       isProcessing={isProcessing}
-                      onPublish={() => requestPublish(exam.id, exam.code)}
-                      onEnd={() => requestEnd(exam.id)}
+                      onManageClasses={() => handleCardCta(exam.id, exam.status, hasAttachments)}
                       onDelete={() => requestDelete(exam.id)}
-                      onEditSettings={() => setSettingsExamId(exam.id)}
                       onEditExam={() => {
                         setCurrentExamId(exam.id);
-                        setOpenedFromEditExam(true);
                         navigateTo("examBuilder");
                       }}
                     />
@@ -282,28 +289,53 @@ export function ExamLibraryScreen({
 
       <ConfirmActionDialog
         isOpen={confirmAction !== null}
-        title={
-          confirmAction?.type === "end" ? "End this exam?" : "Delete this exam?"
-        }
+        title={confirmAction?.type === "endClassExam" ? "End this class's exam?" : "Delete this exam?"}
         message={
-          confirmAction?.type === "end"
-            ? "Students will no longer be able to join or submit answers."
+          confirmAction?.type === "endClassExam"
+            ? "Students in this class will no longer be able to join or submit answers."
             : "This permanently removes the exam and all of its questions."
         }
-        confirmLabel={
-          confirmAction?.type === "end" ? "End Exam" : "Delete Exam"
-        }
+        confirmLabel={confirmAction?.type === "endClassExam" ? "End Exam" : "Delete Exam"}
         isProcessing={isProcessing}
         error={actionError}
         onConfirm={confirmPendingAction}
         onCancel={() => setConfirmAction(null)}
       />
 
+      <ManageClassesModal
+        isOpen={manageClassesExamId !== null}
+        exam={manageClassesExam}
+        isProcessing={isProcessing}
+        error={actionError}
+        onClose={() => setManageClassesExamId(null)}
+        onAttachNew={() => manageClassesExamId && setAttachClassExamId(manageClassesExamId)}
+        onActivate={(classExamId) =>
+          manageClassesExam && requestActivate(classExamId, manageClassesExam.code)
+        }
+        onEnd={requestEnd}
+        onRemove={handleRemoveAttachment}
+        onEditSettings={(classExamId) => setSettingsClassExamId(classExamId)}
+        onNavigate={(classExamId, targetScreen) =>
+          manageClassesExamId && handleNavigateFromClassExam(classExamId, targetScreen, manageClassesExamId)
+        }
+      />
+
+      <AttachClassModal
+        isOpen={attachClassExamId !== null}
+        examId={attachClassExamId}
+        onClose={() => setAttachClassExamId(null)}
+        onAttached={() => {
+          // keep (or reopen) the management list so the new attachment is visible right away
+          if (attachClassExamId) setManageClassesExamId(attachClassExamId);
+          refetch();
+        }}
+      />
+
       {/* Overlay / Modals */}
       <EditSettingsModal
-        isOpen={settingsExamId !== null}
-        examId={settingsExamId}
-        onClose={() => setSettingsExamId(null)}
+        isOpen={settingsClassExamId !== null}
+        classExamId={settingsClassExamId}
+        onClose={() => setSettingsClassExamId(null)}
         onSaved={refetch}
       />
 
@@ -314,11 +346,11 @@ export function ExamLibraryScreen({
       />
 
       <SetSessionCodeModal
-        isOpen={publishTarget !== null}
+        isOpen={activateTarget !== null}
         isProcessing={isProcessing}
         error={actionError}
-        onCancel={() => setPublishTarget(null)}
-        onConfirm={confirmPublishWithCode}
+        onCancel={() => setActivateTarget(null)}
+        onConfirm={confirmActivateWithCode}
       />
     </div>
   );

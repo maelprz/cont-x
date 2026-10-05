@@ -3,42 +3,40 @@ import { useExamSettings } from "../../hooks/useExamSettings";
 import { useUpdateExamSettingsForm } from "../../hooks/useUpdateExamSettingsForm";
 import { isoToLocalInputValue, localInputValueToIso } from "../../lib/scheduleDateTime";
 
+// editing setting for a single class attachment
 export function EditSettingsModal({
   isOpen,
-  examId,
+  classExamId,
   onClose,
   onSaved,
 }: {
   isOpen: boolean;
-  examId: string | null;
+  classExamId: string | null;
   onClose: () => void;
   onSaved: () => void; // called after a successful save, so the parent can refetch
 }) {
-  const { settings, isLoading, error: loadError } = useExamSettings(isOpen ? examId : null);
+  const { settings, isLoading, error: loadError } = useExamSettings(isOpen ? classExamId : null);
   const { saveSettings, isSaving, error: saveError } = useUpdateExamSettingsForm();
 
-  const [description, setDescription] = useState("");
   const [durationHours, setDurationHours] = useState(0);
   const [durationMinutesInput, setDurationMinutesInput] = useState(0);
   const [isScheduled, setIsScheduled] = useState(false);
   const [startsAtInput, setStartsAtInput] = useState("");
   const [endsAtInput, setEndsAtInput] = useState("");
   const [maxAttempts, setMaxAttempts] = useState(1);
+  const [passMarkInput, setPassMarkInput] = useState(""); // blank = no minimum
   const [verificationCode, setVerificationCode] = useState("");
+  const [randomizeOrder, setRandomizeOrder] = useState(false);
 
-  // shuffle is intentionally NOT saved anywhere — UI-only per current scope,
-  // resets to unchecked every time the modal opens
-  const [shuffleQuestions, setShuffleQuestions] = useState(false);
-
-  // fills the form once real settings arrive for this exam
+  // fills the form once real settings arrive for this class attachment
   useEffect(() => {
     if (!settings) return;
-    setDescription(settings.description);
     setDurationHours(Math.floor(settings.durationMinutes / 60));
     setDurationMinutesInput(settings.durationMinutes % 60);
     setMaxAttempts(settings.maxAttempts);
+    setPassMarkInput(settings.passMark !== null ? String(settings.passMark) : "");
     setVerificationCode(settings.verificationCode ?? "");
-    setShuffleQuestions(false);
+    setRandomizeOrder(settings.randomizeOrder);
     setIsScheduled(settings.startsAt !== null || settings.endsAt !== null);
     setStartsAtInput(isoToLocalInputValue(settings.startsAt));
     setEndsAtInput(isoToLocalInputValue(settings.endsAt));
@@ -46,18 +44,20 @@ export function EditSettingsModal({
 
   if (!isOpen) return null; // render nothing when closed
 
-  // session code can only be changed before the exam goes live
-  const canEditVerificationCode = settings?.status === "draft" || settings?.status === "saved";
+  // session code can only be changed before this class goes live
+  const canEditVerificationCode = settings?.status === "scheduled";
 
   const handleSave = async () => {
-    if (!examId) return;
+    if (!classExamId) return;
 
     const totalMinutes = durationHours * 60 + durationMinutesInput;
+    const trimmedPassMark = passMarkInput.trim();
 
-    const didSave = await saveSettings(examId, {
-      description: description.trim(),
+    const didSave = await saveSettings(classExamId, {
       maxAttempts,
       durationMinutes: totalMinutes,
+      passMark: trimmedPassMark === "" ? null : Number(trimmedPassMark),
+      randomizeOrder,
       ...(canEditVerificationCode ? { verificationCode: verificationCode.trim() } : {}),
       startsAt: isScheduled ? localInputValueToIso(startsAtInput) : null,
       endsAt: isScheduled ? localInputValueToIso(endsAtInput) : null,
@@ -81,7 +81,7 @@ export function EditSettingsModal({
       >
         <h2 className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">Edit Settings</h2>
         <p className="text-[13px] mb-5 text-[var(--color-base-content)] opacity-60">
-          Update this exam's settings.
+          {settings ? `Update settings for ${settings.className}.` : "Update this class's settings."}
         </p>
 
         {isLoading && <p className="text-[13px] opacity-60 mb-4">Loading settings...</p>}
@@ -93,16 +93,6 @@ export function EditSettingsModal({
 
         {settings && (
           <>
-            <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
-              Description
-            </label>
-            <textarea
-              value={description}
-              onChange={(e) => setDescription(e.target.value)}
-              rows={2}
-              className="w-full px-3 py-2 rounded-lg border text-[13px] outline-none resize-none mb-4 bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)] font-[inherit]"
-            />
-
             <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
               Exam Duration
             </label>
@@ -137,7 +127,7 @@ export function EditSettingsModal({
                 onChange={(e) => setIsScheduled(e.target.checked)}
               />
               <span className="text-[13px] font-medium text-[var(--color-base-content)]">
-                Schedule this exam automatically
+                Schedule this class automatically
               </span>
             </label>
 
@@ -167,17 +157,34 @@ export function EditSettingsModal({
                 </div>
               </div>
             )}
-            
-            <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
-              Allowed Attempts
-            </label>
-            <input
-              type="number"
-              min={1}
-              value={maxAttempts}
-              onChange={(e) => setMaxAttempts(Math.max(1, Number(e.target.value)))}
-              className="w-20 px-3 py-2 rounded-lg border text-[13px] mb-4 bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
-            />
+
+            <div className="flex items-end gap-3 mb-4">
+              <div>
+                <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
+                  Allowed Attempts
+                </label>
+                <input
+                  type="number"
+                  min={1}
+                  value={maxAttempts}
+                  onChange={(e) => setMaxAttempts(Math.max(1, Number(e.target.value)))}
+                  className="w-20 px-3 py-2 rounded-lg border text-[13px] bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
+                />
+              </div>
+              <div>
+                <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
+                  Pass Mark <span style={{ opacity: 0.5, fontWeight: 400 }}>(optional)</span>
+                </label>
+                <input
+                  type="number"
+                  min={0}
+                  value={passMarkInput}
+                  onChange={(e) => setPassMarkInput(e.target.value)}
+                  placeholder="No minimum"
+                  className="w-28 px-3 py-2 rounded-lg border text-[13px] bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
+                />
+              </div>
+            </div>
 
             <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
               Session Code
@@ -193,19 +200,18 @@ export function EditSettingsModal({
               />
             ) : (
               <p className="text-[12px] mb-1 opacity-60 text-[var(--color-base-content)]">
-                {settings.verificationCode ?? "—"} (locked — exam is already published)
+                {settings.verificationCode ?? "—"} (locked — this class is already live or has ended)
               </p>
             )}
             <p className="text-[11px] mb-4 opacity-50 text-[var(--color-base-content)]">
               Students enter this right before their session begins.
             </p>
 
-            {/* Shuffle is UI-only for now — this value is never saved */}
             <label className="flex items-center gap-2 mb-5 cursor-pointer">
               <input
                 type="checkbox"
-                checked={shuffleQuestions}
-                onChange={(e) => setShuffleQuestions(e.target.checked)}
+                checked={randomizeOrder}
+                onChange={(e) => setRandomizeOrder(e.target.checked)}
               />
               <span className="text-[13px] text-[var(--color-base-content)]">
                 Shuffle question order for each student
