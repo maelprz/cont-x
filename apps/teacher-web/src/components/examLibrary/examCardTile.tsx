@@ -2,6 +2,19 @@ import { Calendar, FileText, Users, Clock, BadgeCheck } from "lucide-react";
 import type { ExamCard } from "../../screens/examLibrary/examLibraryScreen.types";
 import { StatusBadge } from "./statusBadge";
 
+// footer string for class attachments, e.g. "Live in 3 classes" or "Scheduled in 1 class"
+function summarizeAttachments(exam: ExamCard): string | null {
+  if (exam.classAttachments.length === 0) return null;
+
+  const activeCount = exam.classAttachments.filter((a) => a.status === "active").length;
+  if (activeCount > 0) return `Live in ${activeCount} class${activeCount === 1 ? "" : "es"}`;
+
+  const scheduledCount = exam.classAttachments.filter((a) => a.status === "scheduled").length;
+  if (scheduledCount > 0) return `Scheduled in ${scheduledCount} class${scheduledCount === 1 ? "" : "es"}`;
+
+  return `Ended in ${exam.classAttachments.length} class${exam.classAttachments.length === 1 ? "" : "es"}`;
+}
+
 export function ExamCardTile({
   exam,
   onClick,
@@ -13,6 +26,9 @@ export function ExamCardTile({
 }) {
   const isDraft = exam.status === "draft";
   const isClickable = Boolean(onClick);
+  // replaces the old single exam.studentCount, which assumed one audience
+  const totalStudents = exam.classAttachments.reduce((sum, a) => sum + a.studentCount, 0);
+  const attachmentSummary = summarizeAttachments(exam);
 
   return (
     <div
@@ -84,10 +100,11 @@ export function ExamCardTile({
       {/* Card footer */}
       <div className="flex items-center justify-between px-5 py-3 border-t border-[var(--color-base-300)]">
         <div className="flex items-center gap-1.5 text-[12px] text-[var(--color-base-content)] opacity-55">
-          {exam.studentCount !== undefined && (
+          {exam.classAttachments.length > 0 && (
             <>
               <Users size={13} />
-              <span>{exam.studentCount} Students</span>
+              <span>{totalStudents} Students</span>
+              {attachmentSummary && <span className="opacity-70">· {attachmentSummary}</span>}
             </>
           )}
           {isDraft && exam.lastEditedLabel && (
