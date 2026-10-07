@@ -10,7 +10,6 @@ export interface TeacherDashboardData {
 }
 
 // Fetches all exams for a teacher and derives dashboard summary numbers from them.
-// Note: totalStudents sums per-exam session counts, so a student in two exams counts twice.
 export function useTeacherDashboard(teacherId: string | undefined) {
   const [data, setData] = useState<TeacherDashboardData | null>(null); // holds the derived dashboard data
   const [isLoading, setIsLoading] = useState(true); // true while the fetch is in flight
@@ -34,7 +33,8 @@ export function useTeacherDashboard(teacherId: string | undefined) {
 
         if (!isCancelled) {
           const totalStudents = exams.reduce(
-            (sum, exam) => sum + (exam.studentCount ?? 0), // add up each exam's session count
+            (sum, exam) =>
+              sum + exam.classAttachments.reduce((a, attachment) => a + attachment.studentCount, 0),
             0,
           );
 

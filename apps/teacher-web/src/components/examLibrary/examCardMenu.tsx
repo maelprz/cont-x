@@ -2,11 +2,10 @@ import { useState } from "react";
 import { MoreVertical } from "lucide-react";
 import type { ExamStatus } from "../../screens/examLibrary/examLibraryScreen.types";
 
-// Dropdown menu for card actions (edit, manage classes, delete). The parent component handles the actual actions.
 type ExamCardMenuProps = {
   status: ExamStatus; // draft | saved now
   hasClassAttachments: boolean;
-  hasActiveClassAttachment: boolean; // disables content editing while a class is mid-exam
+  hasActiveClassAttachment: boolean;
   isProcessing: boolean;
   onManageClasses: () => void; // opens the class-attachment list (publish/end/settings live there now)
   onDelete: () => void;
@@ -66,11 +65,8 @@ export function ExamCardMenu({
             className="absolute right-0 top-full mt-1 w-48 rounded-lg border shadow-lg z-50 py-1 bg-[var(--color-base-100)] border-[var(--color-base-300)]"
           >
             <button
-              onClick={(event) =>
-                !isProcessing && !hasActiveClassAttachment && runAndClose(event, onEditExam)
-              }
-              disabled={isProcessing || hasActiveClassAttachment}
-              title={hasActiveClassAttachment ? "Can't edit content while a class is live" : undefined}
+              onClick={(event) => !isProcessing && runAndClose(event, onEditExam)}
+              disabled={isProcessing}
               className="w-full text-left px-3 py-2 text-[13px] cursor-pointer border-none bg-transparent transition-colors duration-150 hover:bg-[var(--color-base-200)] disabled:opacity-40 disabled:cursor-not-allowed text-[var(--color-base-content)]"
             >
               Edit Exam

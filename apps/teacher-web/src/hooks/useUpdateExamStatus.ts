@@ -33,18 +33,5 @@ export function useUpdateExamStatus() {
     }
   }
 
-  async function saveExamEdit(examId: string): Promise<boolean> {
-    setError(null);
-    try {
-      await updateExamStatus(examId, "active");
-      return true;
-      } catch (error) {
-        setError(
-          error instanceof Error ? error.message : "Could not save exam. Try again.",
-        );
-      return false;
-    }
-  }
-
-  return { saveDraft, saveExam, saveExamEdit, error };
+  return { saveDraft, saveExam, error };
 }
