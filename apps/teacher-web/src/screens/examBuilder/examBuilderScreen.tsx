@@ -357,7 +357,6 @@ export function ExamBuilderScreen({
   const {
     saveDraft,
     saveExam,
-    saveExamEdit,
     error: statusError,
   } = useUpdateExamStatus();
 
@@ -383,7 +382,6 @@ export function ExamBuilderScreen({
     }
   };
 
-  // marks the exam as draft but not yet visible to students
   const handleSaveExam = async (): Promise<boolean> => {
     if (!examData?.id) return false;
     
@@ -395,13 +393,9 @@ export function ExamBuilderScreen({
       return false;
     }
     const didSave = await saveExam(examData.id);
-    const didSaveEdit = await saveExamEdit(examData.id);
     setIsSavingExamState(false);
     if (didSave) {
-      showToast("Exam saved.", "success");
-      navigateTo("examLibrary");
-    } else if (examData.status === "active" && didSaveEdit) {
-      showToast("Exam updated.", "success");
+      showToast(openedFromEditExam ? "Exam updated." : "Exam saved.", "success");
       navigateTo("examLibrary");
     } else {
       showToast(statusError ?? "Could not save exam.", "error");

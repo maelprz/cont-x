@@ -7,15 +7,9 @@ import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
-import { getExamCardNavigation } from "../../router/examCardNavigation";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
-import type { ExamCard } from "../examLibrary/examLibraryScreen.types";
-import { useExamResultsStore } from "../../store/useExamResultsStore";
-import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which exam Violation Monitoring shows
+import { StatusBadge, ClassExamStatusBadge } from "../../components/examLibrary/statusBadge";
 
-// ---------------------------------------------------------------------------
-// ---------------------------------------------------------------------------
-// one summary stat card, same role as DetailCard in examConfirmationScreen
 function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
   return (
     <div
@@ -55,27 +49,14 @@ export function DashboardScreen({}: DashboardScreenProps) {
   const setOpenedFromEditExam = useExamBuilderStore(
     (state) => state.setOpenedFromEditExam,
   );
-  const setCurrentExamIdResult = useExamResultsStore(
-    (state) => state.setCurrentExamId,
-  );
-
-  const setCurrentExamIdViolation = useViolationMonitoringStore(
-    (state) => state.setCurrentExamId,
-  );
-
-  // navigates to wherever this exam's current status says it should go
-  const openExamByStatus = (examId: string, status: ExamCard["status"]) => {
-    const { targetScreen } = getExamCardNavigation(status);
-
-    if (targetScreen === "examResults") {
-      setCurrentExamIdResult(examId);
-    } else if (targetScreen === "violationMonitoring") {
-      setCurrentExamIdViolation(examId); // violation screen reads from here
-    } else {
+  const openExam = (examId: string, status: "draft" | "saved") => {
+    if (status === "draft") {
       setCurrentExamId(examId);
-      setOpenedFromEditExam(false);
+      setOpenedFromEditExam(false); // still being authored, not a live-exam edit
+      navigateTo("examBuilder");
+    } else {
+      navigateTo("examLibrary");
     }
-    navigateTo(targetScreen);
   };
 
   // pulls the logged in user's name directly from the auth store
@@ -188,7 +169,13 @@ export function DashboardScreen({}: DashboardScreenProps) {
               </thead>
               <tbody>
                 {recentExams.map((exam, index) => {
-                  const { ctaLabel } = getExamCardNavigation(exam.status); // status-driven label for this row
+                  const studentCount = exam.classAttachments.reduce(
+                    (sum, attachment) => sum + attachment.studentCount,
+                    0,
+                  );
+                  const hasActiveAttachment = exam.classAttachments.some(
+                    (attachment) => attachment.status === "active",
+                  );
 
                   return (
                     <tr
@@ -205,35 +192,20 @@ export function DashboardScreen({}: DashboardScreenProps) {
                         {exam.code}
                       </td>
                       <td className="py-3.5 px-5">
-                        <span
-                          className="text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full"
-                          style={{
-                            backgroundColor:
-                              exam.status === "active"
-                                ? "var(--color-success)"
-                                : exam.status === "draft"
-                                  ? "var(--color-base-300)"
-                                  : "var(--color-warning)",
-                            color:
-                              exam.status === "active"
-                                ? "var(--color-success-content)"
-                                : exam.status === "draft"
-                                  ? "var(--color-base-content)"
-                                  : "var(--color-warning-content)",
-                          }}
-                        >
-                          {exam.status}
-                        </span>
+                        <div className="flex items-center gap-1.5">
+                          <StatusBadge status={exam.status} />
+                          {hasActiveAttachment && <ClassExamStatusBadge status="active" />}
+                        </div>
                       </td>
                       <td className="py-3.5 px-5 text-sm opacity-70">
-                        {exam.studentCount ?? 0}
+                        {studentCount}
                       </td>
                       <td className="py-3.5 px-5 text-sm opacity-70">
                         {exam.createdAt}
                       </td>
                       <td className="py-3.5 px-5">
                         <button
-                          onClick={() => openExamByStatus(exam.id, exam.status)}
+                          onClick={() => openExam(exam.id, exam.status)}
                           className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80"
                           style={{
                             borderColor: "var(--color-base-300)",
@@ -241,7 +213,7 @@ export function DashboardScreen({}: DashboardScreenProps) {
                             backgroundColor: "transparent",
                           }}
                         >
-                          {ctaLabel}
+                          {exam.ctaLabel ?? "Open"}
                         </button>
                       </td>
                     </tr>

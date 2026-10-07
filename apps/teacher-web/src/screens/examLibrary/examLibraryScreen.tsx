@@ -46,6 +46,7 @@ export function ExamLibraryScreen({
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { createExam, isCreating, error: createError } = useCreateExam();
   const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
+  const setOpenedFromEditExam = useExamBuilderStore((state) => state.setOpenedFromEditExam);
   const setCurrentExamIdResult = useExamResultsStore((state) => state.setCurrentExamId);
   const setCurrentExamIdViolation = useViolationMonitoringStore((state) => state.setCurrentExamId);
 
@@ -76,6 +77,7 @@ export function ExamLibraryScreen({
     const newExamId = await createExam(settings);
     if (newExamId) {
       setCurrentExamId(newExamId);
+      setOpenedFromEditExam(false); // brand new exam, not editing a live one
       setIsCreateModalOpen(false);
       onCreateNewAssessment?.();
       navigateTo("examBuilder");
@@ -87,10 +89,10 @@ export function ExamLibraryScreen({
     onSearchChange?.(q);
   };
 
-  // routes the user depending on the exam's status and whether it has any class attachments yet
   const handleCardCta = (examId: string, status: "draft" | "saved", hasAttachments: boolean) => {
     if (status === "draft") {
       setCurrentExamId(examId);
+      setOpenedFromEditExam(false); // still being authored, never attached to a class yet
       navigateTo("examBuilder");
       return;
     }
@@ -147,7 +149,6 @@ export function ExamLibraryScreen({
     if (didSucceed) refetch();
   };
 
-  // routes the user to either Violation Monitoring or Exam Results
   const handleNavigateFromClassExam = (
     _classExamId: string,
     targetScreen: "violationMonitoring" | "examResults",
@@ -269,6 +270,7 @@ export function ExamLibraryScreen({
                       onDelete={() => requestDelete(exam.id)}
                       onEditExam={() => {
                         setCurrentExamId(exam.id);
+                        setOpenedFromEditExam(hasActiveAttachment);
                         navigateTo("examBuilder");
                       }}
                     />

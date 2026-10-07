@@ -14,8 +14,9 @@ export function ExamResultsListScreen() {
   );
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  // only exams the teacher has ended should show up here
-  const endedExams = exams.filter((exam) => exam.status === "ended");
+  const endedExams = exams.filter((exam) =>
+    exam.classAttachments.some((attachment) => attachment.status === "ended"),
+  );
 
   // saves which exam was picked, then opens its results detail screen
   const openResultsFor = (examId: string) => {
@@ -71,7 +72,8 @@ export function ExamResultsListScreen() {
                 key={exam.id}
                 exam={{
                   ...exam, // keeps title, description, counts, etc.
-                  onCta: () => openResultsFor(exam.id), // button click opens results
+                  ctaLabel: "View Results",
+                  onCta: () => openResultsFor(exam.id),
                 }}
                 onClick={() => openResultsFor(exam.id)} // card body click does the same
               />
