@@ -3,13 +3,14 @@ import { UserPlus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { AdminHeader } from "../../components/layoutAdmin/adminHeader";
 import { AdminSidebar } from "../../components/layoutAdmin/adminSidebar";
 import { useUserManagement } from "../../hooks/useUserManagement";
-import type { CreateUserPayload, UpdateUserPayload } from "../../services/userManagementService";
+import type { CreateUserPayload, UpdateUserPayload, UserRecord } from "../../services/userManagementService";
 
-// badge color per role
-const roleBadgeStyle: Record<"teacher" | "student", string> = {
-  teacher: "bg-[var(--color-accent)] text-[var(--color-accent-content)]",
-  student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]",
-};
+const roleBadgeStyle: Record<UserRecord["role"], string> = { 
+  teacher: "bg-[var(--color-accent)] text-[var(--color-accent-content)]", 
+  student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]", 
+  admin: "bg-[var(--color-primary)] text-[var(--color-primary-content)]", 
+  superadmin: "bg-[var(--color-primary)] text-[var(--color-primary-content)]", 
+}; 
 
 // formats a raw ISO timestamp into a readable date string e.g. "2023-10-12"
 function formatDate(isoString: string): string {
