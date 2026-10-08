@@ -1,14 +1,14 @@
-import { supabase } from "./supabaseClient";
+import { supabase } from "./supabaseClient"; // the only import this file needs
 
-export interface AuthUser {
-  id: string;
-  firstName: string;
-  lastName: string;
-  fullName: string;
-  email: string;
-  role: "teacher" | "admin";
-  idNumber: string;
-}
+export interface AuthUser { // the logged-in user's details
+  id: string; // account id
+  firstName: string; // first name
+  lastName: string; // last name
+  fullName: string; // first and last name together
+  email: string; // login email
+  role: "teacher" | "admin" | "superadmin"; // base role, now allowing the future superadmin
+  idNumber: string; // school ID number
+} // end of AuthUser
 
 export async function login(
   idNumber: string,
@@ -66,7 +66,7 @@ export async function login(
     lastName: userData.last_name,
     fullName: `${userData.first_name} ${userData.last_name}`,
     email: userData.email,
-    role: userData.role as "teacher" | "admin",
+    role: userData.role as "teacher" | "admin" | "superadmin",
     idNumber: userData.id_number,
   };
 }
@@ -94,7 +94,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     lastName: userData.last_name,
     fullName: `${userData.first_name} ${userData.last_name}`,
     email: userData.email,
-    role: userData.role as "teacher" | "admin",
+    role: userData.role as "teacher" | "admin" | "superadmin",
     idNumber: userData.id_number,
   };
 }

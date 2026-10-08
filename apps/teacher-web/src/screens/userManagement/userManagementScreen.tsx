@@ -1,16 +1,18 @@
-import { useState } from "react";
+import { useState, useEffect } from "react";
 import { UserPlus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { AdminHeader } from "../../components/layoutAdmin/adminHeader";
 import { AdminSidebar } from "../../components/layoutAdmin/adminSidebar";
 import { useUserManagement } from "../../hooks/useUserManagement";
+import { getCurrentUser, type AuthUser } from "../../services/authService"; // new: tells us who is logged in
 import type { CreateUserPayload, UpdateUserPayload, UserRecord } from "../../services/userManagementService";
 
-const roleBadgeStyle: Record<UserRecord["role"], string> = { 
-  teacher: "bg-[var(--color-accent)] text-[var(--color-accent-content)]", 
-  student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]", 
-  admin: "bg-[var(--color-primary)] text-[var(--color-primary-content)]", 
-  superadmin: "bg-[var(--color-primary)] text-[var(--color-primary-content)]", 
-}; 
+// badge color per role
+const roleBadgeStyle: Record<UserRecord["role"], string> = {
+  teacher: "bg-[var(--color-accent)] text-[var(--color-accent-content)]",
+  student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]",
+  admin: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
+  superadmin: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
+};
 
 // formats a raw ISO timestamp into a readable date string e.g. "2023-10-12"
 function formatDate(isoString: string): string {
@@ -18,7 +20,7 @@ function formatDate(isoString: string): string {
 }
 
 export function UserManagementScreen() {
-  const { users, isLoading, error, createNewUser, editUser, removeUser } =
+  const { users, isLoading, error, createNewUser, editUser, removeUser, changeAdminRole } = // changed: changeAdminRole is new
     useUserManagement();
 
   const [searchQuery, setSearchQuery] = useState("");
@@ -39,6 +41,29 @@ export function UserManagementScreen() {
   // tracks which user row is being edited and the current edit values
   const [editingUserId, setEditingUserId] = useState<string | null>(null);
   const [editingFields, setEditingFields] = useState<UpdateUserPayload>({});
+
+  const [editingIsAdmin, setEditingIsAdmin] = useState(false); // new: value of the Admin checkbox while a row is being edited
+  const [viewer, setViewer] = useState<AuthUser | null>(null); // new: the logged-in person looking at this screen
+
+  useEffect(() => { // new: runs once when the screen opens
+    getCurrentUser().then(setViewer); // new: loads who is logged in so we can decide what to offer
+  }, []); // new: empty list means run only once
+
+  const viewerIsTop = viewer?.role === "admin" || viewer?.role === "superadmin"; // new: true for the top-level account (000 until the rename)
+
+  // new: can the viewer edit or delete this row at all, following the rank rule
+  function canManage(user: UserRecord): boolean {
+    if (!viewer) return false; // not loaded yet, so offer nothing
+    if (viewerIsTop) return true; // the top-level account can manage every row
+    const targetIsAdmin = user.role === "admin" || user.role === "superadmin" || user.has_admin_grant; // is the row an admin of any kind
+    return !targetIsAdmin; // delegated admins can only manage accounts that are not admins
+  }
+
+  // new: can the viewer flip the Admin checkbox on this row
+  function canChangeAdmin(user: UserRecord): boolean {
+    if (!viewer || user.role !== "teacher" || user.id === viewer.id) return false; // only teachers, and never your own row
+    return user.has_admin_grant ? viewerIsTop : true; // revoking needs the top-level account, granting is open to any admin
+  }
 
   // narrows the list to rows matching the search query
   const filteredUsers = users.filter((user) =>
@@ -62,14 +87,19 @@ export function UserManagementScreen() {
     }
   }
 
-  // saves an inline edit
-  async function handleSaveEdit(userId: string) {
-    try {
-      await editUser(userId, editingFields);
-      setEditingUserId(null);
-      setEditingFields({});
-    } catch (err) {
-      alert(err instanceof Error ? err.message : "Failed to update user.");
+  // changed: saves an inline edit, including the Admin checkbox
+  async function handleSaveEdit(user: UserRecord) {
+    try { // show a message instead of crashing if anything is rejected
+      const namesChanged = // did the person change either name
+        editingFields.first_name !== user.first_name || editingFields.last_name !== user.last_name; // compare with the stored values
+      if (namesChanged) await editUser(user.id, editingFields); // save names only when they changed
+      if (editingIsAdmin !== user.has_admin_grant) { // did the checkbox change
+        await changeAdminRole(user.id, editingIsAdmin); // grant or revoke through the edge function
+      }
+      setEditingUserId(null); // leave edit mode
+      setEditingFields({}); // clear the edit values
+    } catch (err) { // something was rejected
+      alert(err instanceof Error ? err.message : "Failed to update user."); // show the real reason
     }
   }
 
@@ -287,13 +317,34 @@ export function UserManagementScreen() {
                       {/* email */}
                       <td className="py-3.5 px-5 text-sm">{user.email}</td>
 
-                      {/* role badge */}
+                      {/* changed: role badges plus the Admin checkbox while editing a teacher */}
                       <td className="py-3.5 px-5">
-                        <span
-                          className={`text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full ${roleBadgeStyle[user.role]}`}
-                        >
-                          {user.role}
-                        </span>
+                        <div className="flex items-center gap-2">
+                          <span
+                            className={`text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full ${roleBadgeStyle[user.role]}`}
+                          >
+                            {user.role}
+                          </span>
+                          {user.has_admin_grant && editingUserId !== user.id && ( // extra badge for teachers who hold the grant
+                            <span className="text-[10px] font-medium uppercase tracking-wide px-2.5 py-1 rounded-full bg-[var(--color-primary)] text-[var(--color-primary-content)]">
+                              admin
+                            </span>
+                          )}
+                          {editingUserId === user.id && user.role === "teacher" && ( // the checkbox only exists while editing a teacher row
+                            <label
+                              className="flex items-center gap-1.5 text-xs cursor-pointer"
+                              title={canChangeAdmin(user) ? "" : "You cannot change the admin role for this account."} // hint shown when the box is disabled
+                            >
+                              <input
+                                type="checkbox" // the Make Admin toggle
+                                checked={editingIsAdmin} // current checkbox value
+                                disabled={!canChangeAdmin(user)} // disabled when the rank rule would reject it
+                                onChange={(e) => setEditingIsAdmin(e.target.checked)} // nothing is sent until Save
+                              />
+                              Admin
+                            </label>
+                          )}
+                        </div>
                       </td>
 
                       {/* created date */}
@@ -301,13 +352,13 @@ export function UserManagementScreen() {
                         {formatDate(user.created_at)}
                       </td>
 
-                      {/* actions */}
+                      {/* changed: actions respect the rank rule */}
                       <td className="py-3.5 px-5">
                         <div className="flex gap-1">
                           {editingUserId === user.id ? (
                             <>
                               <button
-                                onClick={() => handleSaveEdit(user.id)}
+                                onClick={() => handleSaveEdit(user)} // changed: passes the whole row, not just the id
                                 className="px-2 py-1 text-xs rounded bg-[var(--color-primary)] text-[var(--color-primary-content)]"
                               >
                                 Save
@@ -323,25 +374,30 @@ export function UserManagementScreen() {
                               </button>
                             </>
                           ) : (
+                            canManage(user) && ( // hide the pencil on rows the viewer is not allowed to edit
+                              <button
+                                onClick={() => {
+                                  setEditingUserId(user.id);
+                                  setEditingFields({
+                                    first_name: user.first_name,
+                                    last_name: user.last_name,
+                                  });
+                                  setEditingIsAdmin(user.has_admin_grant); // starts the checkbox from the current grant
+                                }}
+                                className="p-1.5 rounded-full hover:bg-[var(--color-base-200)]"
+                              >
+                                <Pencil size={13} />
+                              </button>
+                            )
+                          )}
+                          {canManage(user) && user.id !== viewer?.id && ( // hide the trash on rows you cannot manage and on your own row
                             <button
-                              onClick={() => {
-                                setEditingUserId(user.id);
-                                setEditingFields({
-                                  first_name: user.first_name,
-                                  last_name: user.last_name,
-                                });
-                              }}
-                              className="p-1.5 rounded-full hover:bg-[var(--color-base-200)]"
+                              onClick={() => handleDelete(user.id, user.first_name, user.last_name)}
+                              className="p-1.5 rounded-full hover:bg-[var(--color-error)]/10 text-[var(--color-error)]"
                             >
-                              <Pencil size={13} />
+                              <Trash2 size={13} />
                             </button>
                           )}
-                          <button
-                            onClick={() => handleDelete(user.id, user.first_name, user.last_name)}
-                            className="p-1.5 rounded-full hover:bg-[var(--color-error)]/10 text-[var(--color-error)]"
-                          >
-                            <Trash2 size={13} />
-                          </button>
                         </div>
                       </td>
                     </tr>

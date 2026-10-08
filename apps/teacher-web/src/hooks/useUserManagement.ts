@@ -1,13 +1,26 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  getAllUsers,
+  getAllUsers, 
   createUser,
-  updateUser,
-  deleteUser,
-  type UserRecord,
-  type CreateUserPayload,
-  type UpdateUserPayload,
-} from "../services/userManagementService";
+  updateUser, 
+  deleteUser, 
+  setUserAdmin, 
+  type UserRecord, 
+  type CreateUserPayload, 
+  type UpdateUserPayload, 
+} from "../services/userManagementService"; 
+
+interface UseUserManagementReturn { 
+  users: UserRecord[]; 
+  isLoading: boolean; 
+  error: string | null; 
+  refetch: () => Promise<void>; 
+  createNewUser: (payload: CreateUserPayload) => Promise<void>; 
+  editUser: (userId: string, payload: UpdateUserPayload) => Promise<void>; 
+  removeUser: (userId: string) => Promise<void>;
+  changeAdminRole: (userId: string, grant: boolean) => Promise<void>; 
+} 
+
 import { logAdminAction } from "../services/auditLogService";
 import { getCurrentUser } from "../services/authService";
 
@@ -69,25 +82,24 @@ export function useUserManagement(): UseUserManagementReturn {
   }, [refetch]);
 
   // creates a user, logs the action, then refreshes the list
-  async function createNewUser(payload: CreateUserPayload): Promise<void> {
-    await createUser(payload);
+  async function createNewUser(payload: CreateUserPayload): Promise<void> { 
+    const newUserId = await createUser(payload); 
 
-    // fetch the logged in admin so we know who performed this action
-    const admin = await getCurrentUser();
-    if (admin) {
-      await logAdminAction({
-        adminId: admin.id,
-        adminName: admin.fullName,
-        actionType: "create",
-        targetUserId: null, // new user's id is not returned by createUser
-        targetName: `${payload.first_name} ${payload.last_name}`,
-        targetRole: payload.role,
-        details: `Created ${payload.role} account with email ${payload.email}`,
-      });
-    }
+    const admin = await getCurrentUser(); // fetch the logged in admin so we know who performed this action
+    if (admin) { 
+      await logAdminAction({ 
+        adminId: admin.id, 
+        adminName: admin.fullName, 
+        actionType: "create", 
+        targetUserId: newUserId, 
+        targetName: `${payload.first_name} ${payload.last_name}`, 
+        targetRole: payload.role, 
+        details: `Created ${payload.role} account with email ${payload.email}`, 
+      }); 
+    } 
 
-    await refetch();
-  }
+    await refetch(); 
+  } 
 
   // updates a user, logs what changed, then refreshes the list
   async function editUser(
@@ -137,5 +149,10 @@ export function useUserManagement(): UseUserManagementReturn {
     await refetch();
   }
 
-  return { users, isLoading, error, refetch, createNewUser, editUser, removeUser };
+  async function changeAdminRole(userId: string, grant: boolean): Promise<void> { // grants or revokes the admin role
+    await setUserAdmin(userId, grant); // the server checks rank and writes its own audit entry, so we do not log here
+    await refetch(); // reloads so the badge and toggle match the database
+  } // end of changeAdminRole
+
+  return { users, isLoading, error, refetch, createNewUser, editUser, removeUser, changeAdminRole }; // exposes the new function to the screen
 }
