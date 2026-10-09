@@ -17,6 +17,7 @@ import { Toast } from "../components/shared/toast";
 import { useToastStore } from "../store/useToastStore";
 import { ExamResultsScreen } from "../screens/examResult/examResultsScreen";
 import { ExamResultsListScreen } from "../screens/examResult/examResultListScreen";
+const adminScreens: ScreenName[] = ["userManagement", "auditLogs"]; // screens only admins may open
 const screenComponents: Record<ScreenName, ComponentType<any>> = {
   login: LoginScreen,
   userManagement: UserManagementScreen,
@@ -60,13 +61,15 @@ export function AppRouter() {
 
     if (user) {
       // Session exists — if they're still on login, send them to Dashboard.
-      if (currentScreen === "login") {
-        if (user.role === "admin") {
-          navigateTo("userManagement");
-        } else {
-          navigateTo("dashboard");
-        }
+      if (currentScreen === "login") { // right after logging in
+        const isTop = user.role === "admin" || user.role === "superadmin"; // the top-level account (000 until the rename)
+        navigateTo(isTop ? "userManagement" : "dashboard"); // the top-level account lands on the admin side, everyone else on the teacher dashboard
       }
+        useEffect(() => { // the route guard for the admin screens
+      if (!user || !adminScreens.includes(currentScreen)) return; // nothing to check on other screens
+        const allowed = user.role === "admin" || user.role === "superadmin" || user.hasAdminGrant; // top-level account or a teacher with the grant
+      if (!allowed) navigateTo("dashboard"); // anyone else is sent back to the teacher dashboard
+      }, [user, currentScreen]); // re-checks whenever the user or screen changes
     } else {
       // No session — send them to login regardless of which screen they're on.
       navigateTo("login");

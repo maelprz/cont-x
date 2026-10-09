@@ -1,14 +1,26 @@
-import { supabase } from "./supabaseClient"; // the only import this file needs
+import { supabase } from "./supabaseClient"; 
 
-export interface AuthUser { // the logged-in user's details
-  id: string; // account id
-  firstName: string; // first name
-  lastName: string; // last name
-  fullName: string; // first and last name together
-  email: string; // login email
-  role: "teacher" | "admin" | "superadmin"; // base role, now allowing the future superadmin
-  idNumber: string; // school ID number
-} // end of AuthUser
+export interface AuthUser { 
+  id: string;
+  firstName: string; 
+  lastName: string; 
+  fullName: string; 
+  email: string; 
+  role: "teacher" | "admin" | "superadmin"; 
+  idNumber: string; 
+  hasAdminGrant: boolean; 
+} 
+
+// checks whether this account holds the admin grant, using the user's own row
+async function fetchHasAdminGrant(userId: string): Promise<boolean> { 
+  const { data } = await supabase 
+    .from("user_roles") 
+    .select("role") 
+    .eq("user_id", userId) 
+    .eq("role", "admin") 
+    .maybeSingle(); 
+  return !!data; 
+} 
 
 export async function login(
   idNumber: string,
@@ -68,6 +80,7 @@ export async function login(
     email: userData.email,
     role: userData.role as "teacher" | "admin" | "superadmin",
     idNumber: userData.id_number,
+    hasAdminGrant: await fetchHasAdminGrant(userData.id),
   };
 }
 
@@ -96,5 +109,6 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     email: userData.email,
     role: userData.role as "teacher" | "admin" | "superadmin",
     idNumber: userData.id_number,
+    hasAdminGrant: await fetchHasAdminGrant(userData.id),
   };
 }

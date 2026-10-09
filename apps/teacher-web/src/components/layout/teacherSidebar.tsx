@@ -5,9 +5,14 @@ import {
   LogOut,
   Shield,
   FileText,
+  Users, 
+  FileClock
 } from "lucide-react";
+import { useAuthStore } from "../../store/useAuthStore";
 import type { TeacherSidebarProps } from "./teacherSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic";
+
+const user = useAuthStore((state) => state.user); 
 
 // Single shared sidebar for all teacher web screens.
 export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
@@ -83,6 +88,29 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
           <FileText size={16} />
           {<span>Exam Results</span>}
         </button>
+
+                  {user?.hasAdminGrant && ( // only teachers who hold the admin grant see this section
+          <>
+            <p className="text-[var(--color-primary-content)]/60 text-[10px] uppercase tracking-wider px-2 mt-4 mb-1">
+              Administration {/* section heading */}
+            </p>
+            <button
+              onClick={() => navigateTo("userManagement")} // opens the User Directory
+              className={`${navItemBase} ${activeItem === "userManagement" ? navItemActive : navItemInactive}`} // highlights when active
+            >
+              <Users size={16} />
+              <span>User Management</span>
+            </button>
+            <button
+              onClick={() => navigateTo("auditLogs")} // opens the audit log
+              className={`${navItemBase} ${activeItem === "auditLogs" ? navItemActive : navItemInactive}`} // highlights when active, no cast needed now
+            >
+              <FileClock size={16} />
+              <span>Audit Logs</span>
+            </button>
+          </>
+        )}
+
       </nav>
 
       {/* logout pinned to the bottom */}
