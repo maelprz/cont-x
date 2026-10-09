@@ -2,7 +2,7 @@ import { useState } from "react";
 import type { ChangeEvent } from "react";
 import { Loader2 } from "lucide-react";
 import { AdminHeader } from "../../components/layoutAdmin/adminHeader";
-import { AdminSidebar } from "../../components/layoutAdmin/adminSidebar";
+import { AdminAreaSidebar } from "../../components/layoutAdmin/adminAreaSidebar";
 import { useAuditLogs } from "../../hooks/useAuditLogs";
 import type { AuditActionType } from "./auditLogsScreen.types";
 
@@ -62,7 +62,7 @@ export function AuditLogsScreen() {
 
   return (
     <div className="flex h-screen bg-[var(--color-base-200)] text-[var(--color-base-content)]">
-      <AdminSidebar activeItem="auditLogs" />
+      <AdminAreaSidebar activeItem="auditLogs" />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <AdminHeader searchValue={searchQuery} onSearchChange={handleSearchChange} />
