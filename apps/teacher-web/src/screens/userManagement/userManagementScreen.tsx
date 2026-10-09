@@ -1,7 +1,7 @@
 import { useState, useEffect } from "react";
 import { UserPlus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { AdminHeader } from "../../components/layoutAdmin/adminHeader";
-import { AdminSidebar } from "../../components/layoutAdmin/adminSidebar";
+import { AdminAreaSidebar } from "../../components/layoutAdmin/adminAreaSidebar";
 import { useUserManagement } from "../../hooks/useUserManagement";
 import { getCurrentUser, type AuthUser } from "../../services/authService"; // new: tells us who is logged in
 import type { CreateUserPayload, UpdateUserPayload, UserRecord } from "../../services/userManagementService";
@@ -118,7 +118,7 @@ export function UserManagementScreen() {
 
   return (
     <div className="flex h-screen bg-[var(--color-base-200)] text-[var(--color-base-content)]">
-      <AdminSidebar activeItem="userManagement" />
+      <AdminAreaSidebar activeItem="userManagement" />
 
       <div className="flex-1 flex flex-col overflow-hidden">
         <AdminHeader searchValue={searchQuery} onSearchChange={setSearchQuery} />
