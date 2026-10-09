@@ -1,10 +1,12 @@
 import { Shield, Users, FileClock, LogOut } from "lucide-react"; // pre-made icon components
 import type { AdminSidebarProps } from "./adminSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
+import { useLogout } from "../../hooks/useLogout";
 
 // Single shared sidebar -- used across every admin screen.
 export function AdminSidebar({ activeItem }: AdminSidebarProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const handleLogout = useLogout(); // the function that really signs out, then returns to the login screen
 
   // shared classes every nav item gets, regardless of active state
   const navItemBase =
@@ -64,7 +66,7 @@ export function AdminSidebar({ activeItem }: AdminSidebarProps) {
       <div className="mt-auto border-t border-[var(--color-primary-content)]/20">
         <button
           type="button"
-          onClick={() => navigateTo("login")} // sends admin back to login screen
+          onClick={handleLogout} // changed: now signs out for real instead of only changing screen
           className="flex items-center gap-2.5 w-full px-6 py-4 text-sm font-medium text-[var(--color-primary-content)]/80 hover:bg-[var(--color-primary-content)]/10 hover:text-[var(--color-primary-content)] transition-colors duration-150"
         >
           <LogOut size={16} />

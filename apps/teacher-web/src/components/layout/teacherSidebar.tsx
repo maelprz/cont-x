@@ -5,17 +5,18 @@ import {
   LogOut,
   Shield,
   FileText,
-  Users, 
-  FileClock
+  Users,
+  FileClock,
 } from "lucide-react";
 import { useAuthStore } from "../../store/useAuthStore";
+import { useLogout } from "../../hooks/useLogout";
 import type { TeacherSidebarProps } from "./teacherSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic";
 
-const user = useAuthStore((state) => state.user); 
-
 // Single shared sidebar for all teacher web screens.
 export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
+  const user = useAuthStore((state) => state.user); // changed: moved inside the component, where hooks are allowed
+  const handleLogout = useLogout(); // new: the logout function for the button below
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
   // shared base classes every nav item gets
@@ -89,35 +90,36 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
           {<span>Exam Results</span>}
         </button>
 
-                  {user?.hasAdminGrant && ( // only teachers who hold the admin grant see this section
+        {user?.hasAdminGrant && ( // only teachers who hold the admin grant see this section
           <>
             <p className="text-[var(--color-primary-content)]/60 text-[10px] uppercase tracking-wider px-2 mt-4 mb-1">
-              Administration {/* section heading */}
+              Administration
             </p>
             <button
-              onClick={() => navigateTo("userManagement")} // opens the User Directory
-              className={`${navItemBase} ${activeItem === "userManagement" ? navItemActive : navItemInactive}`} // highlights when active
+              onClick={() => navigateTo("userManagement")}
+              className={`${navItemBase} ${
+                activeItem === "userManagement" ? navItemActive : navItemInactive
+              }`}
             >
               <Users size={16} />
               <span>User Management</span>
             </button>
             <button
-              onClick={() => navigateTo("auditLogs")} // opens the audit log
-              className={`${navItemBase} ${activeItem === "auditLogs" ? navItemActive : navItemInactive}`} // highlights when active, no cast needed now
+              onClick={() => navigateTo("auditLogs")} 
+              className={`${navItemBase} ${activeItem === "auditLogs" ? navItemActive : navItemInactive}`}
             >
               <FileClock size={16} />
               <span>Audit Logs</span>
             </button>
           </>
         )}
-
       </nav>
 
       {/* logout pinned to the bottom */}
       <div className="border-t border-[rgba(248,248,248,0.1)]">
         <button
           type="button"
-          onClick={() => navigateTo("login")}
+          onClick={handleLogout} // changed: now signs out for real instead of only changing screen
           className={`${navItemBase} px-4 py-3 rounded-none`}
           style={{ color: "rgba(248,248,248,0.7)" }}
         >
