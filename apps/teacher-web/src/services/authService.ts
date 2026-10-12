@@ -33,11 +33,11 @@ export async function login(
     .from("users")
     .select("email")
     .eq("id_number", idNumber)
-    .in("role", ["teacher", "admin"]) // only teachers and admins use the web portal
+    .in("role", ["teacher", "admin", "superadmin"])
     .single();
 
   if (profileError || !profileData) {
-    throw new Error("Invalid ID number or password."); // vague on purpose
+    throw new Error("Invalid ID number or password.");
   }
 
   // Step 2 — authenticate with Supabase Auth using the email we found.
