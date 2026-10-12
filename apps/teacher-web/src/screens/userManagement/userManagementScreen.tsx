@@ -11,7 +11,7 @@ const roleBadgeStyle: Record<UserRecord["role"], string> = {
   teacher: "bg-[var(--color-accent)] text-[var(--color-accent-content)]",
   student: "bg-[var(--color-secondary)] text-[var(--color-secondary-content)]",
   admin: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
-  superadmin: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
+  superadmin: "bg-white text-[var(--color-primary)] border border-[var(--color-primary)]",
 };
 
 // formats a raw ISO timestamp into a readable date string e.g. "2023-10-12"
