@@ -10,12 +10,14 @@ export function CreateExamModal({
   onSubmit,
   isSubmitting,
   error,
+  fixedSubject,
 }: {
   isOpen: boolean;
   onClose: () => void;
   onSubmit: (settings: NewExamSettings) => void;
   isSubmitting?: boolean;
   error?: string | null;
+  fixedSubject?: { id: string; name: string } | null;
 }) {
   const teacherId = useAuthStore((state) => state.user?.id);
 
@@ -29,7 +31,7 @@ export function CreateExamModal({
 
   // loads the teacher's assigned subjects each time the modal opens
   useEffect(() => {
-    if (!isOpen || !teacherId) return;
+    if (!isOpen || !teacherId || fixedSubject) return; // nothing to pick from when the subject is fixed
 
     let isMounted = true;
     setIsLoadingSubjects(true);
@@ -53,7 +55,7 @@ export function CreateExamModal({
     return () => {
       isMounted = false;
     };
-  }, [isOpen, teacherId]);
+  }, [isOpen, teacherId, fixedSubject]);
 
   // resets the form each time the modal is reopened
   useEffect(() => {
@@ -67,14 +69,15 @@ export function CreateExamModal({
   if (!isOpen) return null; // render nothing when modal is closed
 
   const trimmedTitle = title.trim();
-  const canSubmit = trimmedTitle.length > 0 && subjectId.length > 0 && !isSubmitting;
+  const effectiveSubjectId = fixedSubject ? fixedSubject.id : subjectId;
+  const canSubmit = trimmedTitle.length > 0 && effectiveSubjectId.length > 0 && !isSubmitting;
 
   const handleSubmit = () => {
     if (!canSubmit) return;
     onSubmit({
       title: trimmedTitle,
       description: description.trim(),
-      subjectId,
+      subjectId: effectiveSubjectId,
     });
   };
 
@@ -100,7 +103,11 @@ export function CreateExamModal({
         <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
           Subject
         </label>
-        {isLoadingSubjects ? (
+        {fixedSubject ? (
+          <p className="w-full px-3 py-2 rounded-lg border text-[14px] mb-4 bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]">
+            {fixedSubject.name}
+          </p>
+        ) : isLoadingSubjects ? (
           <p className="text-[13px] mb-4 opacity-60 text-[var(--color-base-content)]">Loading subjects...</p>
         ) : subjects.length === 0 ? (
           <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>

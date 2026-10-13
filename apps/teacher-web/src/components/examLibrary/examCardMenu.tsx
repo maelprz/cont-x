@@ -5,7 +5,6 @@ import type { ExamStatus } from "../../screens/examLibrary/examLibraryScreen.typ
 type ExamCardMenuProps = {
   status: ExamStatus; // draft | saved now
   hasClassAttachments: boolean;
-  hasActiveClassAttachment: boolean;
   isProcessing: boolean;
   onManageClasses: () => void; // opens the class-attachment list (publish/end/settings live there now)
   onDelete: () => void;
@@ -15,7 +14,6 @@ type ExamCardMenuProps = {
 export function ExamCardMenu({
   status,
   hasClassAttachments,
-  hasActiveClassAttachment,
   isProcessing,
   onManageClasses,
   onDelete,

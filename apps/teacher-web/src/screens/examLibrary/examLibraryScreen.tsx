@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Filter, LayoutGrid } from "lucide-react";
+import { ArrowLeft, Filter, LayoutGrid } from "lucide-react";
 import type { ExamLibraryScreenProps } from "./examLibraryScreen.types";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
@@ -11,6 +11,7 @@ import { SetSessionCodeModal } from "../../components/examLibrary/setSessionCode
 import { EditSettingsModal } from "../../components/examLibrary/editSettingsModal";
 import { CreateExamModal } from "../../components/examLibrary/createExamModal";
 import { CreateNewCard } from "../../components/examLibrary/createNewCard";
+import { SubjectCardTile } from "../../components/examLibrary/subjectCardTile";
 import { ManageClassesModal } from "../../components/examLibrary/manageClassesModal";
 import { AttachClassModal } from "../../components/examLibrary/attachClassModal";
 import { useRouterLogic } from "../../router/routerLogic";
@@ -18,7 +19,9 @@ import { useExamLibrary } from "../../hooks/useExamLibrary";
 import { useCreateExam } from "../../hooks/useCreateExam";
 import { useExamCardActions } from "../../hooks/useExamCardActions";
 import { useClassExamActions } from "../../hooks/useClassExamActions";
+import { useLibrarySubjects } from "../../hooks/useLibrarySubjects";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
+import { useExamLibraryStore } from "../../store/useExamLibraryStore";
 import type { NewExamSettings } from "../../services/examBuilderService";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which exam Violation Monitoring shows
@@ -40,8 +43,17 @@ export function ExamLibraryScreen({
 
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  const { exams: fetchedExams, refetch } = useExamLibrary();
+  const { exams: fetchedExams, isLoading: isLoadingExams, refetch } = useExamLibrary();
   const exams = examsProp ?? fetchedExams;
+
+  const selectedSubjectId = useExamLibraryStore((state) => state.selectedSubjectId);
+  const setSelectedSubjectId = useExamLibraryStore((state) => state.setSelectedSubjectId);
+  const {
+    subjects,
+    isLoading: isLoadingSubjects,
+    error: subjectsError,
+  } = useLibrarySubjects(exams);
+  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { createExam, isCreating, error: createError } = useCreateExam();
@@ -87,6 +99,16 @@ export function ExamLibraryScreen({
   const handleSearch = (q: string) => {
     setLocalSearch(q);
     onSearchChange?.(q);
+  };
+
+  // opens a subject to show its exams
+  const openSubject = (subjectId: string) => {
+    setSelectedSubjectId(subjectId);
+    handleSearch("");
+  };
+  const backToSubjects = () => {
+    setSelectedSubjectId(null);
+    handleSearch("");
   };
 
   const handleCardCta = (examId: string, status: "draft" | "saved", hasAttachments: boolean) => {
@@ -162,10 +184,14 @@ export function ExamLibraryScreen({
     navigateTo(targetScreen);
   };
 
+  const query = search.toLowerCase();
+
+  const filteredSubjects = subjects.filter((s) => s.name.toLowerCase().includes(query));
+
   const filtered = exams.filter(
     (e) =>
-      e.title.toLowerCase().includes(search.toLowerCase()) ||
-      e.code.toLowerCase().includes(search.toLowerCase()),
+      e.subjectId === selectedSubject?.id &&
+      (e.title.toLowerCase().includes(query) || e.code.toLowerCase().includes(query)),
   );
 
   return (
@@ -180,16 +206,40 @@ export function ExamLibraryScreen({
           style={{ color: "var(--color-base-content)" }}
         >
           <p className="text-xs opacity-60 mb-2">
-            Teacher Portal &gt; Exam Library
+            Teacher Portal &gt;{" "}
+            {selectedSubject ? (
+              <>
+                <button
+                  onClick={backToSubjects}
+                  className="p-0 border-none bg-transparent cursor-pointer text-inherit text-xs hover:underline"
+                >
+                  Exam Library
+                </button>{" "}
+                &gt; {selectedSubject.name}
+              </>
+            ) : (
+              "Exam Library"
+            )}
           </p>
 
           <div className="flex items-start justify-between gap-6 mb-7">
             <div>
-              <h1 className="text-2xl font-bold mb-1">Academic Inventory</h1>
+              {selectedSubject && (
+                <button
+                  onClick={backToSubjects}
+                  className="flex items-center gap-1.5 mb-2 p-0 border-none bg-transparent cursor-pointer text-[13px] font-medium text-[var(--color-base-content)] opacity-70 transition-opacity hover:opacity-100"
+                >
+                  <ArrowLeft size={14} />
+                  All subjects
+                </button>
+              )}
+              <h1 className="text-2xl font-bold mb-1">
+                {selectedSubject ? selectedSubject.name : "Academic Inventory"}
+              </h1>
               <p className="text-sm opacity-70 max-w-md leading-relaxed">
-                Manage and deploy standardized assessments across your student
-                cohorts. Ensure rigor and academic integrity with Cont/x's
-                structured exam environment.
+                {selectedSubject
+                  ? "Exams under this subject. Build an exam once, then publish it to any of your classes in the subject."
+                  : "Pick a subject to manage its exams and deploy them to your classes. Ensure rigor and academic integrity with Cont/x's structured exam environment."}
               </p>
             </div>
 
@@ -212,7 +262,7 @@ export function ExamLibraryScreen({
                 </svg>
                 <input
                   type="text"
-                  placeholder="Search exams by title or code"
+                  placeholder={selectedSubject ? "Search exams by title or code" : "Search subjects by name"}
                   value={search}
                   onChange={(e) => handleSearch(e.target.value)}
                   className="flex-grow text-[13px] outline-none bg-transparent border-none text-[var(--color-base-content)] font-[inherit]"
@@ -246,8 +296,36 @@ export function ExamLibraryScreen({
             </p>
           )}
 
+          {!selectedSubject ? (
+            isLoadingSubjects || isLoadingExams ? (
+              <p className="text-[13px] opacity-60">Loading subjects...</p>
+            ) : subjectsError ? (
+              <p className="text-[13px]" style={{ color: "var(--color-error)" }}>
+                {subjectsError}
+              </p>
+            ) : subjects.length === 0 ? (
+              <p className="text-[13px] opacity-60">
+                You aren't assigned to any subjects yet. Ask an admin to assign you one, and it
+                will show up here.
+              </p>
+            ) : filteredSubjects.length === 0 ? (
+              <p className="text-[13px] opacity-60">No subjects match "{search}".</p>
+            ) : (
+              <div className="grid grid-cols-3 gap-5">
+                {filteredSubjects.map((subject) => (
+                  <SubjectCardTile
+                    key={subject.id}
+                    subject={subject}
+                    onClick={() => openSubject(subject.id)}
+                  />
+                ))}
+              </div>
+            )
+          ) : (
           <div className="grid grid-cols-3 gap-5">
-            <CreateNewCard onClick={() => setIsCreateModalOpen(true)} />
+            {selectedSubject.isAssigned && (
+              <CreateNewCard onClick={() => setIsCreateModalOpen(true)} />
+            )}
             {filtered.map((exam) => {
               const hasAttachments = exam.classAttachments.length > 0;
               const hasActiveAttachment = exam.classAttachments.some((a) => a.status === "active");
@@ -264,7 +342,6 @@ export function ExamLibraryScreen({
                     <ExamCardMenu
                       status={exam.status}
                       hasClassAttachments={hasAttachments}
-                      hasActiveClassAttachment={hasActiveAttachment}
                       isProcessing={isProcessing}
                       onManageClasses={() => handleCardCta(exam.id, exam.status, hasAttachments)}
                       onDelete={() => requestDelete(exam.id)}
@@ -278,16 +355,19 @@ export function ExamLibraryScreen({
                 />
               );
             })}
-            <CreateExamModal
-              isOpen={isCreateModalOpen}
-              onClose={() => setIsCreateModalOpen(false)}
-              onSubmit={handleCreateExam}
-              isSubmitting={isCreating}
-              error={createError}
-            />
           </div>
+          )}
         </main>
       </div>
+
+      <CreateExamModal
+        isOpen={isCreateModalOpen}
+        onClose={() => setIsCreateModalOpen(false)}
+        onSubmit={handleCreateExam}
+        isSubmitting={isCreating}
+        error={createError}
+        fixedSubject={selectedSubject?.isAssigned ? { id: selectedSubject.id, name: selectedSubject.name } : null}
+      />
 
       <ConfirmActionDialog
         isOpen={confirmAction !== null}

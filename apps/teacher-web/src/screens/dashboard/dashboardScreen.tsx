@@ -8,6 +8,7 @@ import { useRouterLogic } from "../../router/routerLogic";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
+import { useExamLibraryStore } from "../../store/useExamLibraryStore";
 import { StatusBadge, ClassExamStatusBadge } from "../../components/examLibrary/statusBadge";
 
 function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
@@ -49,12 +50,14 @@ export function DashboardScreen({}: DashboardScreenProps) {
   const setOpenedFromEditExam = useExamBuilderStore(
     (state) => state.setOpenedFromEditExam,
   );
-  const openExam = (examId: string, status: "draft" | "saved") => {
+  const setSelectedSubjectId = useExamLibraryStore((state) => state.setSelectedSubjectId);
+  const openExam = (examId: string, status: "draft" | "saved", subjectId: string) => {
     if (status === "draft") {
       setCurrentExamId(examId);
       setOpenedFromEditExam(false); // still being authored, not a live-exam edit
       navigateTo("examBuilder");
     } else {
+      setSelectedSubjectId(subjectId); // open the library straight inside this exam's subject
       navigateTo("examLibrary");
     }
   };
@@ -205,7 +208,7 @@ export function DashboardScreen({}: DashboardScreenProps) {
                       </td>
                       <td className="py-3.5 px-5">
                         <button
-                          onClick={() => openExam(exam.id, exam.status)}
+                          onClick={() => openExam(exam.id, exam.status, exam.subjectId)}
                           className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80"
                           style={{
                             borderColor: "var(--color-base-300)",

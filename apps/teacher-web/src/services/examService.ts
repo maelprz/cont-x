@@ -8,6 +8,7 @@ import type {
 // shape of one row coming straight back from supabase
 type ExamRow = {
   id: string;
+  subject_id: string;
   exam_code: string;
   title: string;
   description: string | null;
@@ -41,6 +42,7 @@ function mapExamRowToCard(row: ExamRow): ExamCard {
 
   return {
     id: row.id,
+    subjectId: row.subject_id,
     code: row.exam_code,
     title: row.title,
     description: row.description ?? "", // fallback if description is empty
@@ -66,6 +68,7 @@ export async function getExamsByTeacherId(
     .select(
       `
       id,
+      subject_id,
       exam_code,
       title,
       description,
