@@ -38,6 +38,9 @@
     "vite-plugin-electron-renderer": "^1.0.0"
   },
   "allowScripts": {
-    "better-sqlite3@12.11.1": true
+    "better-sqlite3@12.11.1": true,
+    "electron-winstaller@5.4.0": true,
+    "esbuild@0.28.1": true,
+    "win-audio@3.0.5": true
   }
 }
