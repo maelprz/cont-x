@@ -13,8 +13,21 @@ export interface ClassExamSummary {
   studentCount: number; // exam_sessions count for this class attachment
 }
 
+export interface SubjectCard {
+  id: string;
+  name: string;
+  examCount: number;
+  classCount: number; // this teacher's own classes under the subject
+  liveClassCount: number; // class attachments currently active, across every exam in the subject
+  // false when the teacher still owns exams under a subject they're no longer
+  // assigned to — shown so those exams don't silently vanish, but nothing new
+  // can be created there (the exams insert policy requires an assignment)
+  isAssigned: boolean;
+}
+
 export interface ExamCard {
   id: string;
+  subjectId: string; // which subject this exam lives under
   code: string; // exam_code in db - one per exam, shared across every class it's attached to
   title: string;
   description: string;
