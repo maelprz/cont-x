@@ -1,23 +1,30 @@
-import { useState } from "react"; // state for search, modal, and saving
-import { Loader2, Plus } from "lucide-react"; // spinner and plus icons
-import { AdminHeader } from "../../components/layoutAdmin/adminHeader"; // the shared top bar
-import { AdminAreaSidebar } from "../../components/layoutAdmin/adminAreaSidebar"; // sidebar for admins and teacher-admins
-import { NewSubjectModal } from "../../components/subjectsClasses/newSubjectModal"; // the create modal
-import { useSubjectsClasses } from "../../hooks/useSubjectsClasses"; // loads subjects and creates them
-import { useToast } from "../../hooks/useToast"; // the shared toast notifications
+import { useState } from "react"; 
+import { Loader2, Plus } from "lucide-react"; 
+import { AdminHeader } from "../../components/layoutAdmin/adminHeader"; 
+import { AdminAreaSidebar } from "../../components/layoutAdmin/adminAreaSidebar"; 
+import { NewSubjectModal } from "../../components/subjectsClasses/newSubjectModal"; 
+import { NewClassModal } from "../../components/subjectsClasses/newClassModal"; 
+import { SubjectDetailModal } from "../../components/subjectsClasses/subjectDetailModal"; 
+import { useSubjectsClasses } from "../../hooks/useSubjectsClasses";
+import { useToast } from "../../hooks/useToast";
+
 
 export function SubjectsClassesScreen() {
-  const { subjects, isLoading, error, addSubject } = useSubjectsClasses(); // data plus the create action
+  const { subjects, teachers, isLoading, error, addSubject, addClass } = useSubjectsClasses();
   const { showToast } = useToast(); // shows the success message
 
   const [searchQuery, setSearchQuery] = useState(""); // text typed into the header search
   const [showNewSubjectModal, setShowNewSubjectModal] = useState(false); // whether the modal is open
   const [isSaving, setIsSaving] = useState(false); // true while a subject is being created
   const [createError, setCreateError] = useState<string | null>(null); // error shown inside the modal
-
+  const [selectedSubjectId, setSelectedSubjectId] = useState<string | null>(null); // which subject's modal is open, if any
+  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null; // always the freshest copy from the loaded list
   const visibleSubjects = subjects.filter((s) => // narrows the list to the search text
     `${s.codePrefix} ${s.name}`.toLowerCase().includes(searchQuery.toLowerCase()), // matches the prefix or the name
   );
+  const [showNewClassModal, setShowNewClassModal] = useState(false); // whether the add-class modal is open
+  const [isSavingClass, setIsSavingClass] = useState(false); // true while a class is being created
+  const [classError, setClassError] = useState<string | null>(null); // error shown inside the add-class modal
 
   function openNewSubjectModal() { // runs when the New Subject button is clicked
     setCreateError(null); // clear any old error
@@ -35,6 +42,26 @@ export function SubjectsClassesScreen() {
       setCreateError(err instanceof Error ? err.message : "Could not create the subject."); // show the safe message in the modal
     } finally {
       setIsSaving(false); // saving is over either way
+    }
+  }
+
+  function openNewClassModal() { // runs when Add Class is clicked in the detail modal
+    setClassError(null); // clear any old error
+    setShowNewClassModal(true); // show the modal
+  }
+
+  async function handleCreateClass(name: string, teacherId: string) { // runs when the add-class modal confirms
+    if (!selectedSubject) return; // nothing selected, nothing to add to
+    setIsSavingClass(true); // block double clicks
+    setClassError(null); // clear any old error
+    try {
+      const created = await addClass(selectedSubject.id, name, teacherId); // ask the database to create it, then refresh the list
+      setShowNewClassModal(false); // close the modal
+      showToast(`Class created. Code: ${created.offerCode}`); // tell the admin it worked, and show the code
+    } catch (err) {
+      setClassError(err instanceof Error ? err.message : "Could not create the class."); // show the safe message in the modal
+    } finally {
+      setIsSavingClass(false); // saving is over either way
     }
   }
 
@@ -89,16 +116,18 @@ export function SubjectsClassesScreen() {
             <p className="text-sm opacity-60 py-8">No subjects match your search.</p>
           )}
 
-          {/* the subject cards */}
+                    {/* the subject cards */}
           {!isLoading && !error && visibleSubjects.length > 0 && (
             <div className="grid grid-cols-1 md:grid-cols-2 xl:grid-cols-3 gap-4">
               {visibleSubjects.map((subject) => {
                 const activeCount = subject.classes.filter((c) => c.archivedAt === null).length; // classes still in use
                 const archivedCount = subject.classes.length - activeCount; // classes already archived
                 return (
-                  <div
+                  <button
+                    type="button" // not a form button
                     key={subject.id} // unique key for React
-                    className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl p-5"
+                    onClick={() => setSelectedSubjectId(subject.id)} // opens the detail modal for this subject
+                    className="text-left w-full cursor-pointer transition-opacity hover:opacity-80 bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl p-5"
                   >
                     {/* the two-digit prefix badge */}
                     <span
@@ -107,12 +136,14 @@ export function SubjectsClassesScreen() {
                     >
                       {subject.codePrefix}
                     </span>
-                    <h3 className="text-[15px] font-bold mb-1">{subject.name}</h3>
-                    <p className="text-xs opacity-60">
+                    {/* the subject name, a span instead of h3 because a button may only hold inline elements */}
+                    <span className="block text-[15px] font-bold mb-1">{subject.name}</span>
+                    {/* the class counts, a span instead of p for the same reason */}
+                    <span className="block text-xs opacity-60">
                       {activeCount} active {activeCount === 1 ? "class" : "classes"}
                       {archivedCount > 0 ? `, ${archivedCount} archived` : ""}
-                    </p>
-                  </div>
+                    </span>
+                  </button>
                 );
               })}
             </div>
@@ -120,6 +151,8 @@ export function SubjectsClassesScreen() {
         </main>
       </div>
 
+      <SubjectDetailModal subject={selectedSubject} onClose={() => setSelectedSubjectId(null)} onAddClass={openNewClassModal} /> {/* the detail modal */}
+      
       {/* the create modal sits on top of everything */}
       <NewSubjectModal
         isOpen={showNewSubjectModal}
@@ -127,6 +160,17 @@ export function SubjectsClassesScreen() {
         error={createError}
         onClose={() => setShowNewSubjectModal(false)}
         onSubmit={handleCreateSubject}
+      />
+
+      <NewClassModal
+        isOpen={showNewClassModal && selectedSubject !== null} // only while a subject is open
+        subjectName={selectedSubject?.name ?? ""} // shown in the title
+        subjectPrefix={selectedSubject?.codePrefix ?? ""} // shown in the code hint
+        teachers={teachers} // the teacher list
+        isSaving={isSavingClass} // saving state
+        error={classError} // inline error
+        onClose={() => setShowNewClassModal(false)} // cancel
+        onSubmit={handleCreateClass} // create
       />
     </div>
   );

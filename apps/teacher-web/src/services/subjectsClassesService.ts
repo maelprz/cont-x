@@ -49,6 +49,7 @@ function unwrapOne<T>(value: T | T[] | null | undefined): T | undefined { // Sup
 
 function toFriendlyMessage(error: { code?: string; message: string }): string { // turns a database error into something safe to show
   if (error.code === "42501") return "You do not have permission to do that."; // the database refused a non-admin
+  if (error.code === "23505") return "That name is already in use."; // a unique rule refused a rename or edit
   if (error.code === "P0001") return error.message; // messages we wrote ourselves inside the database functions
   console.error(error); // keep the real details in the developer console for now
   return "Something went wrong. Please try again."; // generic message for everything else
@@ -112,4 +113,11 @@ export async function createSubject(name: string): Promise<{ id: string; name: s
   if (error) throw new Error(toFriendlyMessage(error)); // stop with a safe message
   const row = data as { id: string; name: string; code_prefix: string }; // the new subject row
   return { id: row.id, name: row.name, codePrefix: row.code_prefix }; // hand back what the screen needs
+}
+
+export async function createClass(subjectId: string, name: string, teacherId: string): Promise<{ id: string; name: string; offerCode: string }> { // asks the database to create a class
+  const { data, error } = await supabase.rpc("create_class", { p_subject_id: subjectId, p_name: name, p_teacher_id: teacherId }); // the function checks rights, makes the code, and links the teacher to the subject
+  if (error) throw new Error(toFriendlyMessage(error)); // stop with a safe message
+  const row = data as { id: string; name: string; class_offer_code: string }; // the new class row
+  return { id: row.id, name: row.name, offerCode: row.class_offer_code }; // hand back what the screen needs
 }
