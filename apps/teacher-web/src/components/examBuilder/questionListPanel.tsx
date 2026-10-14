@@ -1,6 +1,6 @@
 import { Plus } from "lucide-react";
-import { CircleDot, Code2 } from "lucide-react";
-import type { BuilderQuestion, QuestionType } from "../../screens/examBuilder/examBuilderScreen.types";
+import { CircleDot, Code2, Shuffle } from "lucide-react";
+import type { BuilderPool, BuilderQuestion, QuestionType } from "../../screens/examBuilder/examBuilderScreen.types";
 
 function typeLabel(type: QuestionType) {
   return type === "multiple-choice" ? "Multiple Choice" : "Coding";
@@ -57,16 +57,62 @@ function QuestionListItem({
   );
 }
 
+// one random "pick N of M" pool in the list
+function PoolListItem({
+  pool,
+  isActive,
+  onClick,
+}: {
+  pool: BuilderPool;
+  isActive: boolean;
+  onClick: () => void;
+}) {
+  const accent = isActive ? "var(--color-secondary)" : "var(--color-base-content)";
+  return (
+    <button
+      onClick={onClick}
+      className="w-full text-left px-4 py-3.5 border rounded-xl cursor-pointer transition-colors duration-150"
+      style={{
+        backgroundColor: isActive ? "var(--color-base-100)" : "transparent",
+        borderColor: isActive ? "var(--color-secondary)" : "var(--color-base-300)",
+        outline: "none",
+      }}
+    >
+      <div className="flex items-center justify-between mb-1">
+        <p
+          className="font-mono text-[10px] font-semibold uppercase tracking-widest"
+          style={{ color: accent, opacity: isActive ? 1 : 0.5 }}
+        >
+          Random pool
+        </p>
+        <Shuffle size={14} style={{ color: accent, opacity: isActive ? 1 : 0.4 }} />
+      </div>
+      <p className="text-[14px] font-semibold leading-snug mb-0.5" style={{ color: "var(--color-base-content)" }}>
+        {pool.title.trim() || "Untitled pool"}
+      </p>
+      <p className="text-[12px]" style={{ color: accent, opacity: isActive ? 1 : 0.5 }}>
+        Pick {pool.pickCount} of {pool.items.length}
+      </p>
+    </button>
+  );
+}
+
 export function QuestionListPanel({
   questions,
   activeId,
   onSelectQuestion,
   onAddQuestion,
   hideAddButton = false,
+  pools = [],
+  activePoolId = null,
+  onSelectPool,
 }: {
   questions: BuilderQuestion[];
   activeId: string;
   onSelectQuestion: (id: string) => void;
+  pools?: BuilderPool[];
+  activePoolId?: string | null;
+  onSelectPool?: (id: string) => void;
   onAddQuestion?: () => void;
   onReorderQuestions?: () => void;
   hideAddButton?: boolean;
@@ -105,6 +151,25 @@ export function QuestionListPanel({
             onClick={() => onSelectQuestion(q.id)}
           />
         ))}
+
+        {pools.length > 0 && (
+          <>
+            <p
+              className="font-mono text-[10px] font-semibold uppercase tracking-widest mt-3 mb-1 px-1"
+              style={{ color: "var(--color-base-content)", opacity: 0.5 }}
+            >
+              Random pools
+            </p>
+            {pools.map((pool) => (
+              <PoolListItem
+                key={pool.id}
+                pool={pool}
+                isActive={pool.id === activePoolId}
+                onClick={() => onSelectPool?.(pool.id)}
+              />
+            ))}
+          </>
+        )}
       </div>
     </aside>
   );

@@ -15,6 +15,7 @@ type ExamRow = {
   status: ExamStatus; // 'draft' | 'saved'
   created_at: string;
   questions: { count: number }[]; // count from questions table
+  exam_question_pools: { pick_count: number }[]; // each pool adds pick_count questions to a student's exam
   class_exams: {
     id: string;
     status: ClassExamStatus;
@@ -47,7 +48,10 @@ function mapExamRowToCard(row: ExamRow): ExamCard {
     title: row.title,
     description: row.description ?? "", // fallback if description is empty
     status: row.status,
-    questionCount: row.questions[0]?.count ?? 0, // pull count out of embedded array
+    // questions written into the exam + what each random pool will draw
+    questionCount:
+      (row.questions[0]?.count ?? 0) +
+      row.exam_question_pools.reduce((sum, pool) => sum + pool.pick_count, 0),
     createdAt: new Date(row.created_at).toLocaleDateString("en-US", {
       month: "short",
       day: "2-digit",
@@ -75,6 +79,7 @@ export async function getExamsByTeacherId(
       status,
       created_at,
       questions(count),
+      exam_question_pools(pick_count),
       class_exams(
         id,
         status,
@@ -104,6 +109,28 @@ export async function deleteExam(examId: string): Promise<void> {
     throw new Error(
       "This exam has been published to a class and can't be deleted. Remove it from every class first.",
     );
+  }
+
+  // random pools reference the exam and must be deleted first, along with their items  
+  const { data: poolRows, error: poolsError } = await supabase
+    .from("exam_question_pools")
+    .select("id")
+    .eq("exam_id", examId);
+  if (poolsError) throw poolsError;
+
+  const poolIds = (poolRows ?? []).map((p) => p.id);
+  if (poolIds.length > 0) {
+    const { error: itemsError } = await supabase
+      .from("exam_question_pool_items")
+      .delete()
+      .in("pool_id", poolIds);
+    if (itemsError) throw itemsError;
+
+    const { error: poolDeleteError } = await supabase
+      .from("exam_question_pools")
+      .delete()
+      .in("id", poolIds);
+    if (poolDeleteError) throw poolDeleteError;
   }
 
   const { error: deleteError } = await supabase

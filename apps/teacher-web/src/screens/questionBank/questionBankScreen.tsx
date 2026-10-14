@@ -7,6 +7,11 @@ import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPane
 import { UnsavedChangesPrompt } from "../../components/examBuilder/unsavedChangesPrompt";
 import { useToast } from "../../hooks/useToast";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
+import { useBankSubjects } from "../../hooks/useBankSubjects";
+import { useBankVisibility } from "../../hooks/useBankVisibility";
+import { useQuestionBankStore } from "../../store/useQuestionBankStore";
+import { BankSubjectTile } from "../../components/questionBank/bankSubjectTile";
+import { BankVisibilitySelector } from "../../components/questionBank/bankVisibilitySelector";
 import { useSaveBankQuestion } from "../../hooks/useSaveBankQuestion";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useRouterLogic } from "../../router/routerLogic";
@@ -33,7 +38,30 @@ import { NewQuestionModal } from "../../components/questionBank/newQuestionModal
 
 export function QuestionBankScreen() {
   const teacherId = useAuthStore((state) => state.user?.id);
-  const { questions, tags, isLoading, error, refetch } = useQuestionBank();
+  // Two levels now: the sub-question banks (one per subject), then the chosen
+  // subject's questions. The open subject lives in a store so it survives
+  // leaving the screen and coming back.
+  const selectedSubjectId = useQuestionBankStore((state) => state.selectedSubjectId);
+  const setSelectedSubjectId = useQuestionBankStore((state) => state.setSelectedSubjectId);
+  const [includeShared, setIncludeShared] = useState(false); // also list questions shared from other subjects
+  const {
+    subjects,
+    isLoading: isLoadingSubjects,
+    error: subjectsError,
+    refetch: refetchSubjects,
+  } = useBankSubjects();
+  const {
+    settings: visibility,
+    isSaving: isSavingVisibility,
+    error: visibilityError,
+    updateSubjectLevel,
+    updateMainLevel,
+  } = useBankVisibility();
+  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
+  const { questions, tags, isLoading, error, refetch } = useQuestionBank(
+    selectedSubject?.id ?? null,
+    includeShared,
+  );
   const { saveQuestion, isSaving, error: saveError } = useSaveBankQuestion();
   const { showToast } = useToast();
 
@@ -96,6 +124,20 @@ export function QuestionBankScreen() {
     });
   }, [questions, search, activeTagIds, activeTypeFilter]);
 
+  const openSubject = (subjectId: string) => {
+    setSelectedSubjectId(subjectId);
+    setIncludeShared(false);
+    setSearch("");
+    setActiveTagIds([]);
+    setActiveTypeFilter("all");
+  };
+
+  const backToSubjects = () => {
+    setSelectedSubjectId(null);
+    setIncludeShared(false);
+    refetchSubjects(); // counts on the tiles may have changed
+  };
+
   const toggleTagFilter = (tagId: string) => {
     setActiveTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
@@ -134,6 +176,12 @@ export function QuestionBankScreen() {
 
   // opens the editor for an existing bank question, and snapshots it as the saved baseline
   const handleSelectQuestion = async (id: string) => {
+    const target = questions.find((q) => q.id === id);
+    if (target && !target.isOwn) {
+      // row-level security only lets the owner change a bank question, so don't open an editor that can't save
+      showToast("This question was shared with you, so only its owner can edit it. Add it to an exam to reuse it.", "error");
+      return;
+    }
     try {
       const question = await getBankQuestionById(id);
       setEditingQuestion(question);
@@ -172,7 +220,8 @@ export function QuestionBankScreen() {
   // so the leave-prompt knows whether it's safe to continue navigating afterward
   const handleSave = async (): Promise<boolean> => {
     if (!editingQuestion) return false;
-    const didSave = await saveQuestion(editingQuestion);
+    if (!selectedSubject) return false; // new questions are always created inside an open subject
+    const didSave = await saveQuestion(editingQuestion, selectedSubject.id);
     if (!didSave) {
       showToast(saveError ?? "Could not save this question.", "error");
       return false;
@@ -252,7 +301,7 @@ export function QuestionBankScreen() {
                   style={{ color: "var(--color-base-content)", opacity: 0.7 }}
                 >
                   <ArrowLeft size={15} />
-                  Back to Question Bank
+                  Back to {selectedSubject?.name ?? "Question Bank"}
                 </button>
                 <div className="flex items-center gap-3">
                   {!isNewQuestion && (
@@ -330,14 +379,78 @@ export function QuestionBankScreen() {
                 />
               )}
             </>
-          ) : (
+          ) : !selectedSubject ? (
+            // ── Level 1: sub-question banks, one per subject ─────────────────
             <>
               <p className="text-xs opacity-60 mb-2">Teacher Portal &gt; Question Bank</p>
+              <div className="mb-6">
+                <h1 className="text-2xl font-bold mb-1">Question Bank</h1>
+                <p className="text-sm opacity-70 max-w-md leading-relaxed">
+                  One sub-bank per subject you teach. Open a subject to browse, create, and share its questions.
+                </p>
+              </div>
+
+              <div className="flex items-center justify-between gap-4 flex-wrap p-4 mb-6 rounded-2xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]">
+                <div className="max-w-lg">
+                  <p className="text-[14px] font-semibold">Main question bank sharing</p>
+                  <p className="text-[12px] opacity-60 mt-0.5 leading-relaxed">
+                    Pick a level to apply it to every sub-bank at once — it overrides each subject's own
+                    setting. Choose "No override" to go back to setting sharing per subject.
+                  </p>
+                </div>
+                <BankVisibilitySelector
+                  allowNone
+                  value={visibility.mainLevel}
+                  disabled={isSavingVisibility}
+                  onChange={(level) => updateMainLevel(level)}
+                />
+              </div>
+              {visibilityError && (
+                <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>{visibilityError}</p>
+              )}
+
+              {isLoadingSubjects ? (
+                <p className="text-[13px] opacity-60">Loading sub-banks...</p>
+              ) : subjectsError ? (
+                <p className="text-[13px]" style={{ color: "var(--color-error)" }}>{subjectsError}</p>
+              ) : subjects.length === 0 ? (
+                <p className="text-[13px] opacity-60">
+                  You aren't assigned to any subjects yet. Ask an admin to assign you one, and its
+                  question bank will show up here.
+                </p>
+              ) : (
+                <div className="grid grid-cols-3 gap-5">
+                  {subjects.map((subject) => (
+                    <BankSubjectTile key={subject.id} subject={subject} onClick={() => openSubject(subject.id)} />
+                  ))}
+                </div>
+              )}
+            </>
+          ) : (
+            // ── Level 2: the questions under the chosen subject ──────────────
+            <>
+              <p className="text-xs opacity-60 mb-2">
+                Teacher Portal &gt;{" "}
+                <button
+                  onClick={backToSubjects}
+                  className="p-0 border-none bg-transparent cursor-pointer text-inherit text-xs hover:underline"
+                >
+                  Question Bank
+                </button>{" "}
+                &gt; {selectedSubject.name}
+              </p>
               <div className="flex items-start justify-between gap-6 mb-6">
                 <div>
-                  <h1 className="text-2xl font-bold mb-1">Question Bank</h1>
+                  <button
+                    onClick={backToSubjects}
+                    className="flex items-center gap-1.5 mb-2 p-0 border-none bg-transparent cursor-pointer text-[13px] font-medium text-[var(--color-base-content)] opacity-70 transition-opacity hover:opacity-100"
+                  >
+                    <ArrowLeft size={14} />
+                    All subjects
+                  </button>
+                  <h1 className="text-2xl font-bold mb-1">{selectedSubject.name}</h1>
                   <p className="text-sm opacity-70 max-w-md leading-relaxed">
-                    Browse, search, and reuse questions across multiple exams.
+                    Questions under this subject. Reuse them across exams and classes.
                   </p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
@@ -351,6 +464,25 @@ export function QuestionBankScreen() {
                   </button>
                 </div>
               </div>
+
+              <div className="flex items-center justify-between gap-4 flex-wrap p-4 mb-5 rounded-2xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]">
+                <div className="max-w-lg">
+                  <p className="text-[14px] font-semibold">Sharing for this subject</p>
+                  <p className="text-[12px] opacity-60 mt-0.5 leading-relaxed">
+                    {visibility.mainLevel
+                      ? "Your main question bank setting is overriding this. Change it from the sub-bank list."
+                      : "Who can see the questions you create here."}
+                  </p>
+                </div>
+                <BankVisibilitySelector
+                  value={visibility.mainLevel ?? visibility.subjectLevels[selectedSubject.id] ?? "course"}
+                  disabled={visibility.mainLevel !== null || isSavingVisibility}
+                  onChange={(level) => level && updateSubjectLevel(selectedSubject.id, level)}
+                />
+              </div>
+              {visibilityError && (
+                <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>{visibilityError}</p>
+              )}
 
               <div className="flex items-center gap-2 px-3 py-2.5 rounded-lg border w-full max-w-md mb-3 border-[var(--color-base-300)] bg-[var(--color-base-100)]">
                 <Search size={14} style={{ opacity: 0.5, flexShrink: 0 }} />
@@ -381,7 +513,7 @@ export function QuestionBankScreen() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 mb-6">
+              <div className="flex flex-wrap items-center gap-2 mb-3">
                 <TagIcon size={14} style={{ opacity: 0.5 }} />
                 {tags.map((tag) => (
                   <button
@@ -398,6 +530,15 @@ export function QuestionBankScreen() {
                   </button>
                 ))}
               </div>
+
+              <label className="flex items-center gap-2 mb-6 cursor-pointer text-[12px] opacity-80">
+                <input
+                  type="checkbox"
+                  checked={includeShared}
+                  onChange={(e) => setIncludeShared(e.target.checked)}
+                />
+                Also show questions shared with me from other subjects
+              </label>
 
               {isLoading && <p className="text-[13px] opacity-60">Loading question bank...</p>}
               {error && <p className="text-[13px]" style={{ color: "var(--color-error)" }}>{error}</p>}
@@ -419,9 +560,19 @@ export function QuestionBankScreen() {
                         <tr
                           key={q.id}
                           onClick={() => handleSelectQuestion(q.id)}
-                          className="cursor-pointer hover:bg-black/[0.02]"
+                          className={q.isOwn ? "cursor-pointer hover:bg-black/[0.02]" : "cursor-default"}
                         >
-                          <td className="py-3.5 px-5 text-[14px] border-b border-[var(--color-base-300)]">{q.title}</td>
+                          <td className="py-3.5 px-5 text-[14px] border-b border-[var(--color-base-300)]">
+                            {q.title}
+                            {!q.isOwn && (
+                              <span
+                                className="ml-2 px-2 py-0.5 rounded-full text-[10px] font-semibold uppercase tracking-wide align-middle"
+                                style={{ backgroundColor: "var(--color-base-300)" }}
+                              >
+                                Shared
+                              </span>
+                            )}
+                          </td>
                           <td className="py-3.5 px-5 text-[13px] border-b border-[var(--color-base-300)] opacity-70">
                             {q.type === "multiple-choice" ? "Multiple Choice" : "Coding"}
                           </td>
@@ -441,7 +592,9 @@ export function QuestionBankScreen() {
                       {filteredQuestions.length === 0 && (
                         <tr>
                           <td colSpan={5} className="py-8 text-center text-[13px] opacity-50">
-                            No questions match your search or filters.
+                            {questions.length === 0
+                              ? "No questions in this sub-bank yet. Create the first one with New Question."
+                              : "No questions match your search or filters."}
                           </td>
                         </tr>
                       )}

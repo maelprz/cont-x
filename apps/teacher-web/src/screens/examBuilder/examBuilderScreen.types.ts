@@ -42,6 +42,25 @@ export interface CodingBuilderQuestion extends BaseBuilderQuestion {
 
 export type BuilderQuestion = MCQBuilderQuestion | CodingBuilderQuestion;
 
+// One bank question sitting inside a random pool. Only enough to show it in
+// the builder — the full question stays in the bank and is what gets served.
+export interface PoolItem {
+  bankQuestionId: string;
+  title: string;
+  type: QuestionType;
+  points: number;
+}
+
+// A "pick N of M" group: students get pickCount questions drawn from items.
+export interface BuilderPool {
+  id: string;
+  title: string;
+  pickCount: number;
+  // null = every question keeps its own points; a number forces them all to that value
+  pointsPerQuestion: number | null;
+  items: PoolItem[];
+}
+
 export interface ExamBuilderScreenProps {
   examCode?: string;
   questions?: BuilderQuestion[];

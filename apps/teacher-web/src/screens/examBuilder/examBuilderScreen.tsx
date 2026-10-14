@@ -2,6 +2,8 @@ import { useState, useEffect } from "react";
 import type {
   ExamBuilderScreenProps,
   BuilderQuestion,
+  BuilderPool,
+  PoolItem,
   QuestionType,
 } from "./examBuilderScreen.types";
 import type { ScreenName } from "../../router/route";
@@ -12,11 +14,13 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { useRouterLogic } from "../../router/routerLogic";
 import { saveBankQuestion } from "../../services/questionBankService";
-import { saveQuestion as persistExamQuestion } from "../../services/examBuilderService";
+import { saveQuestion as persistExamQuestion, savePools } from "../../services/examBuilderService";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
 import { QuestionBankModal } from "../../components/examBuilder/questionBankModal";
+import type { PoolTarget } from "../../components/examBuilder/questionBankModal";
+import { PoolEditorPanel } from "../../components/examBuilder/poolEditorPanel";
 import { UnsavedChangesPrompt } from "../../components/examBuilder/unsavedChangesPrompt";
 import { ExamBuilderEditorPanel } from "../../components/examBuilder/examBuilderEditorPanel";
 import {
@@ -55,6 +59,12 @@ export function ExamBuilderScreen({
     externalQuestions ?? [],
   );
 
+  // random "pick N of M" pools, tracked the same way as questions: current + last saved
+  const [pools, setPools] = useState<BuilderPool[]>([]);
+  const [savedPools, setSavedPools] = useState<BuilderPool[]>([]);
+  const [activePoolId, setActivePoolId] = useState<string | null>(null); // set while a pool (not a question) is open
+  const [poolModalTargetId, setPoolModalTargetId] = useState<string | null>(null); // pool the bank picker should add to
+
   // tracks which questions are brand-new and need a bank copy saved before the exam can be saved
   const [pendingBankSaveIds, setPendingBankSaveIds] = useState<Set<string>>(new Set());
 
@@ -75,7 +85,9 @@ export function ExamBuilderScreen({
   const forceNavigateTo = useRouterLogic((state) => state.forceNavigateTo);
 
   // true whenever the in-memory question list differs from what's actually persisted
-  const hasUnsavedChanges = JSON.stringify(questions) !== JSON.stringify(savedQuestions);
+  const hasUnsavedChanges =
+    JSON.stringify(questions) !== JSON.stringify(savedQuestions) ||
+    JSON.stringify(pools) !== JSON.stringify(savedPools);
   
   const { showToast } = useToast();
 
@@ -87,6 +99,8 @@ export function ExamBuilderScreen({
     const firstQuestion = examData.questions[0];
     setQuestions(examData.questions);
     setSavedQuestions(examData.questions); // snapshot of what's actually persisted
+    setPools(examData.pools);
+    setSavedPools(examData.pools);
     setActiveId(firstQuestion?.id ?? "");
     setEditorTab(firstQuestion?.type ?? "multiple-choice");
   }, [examData, externalQuestions]);
@@ -115,6 +129,7 @@ export function ExamBuilderScreen({
 
   const activeQuestion =
     questions.find((q) => q.id === activeId) ?? questions[0];
+  const activePool = pools.find((p) => p.id === activePoolId) ?? null;
   const [editorTab, setEditorTab] = useState<QuestionType>(
     activeQuestion?.type ?? "multiple-choice",
   );
@@ -156,6 +171,7 @@ export function ExamBuilderScreen({
 
   // opens the Question Bank modal instead of creating a blank question directly
   const handleAddQuestion = () => {
+    setPoolModalTargetId(null);
     setShowQuestionBankModal(true);
     onAddQuestion?.(); // still notify parent in case it needs to know
   };
@@ -169,6 +185,7 @@ export function ExamBuilderScreen({
 
     setQuestions((prev) => [...prev, newQuestion]);
     setPendingBankSaveIds((prev) => new Set(prev).add(newQuestion.id)); // needs a bank copy on first save
+    setActivePoolId(null);
     setActiveId(newQuestion.id);
     setEditorTab(newQuestion.type);
   };
@@ -182,9 +199,39 @@ export function ExamBuilderScreen({
       return next;
     });
     if (newQuestions.length > 0) {
+      setActivePoolId(null);
       setActiveId(newQuestions[0].id);
       setEditorTab(newQuestions[0].type);
     }
+  };
+
+  // random pool changes are staged locally like questions — Save Draft/Exam persists them
+  const handlePoolItemsAdded = (target: PoolTarget, items: PoolItem[]) => {
+    if (target.kind === "new") {
+      const newPool: BuilderPool = {
+        id: crypto.randomUUID(),
+        title: `Pool ${pools.length + 1}`,
+        pickCount: target.pickCount,
+        pointsPerQuestion: null,
+        items,
+      };
+      setPools((prev) => [...prev, newPool]);
+      setActivePoolId(newPool.id);
+    } else {
+      setPools((prev) =>
+        prev.map((p) => (p.id === target.poolId ? { ...p, items: [...p.items, ...items] } : p)),
+      );
+      setActivePoolId(target.poolId);
+    }
+  };
+
+  const handlePoolChange = (updated: BuilderPool) =>
+    setPools((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
+
+  const handleDeletePool = (id: string) => {
+    if (!window.confirm("Delete this random pool? Its questions stay in the question bank.")) return;
+    setPools((prev) => prev.filter((p) => p.id !== id));
+    setActivePoolId(null);
   };
 
   // reverts the active question to its last confirmed version, or a blank if it was never saved
@@ -247,6 +294,7 @@ export function ExamBuilderScreen({
   };
 
   const handleSelectQuestion = (id: string) => {
+    setActivePoolId(null);
     setActiveId(id);
     const q = questions.find((q) => q.id === id);
     if (q) setEditorTab(q.type);
@@ -308,8 +356,8 @@ export function ExamBuilderScreen({
     setIsSavingQuestion(true);
     setBankSaveError(null);
     try {
-      if (isNewQuestion && teacherId) {
-        await saveBankQuestion(teacherId, { ...activeQuestion, id: crypto.randomUUID() });
+      if (isNewQuestion && teacherId && examData?.subjectId) {
+        await saveBankQuestion(teacherId, examData.subjectId, { ...activeQuestion, id: crypto.randomUUID() });
         setPendingBankSaveIds((prev) => {
           const next = new Set(prev);
           next.delete(activeQuestion.id);
@@ -340,12 +388,15 @@ export function ExamBuilderScreen({
     setSaveAllError(null);
     try {
       for (const q of questions) {
-        if (pendingBankSaveIds.has(q.id) && teacherId) {
-          await saveBankQuestion(teacherId, { ...q, id: crypto.randomUUID() }); // reusable copy, first time only
+        if (pendingBankSaveIds.has(q.id) && teacherId && examData.subjectId) {
+          // reusable copy in this exam's subject bank, first time only
+          await saveBankQuestion(teacherId, examData.subjectId, { ...q, id: crypto.randomUUID() });
         }
         await persistExamQuestion(examData.id, q); // upserts this question into the exam
       }
+      await savePools(examData.id, pools, questions.length); // random pools sit after the questions
       setSavedQuestions(questions);
+      setSavedPools(pools);
       setPendingBankSaveIds(new Set());
       return true;
     } catch (err) {
@@ -417,7 +468,10 @@ export function ExamBuilderScreen({
           {/* Left: question list */}
           <QuestionListPanel
             questions={questions}
-            activeId={activeId}
+            activeId={activePoolId ? "" : activeId}
+            pools={pools}
+            activePoolId={activePoolId}
+            onSelectPool={setActivePoolId}
             onSelectQuestion={handleSelectQuestion}
             onAddQuestion={handleAddQuestion}
             onReorderQuestions={onReorderQuestions}
@@ -439,6 +493,20 @@ export function ExamBuilderScreen({
             isDeleting={isDeleting}
             isSavingQuestion={isSavingQuestion}
             pendingBankSaveIds={pendingBankSaveIds}
+            poolPanel={
+              activePool ? (
+                <PoolEditorPanel
+                  pool={activePool}
+                  readOnly={openedFromEditExam}
+                  onChange={handlePoolChange}
+                  onDelete={() => handleDeletePool(activePool.id)}
+                  onAddQuestions={() => {
+                    setPoolModalTargetId(activePool.id);
+                    setShowQuestionBankModal(true);
+                  }}
+                />
+              ) : undefined
+            }
             onTabSwitch={handleTabSwitch}
             onQuestionChange={handleQuestionChange}
             onPreviewRendered={onPreviewRendered}
@@ -454,9 +522,16 @@ export function ExamBuilderScreen({
       {/* Overlays */}
       <QuestionBankModal
         isOpen={showQuestionBankModal}
+        subjectId={examData?.subjectId ?? null}
         startingNumber={questions.length}
-        onClose={() => setShowQuestionBankModal(false)}
+        pools={pools}
+        defaultPoolId={poolModalTargetId}
+        onClose={() => {
+          setShowQuestionBankModal(false);
+          setPoolModalTargetId(null);
+        }}
         onQuestionsAdded={handleQuestionsAddedFromBank}
+        onPoolItemsAdded={handlePoolItemsAdded}
         onCreateNewQuestion={handleCreateNewQuestionFromModal}
       />
       
