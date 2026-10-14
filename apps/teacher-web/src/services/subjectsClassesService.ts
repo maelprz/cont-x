@@ -64,7 +64,7 @@ export async function fetchSubjects(): Promise<SubjectSummary[]> {
         teacher:users!classes_teacher_id_fkey ( first_name, last_name )
       )
     `) 
-    .order("name", { ascending: true }); 
+    .order("code_prefix", { ascending: true }); 
 
   if (error) throw new Error(toFriendlyMessage(error)); // stop with a safe message
   const rows = (data ?? []) as unknown as SubjectRow[]; // give the untyped result a shape
