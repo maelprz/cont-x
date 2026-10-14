@@ -23,22 +23,16 @@ export async function login(
   // Step 1 — find email by id_number.
   // Unauthenticated query — allowed by the RLS policy:
   // "public can look up student email by id_number"
-  const { data: profileData, error: profileError } = await supabase
-    .from("users")
-    .select("email")
-    .eq("id_number", idNumber) // matches what the student typed
-    .eq("role", "student") // guards against teachers/admins using the desktop app
-    .single();
-
-  if (profileError || !profileData) {
-    // Deliberately vague — don't reveal whether the ID exists
-    throw new Error("Teacher accounts are not allowed in this app.");
+  const { data: loginEmail, error: lookupError } = await supabase // ask the database function for the email
+    .rpc("get_login_email", { p_id_number: idNumber }); // pass the ID number the student typed
+  if (lookupError || !loginEmail) { // no match, or the call failed
+    throw new Error("Invalid student ID or password."); // one vague message for every failure
   }
 
   // Step 2 — authenticate with Supabase Auth using the email we found.
   const { data: authData, error: authError } =
     await supabase.auth.signInWithPassword({
-      email: profileData.email,
+      email: loginEmail,
       password,
     });
 

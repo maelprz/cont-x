@@ -29,21 +29,16 @@ export async function login(
   // Step 1 — find email by id_number.
   // Unauthenticated query — allowed by the RLS policy:
   // "public can look up email by id_number"
-  const { data: profileData, error: profileError } = await supabase
-    .from("users")
-    .select("email")
-    .eq("id_number", idNumber)
-    .in("role", ["teacher", "admin", "superadmin"])
-    .single();
-
-  if (profileError || !profileData) {
-    throw new Error("Invalid ID number or password.");
+  const { data: loginEmail, error: lookupError } = await supabase // call the database function instead of reading the table
+    .rpc("get_login_email", { p_id_number: idNumber }); // pass the ID number the user typed
+  if (lookupError || !loginEmail) { // no match, or the call failed
+    throw new Error("Invalid ID number or password."); // same vague message as before, so nothing leaks
   }
 
   // Step 2 — authenticate with Supabase Auth using the email we found.
   const { data: authData, error: authError } =
     await supabase.auth.signInWithPassword({
-      email: profileData.email,
+      email: loginEmail,
       password,
     });
 
