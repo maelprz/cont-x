@@ -7,6 +7,7 @@ import {
   FileText,
   Users,
   FileClock,
+  BookOpen,
 } from "lucide-react";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useLogout } from "../../hooks/useLogout";
@@ -103,6 +104,13 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
             >
               <Users size={16} />
               <span>User Management</span>
+            </button>
+                        <button
+              onClick={() => navigateTo("subjectsClasses")} // opens the new Subjects & Classes screen
+              className={`${navItemBase} ${activeItem === "subjectsClasses" ? navItemActive : navItemInactive}`} // highlighted when active
+            >
+              <BookOpen size={16} />
+              <span>Subjects &amp; Classes</span>
             </button>
             <button
               onClick={() => navigateTo("auditLogs")} 

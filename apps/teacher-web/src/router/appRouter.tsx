@@ -1,10 +1,10 @@
 import { useEffect } from "react";
-import { getCurrentUser } from "../services/authService"; // changed: replaces the old logout import
+import { getCurrentUser } from "../services/authService"; 
 import type { ComponentType } from "react";
 import type { ScreenName } from "./route";
 import { useAuthStore } from "../store/useAuthStore";
 import { useRouterLogic } from "./routerLogic";
-import { canUseAdminScreens, isTopAdmin } from "./permissions"; // new: shared permission checks
+import { canUseAdminScreens, isTopAdmin } from "./permissions"; 
 import { LoginScreen } from "../screens/login/loginScreen";
 import { UserManagementScreen } from "../screens/userManagement/userManagementScreen";
 import { AuditLogsScreen } from "../screens/auditLogs/auditLogsScreen";
@@ -13,13 +13,14 @@ import { ExamLibraryScreen } from "../screens/examLibrary/examLibraryScreen";
 import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 import { QuestionBankScreen } from "../screens/questionBank/questionBankScreen";
 import { ViolationMonitoringScreen } from "../screens/violationLogs/violationMonitoringScreen";
+import { SubjectsClassesScreen } from "../screens/subjectsClasses/subjectsClassesScreen"; 
 
 import { Toast } from "../components/shared/toast";
 import { useToastStore } from "../store/useToastStore";
 import { ExamResultsScreen } from "../screens/examResult/examResultsScreen";
 import { ExamResultsListScreen } from "../screens/examResult/examResultListScreen";
 
-const adminScreens: ScreenName[] = ["userManagement", "auditLogs"]; // screens only admins may open
+const adminScreens: ScreenName[] = ["userManagement", "auditLogs", "subjectsClasses"]; 
 
 const screenComponents: Record<ScreenName, ComponentType<any>> = {
   login: LoginScreen,
@@ -32,6 +33,7 @@ const screenComponents: Record<ScreenName, ComponentType<any>> = {
   examResultsList: ExamResultsListScreen,
   examResults: ExamResultsScreen,
   violationMonitoring: ViolationMonitoringScreen,
+  subjectsClasses: SubjectsClassesScreen,
 };
 
 export function AppRouter() {

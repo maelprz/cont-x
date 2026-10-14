@@ -1,6 +1,6 @@
-import { Shield, Users, FileClock, LogOut } from "lucide-react"; // pre-made icon components
+import { Shield, Users, FileClock, LogOut, BookOpen } from "lucide-react";
 import type { AdminSidebarProps } from "./adminSidebar.types";
-import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
+import { useRouterLogic } from "../../router/routerLogic";
 import { useLogout } from "../../hooks/useLogout";
 
 // Single shared sidebar -- used across every admin screen.
@@ -26,35 +26,44 @@ export function AdminSidebar({ activeItem }: AdminSidebarProps) {
         </p>
       </div>
 
-      <nav className="px-4 flex flex-col gap-1">
+            <nav className="px-4 flex flex-col gap-1">
         <p className="text-[var(--color-primary-content)]/60 text-[10px] uppercase tracking-wider px-2 mb-1">
           Main Menu
         </p>
 
-        {/* User Management nav item -- navigates on click */}
+        {/* User Management nav item */}
         <button
-          onClick={() => navigateTo("userManagement")}
+          onClick={() => navigateTo("userManagement")} // opens the User Management screen
           className={`${navItemBase} ${
             activeItem === "userManagement"
-              ? "bg-[var(--color-primary-content)]/15 text-[var(--color-primary-content)]"
-              : "text-[var(--color-primary-content)]/80 hover:bg-[var(--color-primary-content)]/10"
+              ? "bg-[var(--color-primary-content)]/15 text-[var(--color-primary-content)]" // highlighted when active
+              : "text-[var(--color-primary-content)]/80 hover:bg-[var(--color-primary-content)]/10" // normal otherwise
           }`}
         >
           <Users size={16} />
           User Management
         </button>
 
-        <p className="text-[var(--color-primary-content)]/60 text-[10px] uppercase tracking-wider px-2 mt-4 mb-1">
-          Configuration
-        </p>
-
-        {/* Audit Logs nav item -- navigates on click */}
+        {/* new: Subjects & Classes nav item */}
         <button
-          onClick={() => navigateTo("auditLogs")}
+          onClick={() => navigateTo("subjectsClasses")} // opens the new Subjects & Classes screen
+          className={`${navItemBase} ${
+            activeItem === "subjectsClasses"
+              ? "bg-[var(--color-primary-content)]/15 text-[var(--color-primary-content)]" // highlighted when active
+              : "text-[var(--color-primary-content)]/80 hover:bg-[var(--color-primary-content)]/10" // normal otherwise
+          }`}
+        >
+          <BookOpen size={16} />
+          Subjects &amp; Classes
+        </button>
+
+        {/* Audit Logs nav item, now under Main Menu */}
+        <button
+          onClick={() => navigateTo("auditLogs")} // opens the Audit Logs screen
           className={`${navItemBase} ${
             activeItem === "auditLogs"
-              ? "bg-[var(--color-primary-content)]/15 text-[var(--color-primary-content)]"
-              : "text-[var(--color-primary-content)]/80 hover:bg-[var(--color-primary-content)]/10"
+              ? "bg-[var(--color-primary-content)]/15 text-[var(--color-primary-content)]" // highlighted when active
+              : "text-[var(--color-primary-content)]/80 hover:bg-[var(--color-primary-content)]/10" // normal otherwise
           }`}
         >
           <FileClock size={16} />

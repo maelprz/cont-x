@@ -8,7 +8,8 @@ export type TeacherScreenName =
   | "examResultsList" 
   | "examResults"
   | "userManagement" 
-  | "auditLogs"; 
+  | "auditLogs"
+  | "subjectsClasses";
 
 export interface TeacherSidebarProps {
   activeItem?: TeacherScreenName;
