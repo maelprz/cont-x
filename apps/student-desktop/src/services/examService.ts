@@ -2,17 +2,16 @@ import { supabase } from "./supabaseClient"; // shared Supabase client, never cr
 
 // Shape of the exam row we get back after a successful lookup.
 export interface ExamLookupResult {
-  id: string; // exams.id — needed later to create the session
-  title: string; // exams.title — shown to the student for confirmation
-  status: string; // exams.status — checked in a future step, not this one
-  attemptsRemaining: number; // how many tries this student has left, for the early warning
+  id: string;
+  classExamId: string;
+  title: string;
+  attemptsRemaining: number;
 }
 
 // Looks up a single exam by its student-facing exam_code, and checks
-// how many attempts this student has left, purely as an early warning.
-// The real enforcement still happens server-side in verify_and_start_session.
+// how many attempts this student has left.
 export async function lookupExamByCode(
-  examCode: string, // the code the student typed into the Dashboard input
+  examCode: string,
 ): Promise<ExamLookupResult | null> {
   const {
     data: { user },
@@ -20,14 +19,18 @@ export async function lookupExamByCode(
 
   if (!user) throw new Error("Not authenticated."); // shouldn't happen, but guard anyway
 
-  const { data: exam, error: examError } = await supabase
-    .from("exams") // querying the exams table only
-    .select("id, title, status, max_attempts") // only the columns this step needs
-    .eq("exam_code", examCode) // match on the student-entered code
-    .maybeSingle(); // expect zero or one row, never throws on zero
+  const { data: rows, error: examError } = await supabase
+    .from("class_exams")
+    .select("id, max_attempts, exams!inner(id, title, exam_code)")
+    .eq("exams.exam_code", examCode) // match on the student-entered code
+    .eq("status", "active");
 
   if (examError) throw new Error(examError.message); // real DB/network errors bubble up
-  if (!exam) return null; // no exam has that code
+  if (!rows || rows.length === 0) return null; // no match found, let the caller handle it
+
+  const classExam = rows[0]; // we expect exactly one row, so we can take the first one
+  const exam = unwrapOne(classExam.exams as any); // handles Supabase's array-or-object quirk
+  if (!exam) return null;
 
   // count this student's finished attempts (either submitted or timed out) for this exam
   const { count, error: countError } = await supabase
@@ -40,12 +43,12 @@ export async function lookupExamByCode(
   if (countError) throw new Error(countError.message); // real DB/network errors bubble up
 
   const usedAttempts = count ?? 0; // default to zero if the count came back null
-  const attemptsRemaining = Math.max(exam.max_attempts - usedAttempts, 0); // never show a negative number
+  const attemptsRemaining = Math.max(classExam.max_attempts - usedAttempts, 0); // never show a negative number
 
   return {
     id: exam.id,
+    classExamId: classExam.id,
     title: exam.title,
-    status: exam.status,
     attemptsRemaining,
   };
 }
@@ -59,11 +62,11 @@ export interface SessionStartResult {
 // Calls the server-side RPC to check the code and start the session.
 // The real verification_code never leaves the database in this call.
 export async function verifySessionCode(
-  examId: string, // which exam the student is trying to enter
-  verificationCode: string, // the code they typed into the modal
+  classExamId: string, // which exam the student is trying to enter
+  verificationCode: string,
 ): Promise<SessionStartResult> {
   const { data, error } = await supabase.rpc("verify_and_start_session", {
-    p_exam_id: examId, // matches the SQL function's first parameter
+    p_class_exam_id: classExamId, // matches the SQL function's first parameter
     p_verification_code: verificationCode, // matches the second parameter
   });
 
@@ -200,7 +203,9 @@ function mapToMonacoLanguage(programType: string | undefined): string {
 // NEW — converts the stored program_type into the shape the compiler IPC
 // call expects: "function" means student code + hidden main are combined,
 // "program" means the student wrote their own main() already.
-function mapToProgramType(programType: string | undefined): "function" | "program" {
+function mapToProgramType(
+  programType: string | undefined,
+): "function" | "program" {
   return programType === "cFunction" ? "function" : "program";
 }
 
@@ -256,7 +261,9 @@ export async function getExamQuestions(
         : undefined, // Monaco language mode
       programType: isCoding ? codingRow?.program_type : undefined, // CHANGED — pass through directly, no translation needed
       mainCode: isCoding ? codingRow?.main_code : undefined, // NEW — hidden main for "function" type
-      checkPenaltyPerAttempt: isCoding ? codingRow?.check_penalty_per_attempt ?? 0 : undefined, // NEW — Run Code scoring penalty
+      checkPenaltyPerAttempt: isCoding
+        ? (codingRow?.check_penalty_per_attempt ?? 0)
+        : undefined, // NEW — Run Code scoring penalty
     };
   });
 }
