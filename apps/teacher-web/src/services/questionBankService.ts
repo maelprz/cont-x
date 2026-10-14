@@ -30,6 +30,8 @@ export interface BankTag {
 // one full question_bank row, with its child table and tags embedded
 type QuestionBankRow = {
   id: string;
+  teacher_id: string; // owner — differs from the viewer for questions shared by a colleague
+  subject_id: string;
   title: string;
   type: "mcq" | "coding";
   prompt: string;
@@ -50,6 +52,8 @@ type QuestionBankRow = {
 // the lightweight shape the table row needs, not the full editable question
 export interface BankQuestionSummary {
   id: string;
+  subjectId: string;
+  isOwn: boolean; // false = shared with this teacher by someone else (read-only here)
   title: string;
   type: "multiple-choice" | "coding";
   points: number;
@@ -102,9 +106,11 @@ function mapBankRowToBuilderQuestion(row: QuestionBankRow): BuilderQuestion | nu
 }
 
 // turns a raw bank row into the summary shape the table needs
-function mapBankRowToSummary(row: QuestionBankRow): BankQuestionSummary {
+function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuestionSummary {
   return {
     id: row.id,
+    subjectId: row.subject_id,
+    isOwn: row.teacher_id === viewerId,
     title: row.title,
     type: row.type === "mcq" ? "multiple-choice" : "coding",
     points: row.max_points,
@@ -120,6 +126,8 @@ function mapBankRowToSummary(row: QuestionBankRow): BankQuestionSummary {
 // shared select string, reused by both the list and single-question fetch
 const BANK_SELECT = `
   id,
+  teacher_id,
+  subject_id,
   title,
   type,
   prompt,
@@ -141,17 +149,37 @@ const BANK_SELECT = `
   )
 `;
 
-// fetches every bank question belonging to one teacher, tags included
-export async function getQuestionBank(teacherId: string): Promise<BankQuestionSummary[]> {
-  const { data, error } = await supabase
-    .from("question_bank")
-    .select(BANK_SELECT)
-    .eq("teacher_id", teacherId)
-    .order("created_at", { ascending: false }); // newest bank questions first
+// fetches all bank questions a teacher can see for one subject, newest first
+export async function getQuestionBank(
+  teacherId: string,
+  subjectId: string,
+  includeShared = false,
+): Promise<BankQuestionSummary[]> {
+  let query = supabase.from("question_bank").select(BANK_SELECT);
+  if (!includeShared) query = query.eq("subject_id", subjectId);
+
+  const { data, error } = await query.order("created_at", { ascending: false }); // newest first
 
   if (error) throw error; // let the hook decide how to show this error
 
-  return (data as unknown as QuestionBankRow[]).map(mapBankRowToSummary);
+  return (data as unknown as QuestionBankRow[]).map((row) => mapBankRowToSummary(row, teacherId));
+}
+
+// question counts per subject for the sub-bank tiles: everything the teacher
+// can see (own + shared) and how many of those are their own
+export async function getBankCountsBySubject(
+  teacherId: string,
+): Promise<Record<string, { total: number; own: number }>> {
+  const { data, error } = await supabase.from("question_bank").select("subject_id, teacher_id");
+  if (error) throw error;
+
+  const counts: Record<string, { total: number; own: number }> = {};
+  (data ?? []).forEach((row) => {
+    const entry = (counts[row.subject_id] ??= { total: 0, own: 0 });
+    entry.total += 1;
+    if (row.teacher_id === teacherId) entry.own += 1;
+  });
+  return counts;
 }
 
 // fetches one bank question fully, ready to hand to an editor panel
@@ -232,12 +260,17 @@ async function syncTestCaseBank(bankQuestionId: string, testCases: TestCase[]): 
 }
 
 // saves one bank question (and its type-specific child rows) to the database
-export async function saveBankQuestion(teacherId: string, question: BuilderQuestion): Promise<void> {
+export async function saveBankQuestion(
+  teacherId: string,
+  subjectId: string, // every bank question lives under a subject now (NOT NULL in the db)
+  question: BuilderQuestion,
+): Promise<void> {
   const dbType = question.type === "multiple-choice" ? "mcq" : "coding"; // matches db's check constraint
 
   const { error: questionError } = await supabase.from("question_bank").upsert({
     id: question.id, // real uuid, insert or update depending on if it exists
     teacher_id: teacherId,
+    subject_id: subjectId,
     title: question.title,
     type: dbType,
     prompt: question.description,
@@ -270,7 +303,15 @@ export async function saveBankQuestion(teacherId: string, question: BuilderQuest
 // permanently deletes a bank question — cascades remove its own child rows
 export async function deleteBankQuestion(id: string): Promise<void> {
   const { error } = await supabase.from("question_bank").delete().eq("id", id);
-  if (error) throw error;
+  if (error) {
+    // 23503 = foreign key violation: an exam's random pool still points at this question
+    if (error.code === "23503") {
+      throw new Error(
+        "This question is part of a random pool in an exam, so it can't be deleted while it's in use.",
+      );
+    }
+    throw error;
+  }
 }
 
 // fetches every tag this teacher has created, for the filter chips

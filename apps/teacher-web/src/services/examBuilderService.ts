@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient";
 import type {
   BuilderQuestion,
+  BuilderPool,
   MCQBuilderQuestion,
   CodingBuilderQuestion,
   CodingProgramType,
@@ -46,14 +47,31 @@ type QuestionRow = {
   } | null;
 };
 
+// one random pool with its candidate bank questions, exactly as fetched
+type PoolRow = {
+  id: string;
+  title: string | null;
+  pick_count: number;
+  order_index: number;
+  points_per_question: number | null;
+  exam_question_pool_items: {
+    id: string;
+    question_bank_id: string;
+    // null if the bank question isn't visible to this teacher any more
+    question_bank: { id: string; title: string; type: "mcq" | "coding"; max_points: number } | null;
+  }[];
+};
+
 // the exam row plus all of its questions, exactly as fetched.
 type ExamBuilderRow = {
   id: string;
+  subject_id: string;
   title: string;
   exam_code: string | null;
   status: "draft" | "saved";
   description: string | null;
   questions: QuestionRow[];
+  exam_question_pools: PoolRow[];
 };
 
 // shape of the initial settings collected when creating a new exam.
@@ -89,11 +107,13 @@ export async function createDraftExam(
 // the shape the builder screen actually needs to render
 export interface ExamBuilderData {
   id: string;
+  subjectId: string; // the subject this exam lives under — decides which question bank the builder uses
   title: string;
   examCode: string | null;
   status: "draft" | "saved";
   description: string; // empty string when not set, never null in the UI
   questions: BuilderQuestion[];
+  pools: BuilderPool[]; // random "pick N of M" groups, in display order
 }
 
 // turns one mcq question row into the shape the MCQ editor expects
@@ -154,6 +174,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
     .select(
       `
       id,
+      subject_id,
       title,
       exam_code,
       status,
@@ -176,11 +197,24 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
           reference_solution,
           test_cases ( id, input, expected_output, is_hidden )
         )
+      ),
+      exam_question_pools (
+        id,
+        title,
+        pick_count,
+        order_index,
+        points_per_question,
+        exam_question_pool_items (
+          id,
+          question_bank_id,
+          question_bank ( id, title, type, max_points )
+        )
       )
     `,
     )
     .eq("id", examId)
     .order("order_index", { referencedTable: "questions" }) // keep questions in builder order
+    .order("order_index", { referencedTable: "exam_question_pools" })
     .single();
 
   if (error) throw error; // let the hook decide how to show this error
@@ -189,6 +223,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
 
   return {
     id: row.id,
+    subjectId: row.subject_id,
     title: row.title,
     examCode: row.exam_code,
     status: row.status,
@@ -196,7 +231,114 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
     questions: row.questions
       .map(mapQuestionRow)
       .filter((q): q is BuilderQuestion => q !== null), // drop unsupported/bad rows
+    pools: row.exam_question_pools.map(mapPoolRow),
   };
+}
+
+function mapPoolRow(row: PoolRow): BuilderPool {
+  return {
+    id: row.id,
+    title: row.title ?? "",
+    pickCount: row.pick_count,
+    pointsPerQuestion: row.points_per_question,
+    items: row.exam_question_pool_items.map((item) => ({
+      bankQuestionId: item.question_bank_id,
+      // keep the item even if its bank row can't be read — dropping it here
+      // would make the next save delete it from the pool
+      title: item.question_bank?.title ?? "Unavailable question",
+      type: item.question_bank?.type === "coding" ? "coding" : "multiple-choice",
+      points: item.question_bank?.max_points ?? 0,
+    })),
+  };
+}
+
+// Saves the exam's random pools: removes pools (and items) the teacher deleted,
+// upserts the rest, and syncs each pool's candidate questions. Pools sit after
+// every question in the exam order (order_index continues where questions end).
+export async function savePools(
+  examId: string,
+  pools: BuilderPool[],
+  questionCount: number,
+): Promise<void> {
+  pools.forEach((pool) => {
+    const name = pool.title.trim() || "Untitled pool";
+    if (pool.items.length === 0) {
+      throw new Error(`"${name}" has no questions. Add some, or delete the pool.`);
+    }
+    if (pool.pickCount < 1 || pool.pickCount > pool.items.length) {
+      throw new Error(`"${name}" picks ${pool.pickCount} but only has ${pool.items.length} questions.`);
+    }
+  });
+
+  const { data: existingPools, error: poolsError } = await supabase
+    .from("exam_question_pools")
+    .select("id")
+    .eq("exam_id", examId);
+  if (poolsError) throw poolsError;
+
+  const keepIds = new Set(pools.map((p) => p.id));
+  const removedIds = (existingPools ?? []).map((p) => p.id).filter((id) => !keepIds.has(id));
+
+  if (removedIds.length > 0) {
+    // items first, in case the foreign key doesn't cascade
+    const { error: itemsDeleteError } = await supabase
+      .from("exam_question_pool_items")
+      .delete()
+      .in("pool_id", removedIds);
+    if (itemsDeleteError) throw itemsDeleteError;
+
+    const { error: poolsDeleteError } = await supabase
+      .from("exam_question_pools")
+      .delete()
+      .in("id", removedIds);
+    if (poolsDeleteError) throw poolsDeleteError;
+  }
+
+  if (pools.length === 0) return;
+
+  const { error: upsertError } = await supabase.from("exam_question_pools").upsert(
+    pools.map((pool, index) => ({
+      id: pool.id,
+      exam_id: examId,
+      title: pool.title.trim() || null,
+      pick_count: pool.pickCount,
+      order_index: questionCount + index,
+      points_per_question: pool.pointsPerQuestion,
+    })),
+  );
+  if (upsertError) throw upsertError;
+
+  const { data: existingItems, error: itemsError } = await supabase
+    .from("exam_question_pool_items")
+    .select("id, pool_id, question_bank_id")
+    .in("pool_id", pools.map((p) => p.id));
+  if (itemsError) throw itemsError;
+
+  const idsToDelete: string[] = [];
+  const rowsToInsert: { pool_id: string; question_bank_id: string }[] = [];
+
+  pools.forEach((pool) => {
+    const wanted = new Set(pool.items.map((i) => i.bankQuestionId));
+    const have = new Set<string>();
+    (existingItems ?? [])
+      .filter((row) => row.pool_id === pool.id)
+      .forEach((row) => {
+        if (wanted.has(row.question_bank_id)) have.add(row.question_bank_id);
+        else idsToDelete.push(row.id);
+      });
+    pool.items
+      .filter((item) => !have.has(item.bankQuestionId))
+      .forEach((item) => rowsToInsert.push({ pool_id: pool.id, question_bank_id: item.bankQuestionId }));
+  });
+
+  if (idsToDelete.length > 0) {
+    const { error } = await supabase.from("exam_question_pool_items").delete().in("id", idsToDelete);
+    if (error) throw error;
+  }
+  if (rowsToInsert.length > 0) {
+    const { error } = await supabase.from("exam_question_pool_items").insert(rowsToInsert);
+    if (error) throw error;
+  }
 }
 
 // deletes mc_options no longer in the current list, then upserts the rest

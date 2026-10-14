@@ -7,8 +7,8 @@ import {
 } from "../services/questionBankService";
 import { useAuthStore } from "../store/useAuthStore";
 
-// Loads every bank question and tag belonging to the logged-in teacher.
-export function useQuestionBank() {
+// only show questions that are visible to the teacher
+export function useQuestionBank(subjectId: string | null, includeShared = false) {
   const teacherId = useAuthStore((state) => state.user?.id);
   const [questions, setQuestions] = useState<BankQuestionSummary[]>([]);
   const [tags, setTags] = useState<BankTag[]>([]);
@@ -16,14 +16,18 @@ export function useQuestionBank() {
   const [error, setError] = useState<string | null>(null);
 
   const refetch = useCallback(async () => {
-    if (!teacherId) return; // not logged in yet, nothing to fetch
+    if (!teacherId || !subjectId) {
+      setQuestions([]);
+      setIsLoading(false);
+      return; // not logged in yet, or no subject chosen — nothing to fetch
+    }
 
     setIsLoading(true);
     setError(null);
     try {
       const [questionRows, tagRows] = await Promise.all([
-        getQuestionBank(teacherId), // real bank questions
-        getBankTags(teacherId), // real tag list for filters
+        getQuestionBank(teacherId, subjectId, includeShared),
+        getBankTags(teacherId), // tags stay personal to each teacher
       ]);
       setQuestions(questionRows);
       setTags(tagRows);
@@ -32,7 +36,7 @@ export function useQuestionBank() {
     } finally {
       setIsLoading(false);
     }
-  }, [teacherId]);
+  }, [teacherId, subjectId, includeShared]);
 
   useEffect(() => {
     refetch();

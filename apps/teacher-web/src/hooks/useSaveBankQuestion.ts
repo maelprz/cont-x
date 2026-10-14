@@ -3,13 +3,13 @@ import { saveBankQuestion } from "../services/questionBankService";
 import { useAuthStore } from "../store/useAuthStore";
 import type { BuilderQuestion } from "../screens/examBuilder/examBuilderScreen.types";
 
-// Saves one bank question, reusing the same editor panels as Exam Builder.
+// Saves one bank question under a subject
 export function useSaveBankQuestion() {
   const teacherId = useAuthStore((state) => state.user?.id);
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
-  async function saveQuestion(question: BuilderQuestion): Promise<boolean> {
+  async function saveQuestion(question: BuilderQuestion, subjectId: string): Promise<boolean> {
     if (!teacherId) {
       setError("Not authenticated.");
       return false;
@@ -18,7 +18,7 @@ export function useSaveBankQuestion() {
     setIsSaving(true);
     setError(null);
     try {
-      await saveBankQuestion(teacherId, question);
+      await saveBankQuestion(teacherId, subjectId, question);
       return true;
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not save this question.");

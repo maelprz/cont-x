@@ -24,6 +24,7 @@ interface ExamBuilderEditorPaneProps {
   isDeleting: boolean;
   isSavingQuestion: boolean;
   pendingBankSaveIds: Set<string>;
+  poolPanel?: React.ReactNode; // when set, replaces the question editor (a random pool is selected)
   onTabSwitch: (tab: QuestionType) => void;
   onQuestionChange: (question: BuilderQuestion) => void;
   onPreviewRendered?: () => void;
@@ -49,6 +50,7 @@ export function ExamBuilderEditorPanel({
   isDeleting,
   isSavingQuestion,
   pendingBankSaveIds,
+  poolPanel,
   onTabSwitch,
   onQuestionChange,
   onPreviewRendered,
@@ -69,15 +71,17 @@ export function ExamBuilderEditorPanel({
             className="text-[24px] font-bold leading-tight mb-0.5"
             style={{ color: "var(--color-base-content)" }}
           >
-            Edit Question
+            {poolPanel ? "Edit Random Pool" : "Edit Question"}
           </h1>
           <p
             className="text-[13px]"
             style={{ color: "var(--color-base-content)", opacity: 0.6 }}
           >
-            {isMCQ
-              ? "Configure your multiple choice question and correct options."
-              : "Configure your coding challenge requirements and test cases."}
+            {poolPanel
+              ? "Each student gets a random selection of the questions in this pool."
+              : isMCQ
+                ? "Configure your multiple choice question and correct options."
+                : "Configure your coding challenge requirements and test cases."}
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
@@ -130,7 +134,9 @@ export function ExamBuilderEditorPanel({
           </p>
         )}
 
-        {!isLoading && !error && (
+        {!isLoading && !error && poolPanel}
+
+        {!isLoading && !error && !poolPanel && (
           <>
             <div
               className="inline-flex rounded-lg p-0.5 mb-6"
@@ -211,6 +217,7 @@ export function ExamBuilderEditorPanel({
           </p>
         )}
 
+        {!poolPanel && (
         <div
           className="flex items-center justify-between mt-8 pt-5 border-t"
           style={{ borderColor: "var(--color-base-300)" }}
@@ -257,6 +264,7 @@ export function ExamBuilderEditorPanel({
             </button>
           </div>
         </div>
+        )}
       </div>
     </main>
   );
