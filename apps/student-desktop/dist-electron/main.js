@@ -2,19 +2,25 @@ import { BrowserWindow, app, ipcMain } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { spawn, spawnSync } from "child_process";
-import { mkdtempSync, rmSync, writeFileSync } from "fs";
+import { cpSync, existsSync, mkdtempSync, rmSync, writeFileSync } from "fs";
 import { dirname, join } from "path";
 import { tmpdir } from "os";
 import winAudio from "win-audio";
 import path from "node:path";
 //#region electron/compiler/compilerService.ts
-var GCC_PATH = join(process.env.APP_ROOT ?? "", "electron", "native", "mingw", "bin", "gcc.exe");
+var MINGW_COPY_DIR = join(tmpdir(), "contx-mingw-copy");
+function ensureMingwCopy() {
+	const gccInCopy = join(MINGW_COPY_DIR, "bin", "gcc.exe");
+	if (existsSync(gccInCopy)) return gccInCopy;
+	cpSync(join(process.env.APP_ROOT ?? "", "electron", "native", "mingw"), MINGW_COPY_DIR, { recursive: true });
+	return gccInCopy;
+}
 function compileSource(sourceCode) {
 	const workDir = mkdtempSync(join(tmpdir(), "contx-"));
 	const sourcePath = join(workDir, "submission.c");
 	const binaryPath = join(workDir, "submission.exe");
 	writeFileSync(sourcePath, sourceCode, "utf-8");
-	const proc = spawnSync(GCC_PATH, [
+	const proc = spawnSync(ensureMingwCopy(), [
 		"-std=c11",
 		"-Wall",
 		"-Werror",
@@ -26,7 +32,7 @@ function compileSource(sourceCode) {
 		cleanupDir(workDir);
 		return {
 			success: false,
-			stderr: proc.stderr ?? ""
+			stderr: proc.stderr ?? proc.error?.message ?? ""
 		};
 	}
 	return {
@@ -73,7 +79,7 @@ function cleanupDir(workDir) {
 //#endregion
 //#region electron/ipc/compilerHandlers.ts
 function buildSource(code, programType, mainCode) {
-	if (programType === "program") return code;
+	if (programType === "cProgram") return code;
 	return `${code}\n\n${mainCode ?? ""}`;
 }
 function registerCompilerHandlers() {
@@ -86,7 +92,9 @@ function registerCompilerHandlers() {
 		const results = [];
 		for (const testCase of payload.testCases) {
 			const runResult = await runBinary(compileResult.binaryPath, testCase.input, testCase.timeLimitMs);
-			const passed = !runResult.timedOut && runResult.exitCode === 0 && runResult.stdout === testCase.expectedOutput;
+			const actualTrimmed = runResult.stdout.trim();
+			const expectedTrimmed = testCase.expectedOutput.trim();
+			const passed = !runResult.timedOut && runResult.exitCode === 0 && actualTrimmed === expectedTrimmed;
 			results.push({
 				testCaseId: testCase.id,
 				passed,
