@@ -11,7 +11,7 @@ export interface ExamLookupResult {
 // Looks up a single exam by its student-facing exam_code, and checks
 // how many attempts this student has left.
 export async function lookupExamByCode(
-  examCode: string, // the code the student typed into the Dashboard input
+  examCode: string,
 ): Promise<ExamLookupResult | null> {
   const {
     data: { user },
@@ -62,11 +62,11 @@ export interface SessionStartResult {
 // Calls the server-side RPC to check the code and start the session.
 // The real verification_code never leaves the database in this call.
 export async function verifySessionCode(
-  examId: string, // which exam the student is trying to enter
-  verificationCode: string, // the code they typed into the modal
+  classExamId: string, // which exam the student is trying to enter
+  verificationCode: string,
 ): Promise<SessionStartResult> {
   const { data, error } = await supabase.rpc("verify_and_start_session", {
-    p_exam_id: examId, // matches the SQL function's first parameter
+    p_class_exam_id: classExamId, // matches the SQL function's first parameter
     p_verification_code: verificationCode, // matches the second parameter
   });
 
