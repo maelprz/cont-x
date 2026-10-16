@@ -1,6 +1,6 @@
 import { useCallback, useEffect, useRef } from "react";
 import { createKeystrokeRecorder } from "../lib/keystrokeRecorder";
-//import {logKeystrokeBatch} from '../services/keystrokeService';
+import { logKeystrokeBatch } from "../services/keystrokeService";
 
 const FLUSH_MS = 30000; //flush every 30 seconds
 const JITTER_MS = 5000; //add 5 seconds to flush time, so students  dont all send together
@@ -83,9 +83,14 @@ export function useKeystrokeRecorder(
     };
   }, [sessionId, questionId, queueBatch, sendPending]);
 
+  const FLUSH_TIMEOUT_MS = 5000;
+
   const flush = useCallback(async () => {
-    if (questionIdRef.current) queueBatch(questionIdRef.current);
-    await sendPending(); //wait for it to finish
+    if (questionIdRef.current) queueBatch(questionIdRef.current); // move the last keys into the pending list
+    await Promise.race([
+      sendPending(), // try to save everything pending
+      new Promise<void>((resolve) => setTimeout(resolve, FLUSH_TIMEOUT_MS)), // or give up after 5 seconds
+    ]);
   }, [queueBatch, sendPending]);
 
   return { flush }; //return the flush function to the caller
