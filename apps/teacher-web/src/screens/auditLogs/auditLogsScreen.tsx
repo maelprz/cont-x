@@ -8,22 +8,24 @@ import type { AuditActionType } from "./auditLogsScreen.types";
 
 // badge style per action type
 const actionBadgeStyle: Record<AuditActionType, string> = {
-  create:         "bg-[var(--color-success)] text-[var(--color-success-content)]",
-  update:         "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
-  delete:         "bg-[var(--color-error)] text-[var(--color-error-content)]",
-  disable:        "bg-[var(--color-warning)] text-[var(--color-warning-content)]",
-  enable:         "bg-[var(--color-info)] text-[var(--color-info-content)]",
+  create: "bg-[var(--color-success)] text-[var(--color-success-content)]",
+  update: "bg-[var(--color-primary)] text-[var(--color-primary-content)]",
+  delete: "bg-[var(--color-error)] text-[var(--color-error-content)]",
+  disable: "bg-[var(--color-warning)] text-[var(--color-warning-content)]",
+  enable: "bg-[var(--color-info)] text-[var(--color-info-content)]",
   reset_password: "bg-[var(--color-base-300)] text-[var(--color-base-content)]",
+  enroll: "bg-[var(--color-info)] text-[var(--color-info-content)]",
 };
 
 // human readable label per action type
 const actionLabel: Record<AuditActionType, string> = {
-  create:         "Created",
-  update:         "Updated",
-  delete:         "Deleted",
-  disable:        "Disabled",
-  enable:         "Enabled",
+  create: "Created",
+  update: "Updated",
+  delete: "Deleted",
+  disable: "Disabled",
+  enable: "Enabled",
   reset_password: "Reset Password",
+  enroll: "Enrolled",
 };
 
 // formats an ISO timestamp to a readable string e.g. "2026-07-01 06:21"
@@ -38,7 +40,9 @@ export function AuditLogsScreen() {
   const [searchQuery, setSearchQuery] = useState("");
 
   // filter dropdown: which action type to show
-  const [actionFilter, setActionFilter] = useState<AuditActionType | "all">("all");
+  const [actionFilter, setActionFilter] = useState<AuditActionType | "all">(
+    "all",
+  );
 
   function handleSearchChange(value: string) {
     setSearchQuery(value);
@@ -65,12 +69,13 @@ export function AuditLogsScreen() {
       <AdminAreaSidebar activeItem="auditLogs" />
 
       <div className="flex-1 flex flex-col overflow-hidden">
-        <AdminHeader searchValue={searchQuery} onSearchChange={handleSearchChange} />
+        <AdminHeader
+          searchValue={searchQuery}
+          onSearchChange={handleSearchChange}
+        />
 
         <main className="flex-1 overflow-y-auto px-8 py-6">
-          <p className="text-xs opacity-60 mb-2">
-            Core System &gt; Audit Logs
-          </p>
+          <p className="text-xs opacity-60 mb-2">Core System &gt; Audit Logs</p>
 
           <div className="flex items-start justify-between gap-4 mb-6">
             <div>
@@ -95,23 +100,30 @@ export function AuditLogsScreen() {
               <option value="disable">Disabled</option>
               <option value="enable">Enabled</option>
               <option value="reset_password">Reset Password</option>
+              <option value="enroll">Enrolled</option>
             </select>
           </div>
 
           {/* stat cards */}
           <div className="grid grid-cols-3 gap-4 mb-6">
             <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl p-4">
-              <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Total Actions</p>
+              <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
+                Total Actions
+              </p>
               <p className="text-2xl font-bold">{logs.length}</p>
             </div>
             <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl p-4">
-              <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Accounts Created</p>
+              <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
+                Accounts Created
+              </p>
               <p className="text-2xl font-bold">
                 {logs.filter((l) => l.actionType === "create").length}
               </p>
             </div>
             <div className="bg-[var(--color-base-100)] border border-[var(--color-base-300)] rounded-2xl p-4">
-              <p className="text-xs uppercase tracking-wide opacity-60 mb-1">Accounts Deleted</p>
+              <p className="text-xs uppercase tracking-wide opacity-60 mb-1">
+                Accounts Deleted
+              </p>
               <p className="text-2xl font-bold">
                 {logs.filter((l) => l.actionType === "delete").length}
               </p>
@@ -139,10 +151,14 @@ export function AuditLogsScreen() {
               <table className="w-full border-collapse">
                 <thead>
                   <tr className="text-xs uppercase tracking-wide opacity-60 bg-[var(--color-base-200)]">
-                    <th className="text-left py-3 px-5 font-medium">Timestamp</th>
+                    <th className="text-left py-3 px-5 font-medium">
+                      Timestamp
+                    </th>
                     <th className="text-left py-3 px-5 font-medium">Admin</th>
                     <th className="text-left py-3 px-5 font-medium">Action</th>
-                    <th className="text-left py-3 px-5 font-medium">Target Account</th>
+                    <th className="text-left py-3 px-5 font-medium">
+                      Target Account
+                    </th>
                     <th className="text-left py-3 px-5 font-medium">Details</th>
                   </tr>
                 </thead>
@@ -178,7 +194,9 @@ export function AuditLogsScreen() {
                       {/* target user */}
                       <td className="py-3.5 px-5">
                         <p className="text-sm font-medium">{log.targetName}</p>
-                        <p className="text-xs opacity-60 capitalize">{log.targetRole}</p>
+                        <p className="text-xs opacity-60 capitalize">
+                          {log.targetRole}
+                        </p>
                       </td>
 
                       {/* details */}
