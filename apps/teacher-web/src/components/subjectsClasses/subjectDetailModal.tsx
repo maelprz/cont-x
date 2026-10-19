@@ -1,20 +1,26 @@
-import { useEffect, useState } from "react"; 
-import { X } from "lucide-react"; 
-import type { SubjectSummary } from "../../services/subjectsClassesService"; 
+import { useEffect, useState } from "react";
+import { X } from "lucide-react";
+import type {
+  SubjectSummary,
+  ClassSummary,
+} from "../../services/subjectsClassesService";
 
 // Modal showing one subject and its classes. Display only for now; adding and archiving come in later pieces.
 export function SubjectDetailModal({
-  subject, 
-  onClose, 
-  onAddClass, 
+  subject,
+  onClose,
+  onAddClass,
+  onEnroll,
 }: {
-  subject: SubjectSummary | null; 
-  onClose: () => void; 
-  onAddClass: () => void; 
+  subject: SubjectSummary | null;
+  onClose: () => void;
+  onAddClass: () => void;
+  onEnroll: (cls: ClassSummary) => void;
 }) {
   const [showArchived, setShowArchived] = useState(false); // whether archived classes are visible
 
-  useEffect(() => { // runs when a different subject is opened
+  useEffect(() => {
+    // runs when a different subject is opened
     setShowArchived(false); // always start with archived classes hidden
   }, [subject?.id]);
 
@@ -22,7 +28,9 @@ export function SubjectDetailModal({
 
   const activeClasses = subject.classes.filter((c) => c.archivedAt === null); // classes still in use
   const archivedClasses = subject.classes.filter((c) => c.archivedAt !== null); // classes already archived
-  const rows = showArchived ? [...activeClasses, ...archivedClasses] : activeClasses; // active first, archived only on request
+  const rows = showArchived
+    ? [...activeClasses, ...archivedClasses]
+    : activeClasses; // active first, archived only on request
 
   return (
     <div
@@ -39,20 +47,32 @@ export function SubjectDetailModal({
           <div>
             <span
               className="inline-block text-[11px] font-semibold px-2 py-0.5 rounded-full mb-2"
-              style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
+              style={{
+                backgroundColor: "var(--color-primary)",
+                color: "var(--color-primary-content)",
+              }}
             >
               {subject.codePrefix}
             </span>
-            <h2 className="text-[17px] font-bold" style={{ color: "var(--color-base-content)" }}>
+            <h2
+              className="text-[17px] font-bold"
+              style={{ color: "var(--color-base-content)" }}
+            >
               {subject.name}
             </h2>
-            <p className="text-[13px] opacity-60 mt-0.5" style={{ color: "var(--color-base-content)" }}>
-              {activeClasses.length} active {activeClasses.length === 1 ? "class" : "classes"}
-              {archivedClasses.length > 0 ? `, ${archivedClasses.length} archived` : ""}
+            <p
+              className="text-[13px] opacity-60 mt-0.5"
+              style={{ color: "var(--color-base-content)" }}
+            >
+              {activeClasses.length} active{" "}
+              {activeClasses.length === 1 ? "class" : "classes"}
+              {archivedClasses.length > 0
+                ? `, ${archivedClasses.length} archived`
+                : ""}
             </p>
           </div>
           <button
-            onClick={onClose} 
+            onClick={onClose}
             title="Close"
             className="cursor-pointer border-none bg-transparent p-1 opacity-60 hover:opacity-100"
           >
@@ -62,12 +82,18 @@ export function SubjectDetailModal({
 
         {/* toolbar: archived toggle and the Add Class button */}
         <div className="flex items-center justify-between px-6 pb-3">
-          <h3 className="text-[14px] font-semibold" style={{ color: "var(--color-base-content)" }}>
+          <h3
+            className="text-[14px] font-semibold"
+            style={{ color: "var(--color-base-content)" }}
+          >
             Classes
           </h3>
           <div className="flex items-center gap-4">
             {archivedClasses.length > 0 && ( // only offer the toggle when archived classes exist
-              <label className="flex items-center gap-1.5 text-[12px] cursor-pointer" style={{ color: "var(--color-base-content)" }}>
+              <label
+                className="flex items-center gap-1.5 text-[12px] cursor-pointer"
+                style={{ color: "var(--color-base-content)" }}
+              >
                 <input
                   type="checkbox"
                   checked={showArchived} // reflects the current state
@@ -77,9 +103,12 @@ export function SubjectDetailModal({
               </label>
             )}
             <button
-              onClick={onAddClass} 
+              onClick={onAddClass}
               className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-              style={{ backgroundColor: "var(--color-primary)", color: "var(--color-primary-content)" }}
+              style={{
+                backgroundColor: "var(--color-primary)",
+                color: "var(--color-primary-content)",
+              }}
             >
               Add Class
             </button>
@@ -89,11 +118,17 @@ export function SubjectDetailModal({
         {/* the classes list, scrolls inside the modal if it gets long */}
         <div className="px-6 pb-6 overflow-y-auto">
           {rows.length === 0 ? ( // nothing to list
-            <p className="text-[13px] opacity-60 py-6 text-center" style={{ color: "var(--color-base-content)" }}>
+            <p
+              className="text-[13px] opacity-60 py-6 text-center"
+              style={{ color: "var(--color-base-content)" }}
+            >
               No classes yet. Add the first one to this subject.
             </p>
           ) : (
-            <table className="w-full border-collapse text-[13px]" style={{ color: "var(--color-base-content)" }}>
+            <table
+              className="w-full border-collapse text-[13px]"
+              style={{ color: "var(--color-base-content)" }}
+            >
               <thead>
                 <tr className="text-left text-[11px] uppercase tracking-wide opacity-60">
                   <th className="py-2 pr-3 font-medium">Class</th>
@@ -107,7 +142,10 @@ export function SubjectDetailModal({
                 {rows.map((c) => {
                   const isArchived = c.archivedAt !== null; // used for the status and the dimmed look
                   return (
-                    <tr key={c.id} className={`border-t border-[var(--color-base-300)] ${isArchived ? "opacity-60" : ""}`}>
+                    <tr
+                      key={c.id}
+                      className={`border-t border-[var(--color-base-300)] ${isArchived ? "opacity-60" : ""}`}
+                    >
                       <td className="py-2.5 pr-3 font-medium">{c.name}</td>
                       <td className="py-2.5 pr-3 font-mono">{c.offerCode}</td>
                       <td className="py-2.5 pr-3">{c.teacherName}</td>
@@ -116,8 +154,14 @@ export function SubjectDetailModal({
                           className="text-[11px] font-semibold px-2 py-0.5 rounded-full"
                           style={
                             isArchived
-                              ? { backgroundColor: "var(--color-base-300)", color: "var(--color-base-content)" } // grey pill
-                              : { backgroundColor: "var(--color-success)", color: "var(--color-success-content)" } // green pill
+                              ? {
+                                  backgroundColor: "var(--color-base-300)",
+                                  color: "var(--color-base-content)",
+                                } // grey pill
+                              : {
+                                  backgroundColor: "var(--color-success)",
+                                  color: "var(--color-success-content)",
+                                } // green pill
                           }
                         >
                           {isArchived ? "Archived" : "Active"}
@@ -125,14 +169,31 @@ export function SubjectDetailModal({
                       </td>
                       <td className="py-2.5 text-right">
                         {!isArchived && ( // only active classes can be archived
-                          <button
-                            disabled // wired up in piece 6
-                            title="Coming in a later step"
-                            className="px-2.5 py-1 rounded-lg border text-[12px] opacity-40 cursor-not-allowed bg-transparent"
-                            style={{ borderColor: "var(--color-base-300)", color: "var(--color-base-content)" }}
-                          >
-                            Archive
-                          </button>
+                          <div className="flex justify-end gap-2">
+                            {" "}
+                            {/* puts the two buttons side by side */}
+                            <button
+                              onClick={() => onEnroll(c)} // open the enroll modal for this class
+                              className="px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+                              style={{
+                                backgroundColor: "var(--color-primary)",
+                                color: "var(--color-primary-content)",
+                              }}
+                            >
+                              Enroll student
+                            </button>
+                            <button
+                              disabled // still wired up in a later piece
+                              title="Coming in a later step"
+                              className="px-2.5 py-1 rounded-lg border text-[12px] opacity-40 cursor-not-allowed bg-transparent"
+                              style={{
+                                borderColor: "var(--color-base-300)",
+                                color: "var(--color-base-content)",
+                              }}
+                            >
+                              Archive
+                            </button>
+                          </div>
                         )}
                       </td>
                     </tr>

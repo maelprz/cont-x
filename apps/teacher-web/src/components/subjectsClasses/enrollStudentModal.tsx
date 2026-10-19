@@ -82,7 +82,6 @@ export function EnrollStudentModal({
         onClick={(e) => e.stopPropagation()} // clicking inside the modal does not close it
         className="w-[460px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]"
       >
-        //title and explanation
         <h2
           className="text-[17px] font-bold mb-1"
           style={{ color: "var(--color-base-content)" }}
@@ -95,7 +94,6 @@ export function EnrollStudentModal({
         >
           Adding to {classTitle} ({classCode}).
         </p>
-        //search box
         <label
           className="text-[12px] font-medium opacity-70 block mb-1.5"
           style={{ color: "var(--color-base-content)" }}
@@ -118,7 +116,6 @@ export function EnrollStudentModal({
             color: "var(--color-base-content)",
           }}
         />
-        //result list
         <div
           className="max-h-44 overflow-y-auto rounded-lg border"
           style={{ borderColor: "var(--color-base-300)" }}
@@ -147,9 +144,7 @@ export function EnrollStudentModal({
               <p
                 className="text-[13px] opacity-60 p-3"
                 style={{ color: "var(--color-base-content)" }}
-              >
-                No students match your search.
-              </p>
+              ></p>
             )}
           {results.map((s) => (
             // one row per matching student
@@ -174,7 +169,6 @@ export function EnrollStudentModal({
             </button>
           ))}
         </div>
-        //who is currently selected
         {selected && (
           <p
             className="text-[12px] mt-3"
@@ -193,7 +187,6 @@ export function EnrollStudentModal({
             {searchError ?? error}
           </p>
         )}
-        //buttons
         <div className="flex gap-2 mt-5">
           <button
             onClick={onClose} // cancel
