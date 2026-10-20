@@ -6,8 +6,10 @@ import {
   fetchTeachers,
   searchStudents,
   enrollStudent,
+  enrollStudentsCsv,
   type SubjectSummary, // the subject shape
   type TeacherOption, // the teacher shape
+  type CsvEnrollResult, // the CSV result shape
 } from "../services/subjectsClassesService"; // all database calls for this feature live there
 
 export function useSubjectsClasses() {
@@ -64,6 +66,12 @@ export function useSubjectsClasses() {
     },
     [],
   ); // depends only on the service
+  const enrollCsvInClass = useCallback(
+    async (classId: string, idNumbers: string[]): Promise<CsvEnrollResult> => {
+      return enrollStudentsCsv(classId, idNumbers); // throws a safe message on a whole-upload failure
+    },
+    [],
+  );
 
   return {
     subjects,
@@ -75,5 +83,6 @@ export function useSubjectsClasses() {
     addClass,
     findStudents,
     enrollInClass,
+    enrollCsvInClass,
   };
 }
