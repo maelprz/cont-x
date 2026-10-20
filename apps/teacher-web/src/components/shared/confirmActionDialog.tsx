@@ -9,7 +9,7 @@ type ConfirmActionDialogProps = {
   onCancel: () => void;
 };
 
-// generic yes/no confirmation, reused for both End Exam and Delete Exam
+// generic yes/no confirmation, shared by the exam library, question bank and exam builder
 export function ConfirmActionDialog({
   isOpen,
   title,

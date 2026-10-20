@@ -30,6 +30,8 @@ import {
   mainCodeFor,
 } from "../../components/examBuilder/createBlankQuestion";
 import { useToast } from "../../hooks/useToast";
+import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog";
+import { useExamLibraryStore } from "../../store/useExamLibraryStore";
 
 export function ExamBuilderScreen({
   questions: externalQuestions,
@@ -64,6 +66,9 @@ export function ExamBuilderScreen({
   const [savedPools, setSavedPools] = useState<BuilderPool[]>([]);
   const [activePoolId, setActivePoolId] = useState<string | null>(null); // set while a pool (not a question) is open
   const [poolModalTargetId, setPoolModalTargetId] = useState<string | null>(null); // pool the bank picker should add to
+  const [poolToDelete, setPoolToDelete] = useState<string | null>(null); // asks before a pool is removed
+  // after saving, the library should open inside this exam's subject
+  const setLibrarySubject = useExamLibraryStore((state) => state.setSelectedSubjectId);
 
   // tracks which questions are brand-new and need a bank copy saved before the exam can be saved
   const [pendingBankSaveIds, setPendingBankSaveIds] = useState<Set<string>>(new Set());
@@ -130,6 +135,9 @@ export function ExamBuilderScreen({
   const activeQuestion =
     questions.find((q) => q.id === activeId) ?? questions[0];
   const activePool = pools.find((p) => p.id === activePoolId) ?? null;
+  // A saved exam may already be in a class, so "Save Draft" must never push it back to draft
+  // (the library would then hide Manage Classes for an exam that could even be live).
+  const isAlreadySaved = examData?.status === "saved";
   const [editorTab, setEditorTab] = useState<QuestionType>(
     activeQuestion?.type ?? "multiple-choice",
   );
@@ -139,14 +147,14 @@ export function ExamBuilderScreen({
     if (!pendingLeaveScreen || !examData?.id) return;
 
     setIsSavingDraftState(true);
-    const questionsOk = await persistAllQuestions();
-    if (!questionsOk) {
-      showToast(saveAllError ?? "Could not save changes.", "error");
+    const saveProblem = await persistAllQuestions();
+    if (saveProblem) {
+      showToast(saveProblem, "error");
       setIsSavingDraftState(false);
       return;
     }
 
-    const didSave = await saveDraft(examData.id);
+    const didSave = isAlreadySaved ? await saveExam(examData.id) : await saveDraft(examData.id);
     setIsSavingDraftState(false);
     if (!didSave) {
       showToast(statusError ?? "Could not save changes.", "error");
@@ -228,10 +236,11 @@ export function ExamBuilderScreen({
   const handlePoolChange = (updated: BuilderPool) =>
     setPools((prev) => prev.map((p) => (p.id === updated.id ? updated : p)));
 
-  const handleDeletePool = (id: string) => {
-    if (!window.confirm("Delete this random pool? Its questions stay in the question bank.")) return;
-    setPools((prev) => prev.filter((p) => p.id !== id));
+  const confirmDeletePool = () => {
+    if (!poolToDelete) return;
+    setPools((prev) => prev.filter((p) => p.id !== poolToDelete));
     setActivePoolId(null);
+    setPoolToDelete(null);
   };
 
   // reverts the active question to its last confirmed version, or a blank if it was never saved
@@ -349,7 +358,7 @@ export function ExamBuilderScreen({
 
   // saves the active question to the bank (if new) and updates the savedQuestions snapshot
   const handleSaveAndContinue = async () => {
-    if (!activeQuestion) return; // nothing selected, nothing to save
+    if (!activeQuestion || !examData?.id) return; // nothing selected, nothing to save
 
     const isNewQuestion = pendingBankSaveIds.has(activeQuestion.id);
 
@@ -365,12 +374,16 @@ export function ExamBuilderScreen({
         });
       }
 
+      // Write it into the exam too. This used to only mark the question as "saved" in memory,
+      // which switched off the unsaved-changes warning while nothing had reached the database.
+      await persistExamQuestion(examData.id, activeQuestion);
+
       setSavedQuestions((prev) =>
         prev.some((q) => q.id === activeQuestion.id)
           ? prev.map((q) => (q.id === activeQuestion.id ? activeQuestion : q))
           : [...prev, activeQuestion],
       );
-      showToast(isNewQuestion ? "Saved to Question Bank." : "Question updated.", "success");
+      showToast(isNewQuestion ? "Question saved to the exam and your question bank." : "Question saved.", "success");
       onSaveAndContinue?.();
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save this question to the bank.";
@@ -382,8 +395,8 @@ export function ExamBuilderScreen({
   };
 
   // saves all questions to the exam (and any new ones to the bank) used by Save Draft and Save Exam
-  const persistAllQuestions = async (): Promise<boolean> => {
-    if (!examData?.id) return false;
+  const persistAllQuestions = async (): Promise<string | null> => {
+    if (!examData?.id) return "Could not find this exam.";
 
     setSaveAllError(null);
     try {
@@ -391,17 +404,23 @@ export function ExamBuilderScreen({
         if (pendingBankSaveIds.has(q.id) && teacherId && examData.subjectId) {
           // reusable copy in this exam's subject bank, first time only
           await saveBankQuestion(teacherId, examData.subjectId, { ...q, id: crypto.randomUUID() });
+          // clear it right away so a retry after a later failure doesn't save a second copy
+          setPendingBankSaveIds((prev) => {
+            const next = new Set(prev);
+            next.delete(q.id);
+            return next;
+          });
         }
         await persistExamQuestion(examData.id, q); // upserts this question into the exam
       }
       await savePools(examData.id, pools, questions.length); // random pools sit after the questions
       setSavedQuestions(questions);
       setSavedPools(pools);
-      setPendingBankSaveIds(new Set());
-      return true;
+      return null;
     } catch (err) {
-      setSaveAllError(err instanceof Error ? err.message : "Could not save all questions.");
-      return false;
+      const message = err instanceof Error ? err.message : "Could not save all questions.";
+      setSaveAllError(message);
+      return message;
     }
   };
 
@@ -414,9 +433,10 @@ export function ExamBuilderScreen({
   // quick save — persists all question edits, marks the exam as draft, returns to the library
   const handleSaveDraft = async (): Promise<boolean> => {
     setIsSavingDraftState(true);
-    const questionsOk = await persistAllQuestions();
-    if (!questionsOk || !examData?.id) {
-      showToast(saveAllError ?? "Could not save draft.", "error");
+    const saveProblem = await persistAllQuestions();
+    if (saveProblem || !examData?.id) {
+      showToast(saveProblem ?? "Could not save draft.", "error");
+      setIsSavingDraftState(false); // was left on, so the button stayed stuck on "Saving..."
       return false;
     }
 
@@ -425,6 +445,7 @@ export function ExamBuilderScreen({
     
     if (didSave) {
       showToast("Draft saved.", "success");
+      setLibrarySubject(examData.subjectId);
       navigateTo("examLibrary");
       return true;
     } else {
@@ -437,9 +458,9 @@ export function ExamBuilderScreen({
     if (!examData?.id) return false;
     
     setIsSavingExamState(true);
-    const questionsOk = await persistAllQuestions();
-    if (!questionsOk) {
-      showToast(saveAllError ?? "Could not save exam.", "error");
+    const saveProblem = await persistAllQuestions();
+    if (saveProblem) {
+      showToast(saveProblem, "error");
       setIsSavingExamState(false);
       return false;
     }
@@ -447,6 +468,7 @@ export function ExamBuilderScreen({
     setIsSavingExamState(false);
     if (didSave) {
       showToast(openedFromEditExam ? "Exam updated." : "Exam saved.", "success");
+      setLibrarySubject(examData.subjectId);
       navigateTo("examLibrary");
     } else {
       showToast(statusError ?? "Could not save exam.", "error");
@@ -493,13 +515,14 @@ export function ExamBuilderScreen({
             isDeleting={isDeleting}
             isSavingQuestion={isSavingQuestion}
             pendingBankSaveIds={pendingBankSaveIds}
+            canSaveDraft={!isAlreadySaved}
             poolPanel={
               activePool ? (
                 <PoolEditorPanel
                   pool={activePool}
                   readOnly={openedFromEditExam}
                   onChange={handlePoolChange}
-                  onDelete={() => handleDeletePool(activePool.id)}
+                  onDelete={() => setPoolToDelete(activePool.id)}
                   onAddQuestions={() => {
                     setPoolModalTargetId(activePool.id);
                     setShowQuestionBankModal(true);
@@ -535,6 +558,17 @@ export function ExamBuilderScreen({
         onCreateNewQuestion={handleCreateNewQuestionFromModal}
       />
       
+      <ConfirmActionDialog
+        isOpen={poolToDelete !== null}
+        title="Delete this random pool?"
+        message="Its questions stay in the question bank."
+        confirmLabel="Delete Pool"
+        isProcessing={false}
+        error={null}
+        onConfirm={confirmDeletePool}
+        onCancel={() => setPoolToDelete(null)}
+      />
+
       <UnsavedChangesPrompt
         isOpen={Boolean(pendingLeaveScreen)}
         onSave={handleSaveAndLeave}

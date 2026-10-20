@@ -28,7 +28,7 @@ type ExamRow = {
 function getCtaLabel(status: ExamRow["status"], hasAttachments: boolean): string {
   if (status === "draft") return "Continue Building"; // still being built, not published
   // status === "saved"
-  return hasAttachments ? "Manage Classes" : "Publish to a Class";
+  return hasAttachments ? "Manage Classes" : "Add to a Class";
 }
 
 // turns a raw database row into the shape the UI card expects
@@ -107,11 +107,12 @@ export async function deleteExam(examId: string): Promise<void> {
 
   if ((count ?? 0) > 0) {
     throw new Error(
-      "This exam has been published to a class and can't be deleted. Remove it from every class first.",
+      "This exam is in a class and can't be deleted. Remove it from every class first.",
     );
   }
 
-  // random pools reference the exam and must be deleted first, along with their items  
+  // random pools reference the exam — clear them (items first) so the delete
+  // doesn't depend on those foreign keys cascading
   const { data: poolRows, error: poolsError } = await supabase
     .from("exam_question_pools")
     .select("id")

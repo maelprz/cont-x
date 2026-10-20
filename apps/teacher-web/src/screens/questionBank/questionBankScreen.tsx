@@ -10,7 +10,8 @@ import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { useBankSubjects } from "../../hooks/useBankSubjects";
 import { useBankVisibility } from "../../hooks/useBankVisibility";
 import { useQuestionBankStore } from "../../store/useQuestionBankStore";
-import { BankSubjectTile } from "../../components/questionBank/bankSubjectTile";
+import { SubjectTile } from "../../components/shared/subjectTile";
+import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog";
 import { BankVisibilitySelector } from "../../components/questionBank/bankVisibilitySelector";
 import { useSaveBankQuestion } from "../../hooks/useSaveBankQuestion";
 import { useAuthStore } from "../../store/useAuthStore";
@@ -43,6 +44,7 @@ export function QuestionBankScreen() {
   // leaving the screen and coming back.
   const selectedSubjectId = useQuestionBankStore((state) => state.selectedSubjectId);
   const setSelectedSubjectId = useQuestionBankStore((state) => state.setSelectedSubjectId);
+  const setResetHandler = useQuestionBankStore((state) => state.setResetHandler);
   const [includeShared, setIncludeShared] = useState(false); // also list questions shared from other subjects
   const {
     subjects,
@@ -73,6 +75,9 @@ export function QuestionBankScreen() {
   const [newTagNameInEditor, setNewTagNameInEditor] = useState("");
 
   const [editingQuestion, setEditingQuestion] = useState<BuilderQuestion | null>(null);
+  // deleting a question or a tag is permanent, so it always asks first
+  const [confirmDelete, setConfirmDelete] = useState<{ kind: "question" | "tag"; id: string } | null>(null);
+  const [isDeleting, setIsDeleting] = useState(false);
   const [editingTagIds, setEditingTagIds] = useState<string[]>([]);
 
   // last confirmed-saved version of the question being edited, null while creating brand new —
@@ -157,11 +162,6 @@ export function QuestionBankScreen() {
   };
 
   const handleDeleteTag = async (tagId: string) => {
-    const confirmed = window.confirm(
-      "Delete this tag? It will be removed from every question that uses it. This cannot be undone.",
-    );
-    if (!confirmed) return;
-
     try {
       await deleteBankTag(tagId);
       setEditingTagIds((prev) => prev.filter((id) => id !== tagId));
@@ -278,6 +278,32 @@ export function QuestionBankScreen() {
     }
   };
 
+  // runs after the teacher confirms the delete dialog
+  const runConfirmedDelete = async () => {
+    if (!confirmDelete) return;
+    setIsDeleting(true);
+    if (confirmDelete.kind === "question") await handleDelete(confirmDelete.id);
+    else await handleDeleteTag(confirmDelete.id);
+    setIsDeleting(false);
+    setConfirmDelete(null);
+  };
+
+  // The sidebar's "Question Bank" was clicked while already on this screen: go back to the
+  // subject list, asking first if a question is half-edited. The sidebar calls this handler.
+  useEffect(() => {
+    setResetHandler(() => {
+      const goToSubjectList = () => {
+        setEditingQuestion(null);
+        setSelectedSubjectId(null);
+        setIncludeShared(false);
+        refetchSubjects(); // counts on the tiles may have changed
+      };
+      if (hasUnsavedChanges) setPendingLeaveAction(() => goToSubjectList);
+      else goToSubjectList();
+    });
+    return () => setResetHandler(null);
+  }, [hasUnsavedChanges, setResetHandler, setSelectedSubjectId, refetchSubjects]);
+
   const handleToggleQuestionTag = (tagId: string) => {
     setEditingTagIds((prev) =>
       prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
@@ -306,7 +332,7 @@ export function QuestionBankScreen() {
                 <div className="flex items-center gap-3">
                   {!isNewQuestion && (
                     <button
-                      onClick={() => handleDelete(editingQuestion.id)}
+                      onClick={() => setConfirmDelete({ kind: "question", id: editingQuestion.id })}
                       className="flex items-center gap-1.5 text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
                       style={{ color: "var(--color-error)" }}
                     >
@@ -348,7 +374,7 @@ export function QuestionBankScreen() {
                       {tag.name}
                     </button>
                     <button
-                      onClick={() => handleDeleteTag(tag.id)}
+                      onClick={() => setConfirmDelete({ kind: "tag", id: tag.id })}
                       title="Delete this tag everywhere"
                       className="cursor-pointer border-none bg-transparent p-0.5 opacity-60 hover:opacity-100"
                     >
@@ -382,20 +408,18 @@ export function QuestionBankScreen() {
           ) : !selectedSubject ? (
             // ── Level 1: sub-question banks, one per subject ─────────────────
             <>
-              <p className="text-xs opacity-60 mb-2">Teacher Portal &gt; Question Bank</p>
+              <p className="text-[13px] mb-3 opacity-60">Teacher Portal &gt; Question Bank</p>
               <div className="mb-6">
-                <h1 className="text-2xl font-bold mb-1">Question Bank</h1>
-                <p className="text-sm opacity-70 max-w-md leading-relaxed">
-                  One sub-bank per subject you teach. Open a subject to browse, create, and share its questions.
-                </p>
+                <h1 className="text-2xl font-bold">Question Bank</h1>
+                <p className="text-sm opacity-70 mt-1">Choose a subject to see its questions.</p>
               </div>
 
               <div className="flex items-center justify-between gap-4 flex-wrap p-4 mb-6 rounded-2xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]">
                 <div className="max-w-lg">
                   <p className="text-[14px] font-semibold">Main question bank sharing</p>
                   <p className="text-[12px] opacity-60 mt-0.5 leading-relaxed">
-                    Pick a level to apply it to every sub-bank at once — it overrides each subject's own
-                    setting. Choose "No override" to go back to setting sharing per subject.
+                    Applies one sharing level to every subject at once, overriding each subject's own
+                    setting. "No override" goes back to per-subject settings.
                   </p>
                 </div>
                 <BankVisibilitySelector
@@ -421,7 +445,15 @@ export function QuestionBankScreen() {
               ) : (
                 <div className="grid grid-cols-3 gap-5">
                   {subjects.map((subject) => (
-                    <BankSubjectTile key={subject.id} subject={subject} onClick={() => openSubject(subject.id)} />
+                    <SubjectTile
+                      key={subject.id}
+                      name={subject.name}
+                      stats={[
+                        { label: "Questions", value: subject.totalCount },
+                        { label: "Shared with you", value: subject.totalCount - subject.ownCount },
+                      ]}
+                      onClick={() => openSubject(subject.id)}
+                    />
                   ))}
                 </div>
               )}
@@ -429,29 +461,20 @@ export function QuestionBankScreen() {
           ) : (
             // ── Level 2: the questions under the chosen subject ──────────────
             <>
-              <p className="text-xs opacity-60 mb-2">
+              <p className="text-[13px] mb-3 opacity-60">
                 Teacher Portal &gt;{" "}
                 <button
                   onClick={backToSubjects}
-                  className="p-0 border-none bg-transparent cursor-pointer text-inherit text-xs hover:underline"
+                  className="p-0 border-none bg-transparent cursor-pointer text-inherit text-[13px] hover:underline"
                 >
                   Question Bank
                 </button>{" "}
                 &gt; {selectedSubject.name}
               </p>
-              <div className="flex items-start justify-between gap-6 mb-6">
+              <div className="flex items-end justify-between gap-6 mb-6">
                 <div>
-                  <button
-                    onClick={backToSubjects}
-                    className="flex items-center gap-1.5 mb-2 p-0 border-none bg-transparent cursor-pointer text-[13px] font-medium text-[var(--color-base-content)] opacity-70 transition-opacity hover:opacity-100"
-                  >
-                    <ArrowLeft size={14} />
-                    All subjects
-                  </button>
-                  <h1 className="text-2xl font-bold mb-1">{selectedSubject.name}</h1>
-                  <p className="text-sm opacity-70 max-w-md leading-relaxed">
-                    Questions under this subject. Reuse them across exams and classes.
-                  </p>
+                  <h1 className="text-2xl font-bold">{selectedSubject.name}</h1>
+                  <p className="text-sm opacity-70 mt-1">Questions in this subject.</p>
                 </div>
                 <div className="flex items-center gap-2 shrink-0">
                   <button
@@ -471,7 +494,7 @@ export function QuestionBankScreen() {
                   <p className="text-[12px] opacity-60 mt-0.5 leading-relaxed">
                     {visibility.mainLevel
                       ? "Your main question bank setting is overriding this. Change it from the sub-bank list."
-                      : "Who can see the questions you create here."}
+                      : "Who else can see the questions you create here."}
                   </p>
                 </div>
                 <BankVisibilitySelector
@@ -614,6 +637,21 @@ export function QuestionBankScreen() {
           setShowNewQuestionModal(false);
           handleCreateNew(type);
         }}
+      />
+
+      <ConfirmActionDialog
+        isOpen={confirmDelete !== null}
+        title={confirmDelete?.kind === "tag" ? "Delete this tag?" : "Delete this question?"}
+        message={
+          confirmDelete?.kind === "tag"
+            ? "It will be removed from every question that uses it. This can't be undone."
+            : "This permanently removes the question from your bank. Exams that already have a copy keep it."
+        }
+        confirmLabel={confirmDelete?.kind === "tag" ? "Delete Tag" : "Delete Question"}
+        isProcessing={isDeleting}
+        error={null}
+        onConfirm={runConfirmedDelete}
+        onCancel={() => setConfirmDelete(null)}
       />
 
       <UnsavedChangesPrompt

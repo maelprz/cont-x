@@ -2,7 +2,10 @@ import type { ExamCard, ClassExamSummary } from "../../screens/examLibrary/examL
 import { ClassExamStatusBadge } from "./statusBadge";
 import { getClassExamNavigation } from "../../router/examCardNavigation";
 
-// Modal for managing all classes attached to a single exam.
+// NEW COMPONENT — this view didn't exist before the revision. An exam can
+// now be attached to several classes at once, each with its own status, so
+// "Publish"/"End" are no longer single buttons on the exam card — they're
+// per-row actions here.
 export function ManageClassesModal({
   isOpen,
   exam,
@@ -38,7 +41,7 @@ export function ManageClassesModal({
           disabled={isProcessing}
           className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)] disabled:opacity-50"
         >
-          Activate
+          Publish
         </button>
       );
     }
@@ -75,7 +78,7 @@ export function ManageClassesModal({
 
         {exam.classAttachments.length === 0 ? (
           <p className="text-[13px] mb-5 opacity-60 text-[var(--color-base-content)]">
-            This exam hasn't been attached to any class yet.
+            This exam isn't in any class yet.
           </p>
         ) : (
           <div className="flex flex-col gap-2 mb-5">
@@ -119,7 +122,7 @@ export function ManageClassesModal({
                     <button
                       onClick={() => onRemove(attachment.classExamId)}
                       disabled={isProcessing}
-                      title="Remove this class attachment"
+                      title="Remove from this class"
                       className="px-2 py-1.5 rounded-lg text-[12px] cursor-pointer border-none transition-opacity hover:opacity-70 bg-transparent text-[var(--color-error)] disabled:opacity-50"
                     >
                       Remove
@@ -136,7 +139,7 @@ export function ManageClassesModal({
           onClick={onAttachNew}
           className="w-full px-4 py-2 mb-5 rounded-lg border border-dashed text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 bg-transparent border-[var(--color-base-300)] text-[var(--color-base-content)]"
         >
-          + Attach to Another Class
+          + Add to Another Class
         </button>
 
         <div className="flex items-center justify-end">
