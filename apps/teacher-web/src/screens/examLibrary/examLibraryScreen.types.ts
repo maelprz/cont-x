@@ -13,6 +13,7 @@ export interface ClassExamSummary {
   studentCount: number; // exam_sessions count for this class attachment
 }
 
+// one subject tile on the top level of the Exam Library — exams live under these
 export interface SubjectCard {
   id: string;
   name: string;
@@ -39,27 +40,4 @@ export interface ExamCard {
   footerMeta?: string; // e.g. "Quality Audited"
   ctaLabel?: string; // override CTA text, e.g. "Continue Building"
   onCta?: () => void;
-}
-
-export interface ExamLibraryScreenProps {
-  teacherName?: string;
-  teacherAvatarUrl?: string;
-  exams?: ExamCard[];
-  searchQuery?: string;
-  onSearchChange?: (q: string) => void;
-  onFilter?: () => void;
-  onToggleView?: () => void;
-  onNewExam?: () => void;
-  onCreateNewAssessment?: () => void;
-  // Nav callbacks
-  onNavOverview?: () => void;
-  onNavLibrary?: () => void;
-  onNavBell?: () => void;
-  onNavHelp?: () => void;
-  // Sidebar
-  onSidebarLiveFeed?: () => void;
-  onSidebarExamLibrary?: () => void;
-  onSidebarResults?: () => void;
-  onSidebarSettings?: () => void;
-  onLogout?: () => void;
 }

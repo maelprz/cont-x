@@ -17,6 +17,8 @@ export function CreateExamModal({
   onSubmit: (settings: NewExamSettings) => void;
   isSubmitting?: boolean;
   error?: string | null;
+  // when the modal is opened from inside a subject in the Exam Library, the
+  // subject is already decided — shown read-only instead of as a picker
   fixedSubject?: { id: string; name: string } | null;
 }) {
   const teacherId = useAuthStore((state) => state.user?.id);
@@ -94,10 +96,10 @@ export function CreateExamModal({
         className="w-[440px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)] max-h-[85vh] overflow-y-auto"
       >
         <h2 className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">
-          Name Your Assessment
+          New Exam
         </h2>
         <p className="text-[13px] mb-5 text-[var(--color-base-content)] opacity-60">
-          Set the basics now. You can add questions, then publish it to a class, next.
+          You'll add the questions next, then add the exam to a class when it's ready.
         </p>
 
         <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
@@ -173,7 +175,7 @@ export function CreateExamModal({
             disabled={!canSubmit}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? "Creating..." : "Create & Continue"}
+            {isSubmitting ? "Creating..." : "Create Exam"}
           </button>
         </div>
       </div>

@@ -13,12 +13,35 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useLogout } from "../../hooks/useLogout";
 import type { TeacherSidebarProps } from "./teacherSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic";
+import { useExamLibraryStore } from "../../store/useExamLibraryStore";
+import { useQuestionBankStore } from "../../store/useQuestionBankStore";
 
 // Single shared sidebar for all teacher web screens.
 export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
   const user = useAuthStore((state) => state.user); // changed: moved inside the component, where hooks are allowed
   const handleLogout = useLogout(); // new: the logout function for the button below
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const currentScreen = useRouterLogic((state) => state.currentScreen);
+  const setLibrarySubject = useExamLibraryStore((state) => state.setSelectedSubjectId);
+  const setBankSubject = useQuestionBankStore((state) => state.setSelectedSubjectId);
+  const bankResetHandler = useQuestionBankStore((state) => state.resetHandler);
+
+  // These two screens have a subject level and an inside-a-subject level.
+  // Coming in from the sidebar should always start at the subject list, not
+  // wherever the teacher last was. (Going back from the builder, or from a
+  // dashboard link, doesn't use the sidebar, so it still lands inside the subject.)
+  const openExamLibrary = () => {
+    setLibrarySubject(null);
+    navigateTo("examLibrary");
+  };
+  const openQuestionBank = () => {
+    if (currentScreen === "questionBank" && bankResetHandler) {
+      bankResetHandler(); // already here — the screen resets itself, since it may be mid-edit
+    } else {
+      setBankSubject(null);
+      navigateTo("questionBank");
+    }
+  };
 
   // shared base classes every nav item gets
   const navItemBase =
@@ -62,7 +85,7 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
         </button>
 
         <button
-          onClick={() => navigateTo("examLibrary")}
+          onClick={openExamLibrary}
           className={`${navItemBase} ${
             activeItem === "examLibrary" ? navItemActive : navItemInactive
           }`}
@@ -72,7 +95,7 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
         </button>
 
         <button
-          onClick={() => navigateTo("questionBank")}
+          onClick={openQuestionBank}
           className={`${navItemBase} ${
             activeItem === "questionBank" ? navItemActive : navItemInactive
           }`}
@@ -127,7 +150,7 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
       <div className="border-t border-[rgba(248,248,248,0.1)]">
         <button
           type="button"
-          onClick={handleLogout} // changed: now signs out for real instead of only changing screen
+          onClick={() => navigateTo("login")}
           className={`${navItemBase} px-4 py-3 rounded-none`}
           style={{ color: "rgba(248,248,248,0.7)" }}
         >

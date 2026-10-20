@@ -21,8 +21,6 @@ export function useLibrarySubjects(exams: ExamCard[]) {
     if (!teacherId) return;
 
     let isActive = true;
-    setIsLoading(true);
-    setError(null);
 
     Promise.all([getAssignedSubjects(teacherId), getClassCountsBySubject(teacherId)])
       .then(([subjects, counts]) => {

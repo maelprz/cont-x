@@ -3,7 +3,10 @@ import { getAttachableClasses, attachExamToClass } from "../../services/classExa
 import type { AttachableClass } from "../../services/classExamService";
 import { useAuthStore } from "../../store/useAuthStore";
 
-// UI for attaching an exam to a class
+// NEW COMPONENT — this flow didn't exist before the revision. Replaces the
+// old "Publish" button's implicit single-class assumption: now attaching an
+// exam to a class is an explicit step, separate from actually going live
+// (which happens afterwards, from Manage Classes, once a session code is set).
 export function AttachClassModal({
   isOpen,
   examId,
@@ -84,7 +87,7 @@ export function AttachClassModal({
       onAttached();
       onClose();
     } catch (err) {
-      setSubmitError(err instanceof Error ? err.message : "Could not attach this exam to the class.");
+      setSubmitError(err instanceof Error ? err.message : "Could not add this exam to the class.");
     } finally {
       setIsSubmitting(false);
     }
@@ -101,11 +104,11 @@ export function AttachClassModal({
         className="w-[440px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)] max-h-[85vh] overflow-y-auto"
       >
         <h2 className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">
-          Attach to a Class
+          Add to a Class
         </h2>
         <p className="text-[13px] mb-5 text-[var(--color-base-content)] opacity-60">
-          Pick a class and set its initial duration and attempts. You'll set a session code and go
-          live from Manage Classes.
+          Choose a class and how long students get. You'll set the session code and publish it from
+          Manage Classes.
         </p>
 
         <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
@@ -115,8 +118,8 @@ export function AttachClassModal({
           <p className="text-[13px] mb-4 opacity-60 text-[var(--color-base-content)]">Loading classes...</p>
         ) : classes.length === 0 ? (
           <p className="text-[13px] mb-4 opacity-60 text-[var(--color-base-content)]">
-            No eligible classes under this exam's subject — every class there is already attached,
-            or you don't have one yet.
+            None of your classes in this subject are available — they already have this exam, or you
+            don't have a class here yet.
           </p>
         ) : (
           <select
@@ -196,7 +199,7 @@ export function AttachClassModal({
             disabled={!canSubmit}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
-            {isSubmitting ? "Attaching..." : "Attach to Class"}
+            {isSubmitting ? "Adding..." : "Add to Class"}
           </button>
         </div>
       </div>

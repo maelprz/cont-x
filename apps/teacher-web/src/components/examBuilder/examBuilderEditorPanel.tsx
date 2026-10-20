@@ -24,6 +24,7 @@ interface ExamBuilderEditorPaneProps {
   isDeleting: boolean;
   isSavingQuestion: boolean;
   pendingBankSaveIds: Set<string>;
+  canSaveDraft?: boolean; // false for an already-saved exam: it can't go back to draft
   poolPanel?: React.ReactNode; // when set, replaces the question editor (a random pool is selected)
   onTabSwitch: (tab: QuestionType) => void;
   onQuestionChange: (question: BuilderQuestion) => void;
@@ -50,6 +51,7 @@ export function ExamBuilderEditorPanel({
   isDeleting,
   isSavingQuestion,
   pendingBankSaveIds,
+  canSaveDraft = true,
   poolPanel,
   onTabSwitch,
   onQuestionChange,
@@ -85,6 +87,7 @@ export function ExamBuilderEditorPanel({
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
+          {canSaveDraft && (
           <button
             onClick={onSaveDraft}
             disabled={isSavingDraft}
@@ -97,6 +100,7 @@ export function ExamBuilderEditorPanel({
           >
             {isSavingDraft ? "Saving..." : "Save Draft"}
           </button>
+          )}
           <button
             onClick={onSaveExam}
             disabled={isSavingExam}

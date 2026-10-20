@@ -1,7 +1,8 @@
 import { supabase } from "./supabaseClient";
 import type { ClassExamStatus } from "../screens/examLibrary/examLibraryScreen.types";
 
-// fetches all classes that can be attached to an exam
+// a class the signed-in teacher could attach this exam to:
+// their own class, under the exam's own subject, not already attached to this exam
 export interface AttachableClass {
   id: string;
   name: string;
@@ -42,7 +43,8 @@ export async function getAttachableClasses(
   return data ?? [];
 }
 
-// per class settings for an attached exam
+// full settings snapshot for one class_exams row — the per-class equivalent
+// of the old "Edit Settings" modal data, now scoped to a single attachment
 export interface ClassExamSettingsData {
   classExamId: string;
   classId: string;
@@ -99,7 +101,9 @@ export async function getClassExamSettings(
   };
 }
 
-// attaches an exam to a class with the given settings, returning the new class_exams row id
+// attaches an exam to a class for the first time, in 'scheduled' state —
+// equivalent of the old "fill in settings then publish" flow, but publishing
+// (going active) is now a separate, explicit step via activateClassExam below
 export interface NewClassExamSettings {
   durationMinutes: number;
   maxAttempts: number;
@@ -132,7 +136,7 @@ export async function attachExamToClass(
     .select("id")
     .single();
 
-  if (error || !data) throw error ?? new Error("Could not attach exam to class.");
+  if (error || !data) throw error ?? new Error("Could not add this exam to the class.");
   return data.id;
 }
 
@@ -141,7 +145,7 @@ export async function attachExamToClass(
 export const SESSION_CODE_REQUIRED_MESSAGE =
   "This class needs a session code before the exam can go live.";
 
-// moves one class_exams row from 'scheduled' to 'active'
+// moves one class_exams row from 'scheduled' to 'active' — this is "Publish" now
 export async function activateClassExam(
   classExamId: string,
   verificationCode?: string,
@@ -182,7 +186,8 @@ export async function endClassExam(classExamId: string): Promise<void> {
   if (error) throw error;
 }
 
-// edits settings on an existing attachment
+// edits settings on an existing attachment — verification code can only change
+// before it goes live, mirroring the old exams-level rule 1:1
 export async function updateClassExamSettings(
   classExamId: string,
   settings: {
@@ -227,7 +232,8 @@ export async function updateClassExamSettings(
   if (error) throw error;
 }
 
-// removes connection between an exam and a class, deleting the class_exams row - only allowed if not yet active
+// removes an attachment outright — only sensible while still 'scheduled';
+// once active/ended it's tied to real sessions and should be ended, not deleted
 export async function removeClassExamAttachment(classExamId: string): Promise<void> {
   const { data, error: fetchError } = await supabase
     .from("class_exams")
@@ -238,7 +244,7 @@ export async function removeClassExamAttachment(classExamId: string): Promise<vo
   if (fetchError || !data) throw fetchError ?? new Error("Class attachment not found.");
 
   if (data.status !== "scheduled") {
-    throw new Error("Only a not-yet-active class attachment can be removed. End it instead.");
+    throw new Error("Only a class that hasn't gone live can be removed. End it instead.");
   }
 
   const { error } = await supabase.from("class_exams").delete().eq("id", classExamId);

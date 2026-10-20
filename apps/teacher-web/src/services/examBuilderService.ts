@@ -469,6 +469,17 @@ export async function updateExamStatus(
   examId: string,
   status: "draft" | "saved",
 ): Promise<void> {
+  if (status === "draft") {
+    const { count, error: countError } = await supabase
+      .from("class_exams")
+      .select("id", { count: "exact", head: true })
+      .eq("exam_id", examId);
+    if (countError) throw countError;
+    if ((count ?? 0) > 0) {
+      throw new Error("This exam is in a class, so it can't go back to draft.");
+    }
+  }
+
   const { error } = await supabase
     .from("exams")
     .update({ status })

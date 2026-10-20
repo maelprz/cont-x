@@ -1,17 +1,15 @@
 import { useState } from "react";
-import { ArrowLeft, Filter, LayoutGrid } from "lucide-react";
-import type { ExamLibraryScreenProps } from "./examLibraryScreen.types";
+import { Plus } from "lucide-react";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { ExamCardTile } from "../../components/examLibrary/examCardTile";
 import { ExamCardMenu } from "../../components/examLibrary/examCardMenu";
-import { ConfirmActionDialog } from "../../components/examLibrary/confirmActionDialog";
+import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog";
+import { SubjectTile } from "../../components/shared/subjectTile";
 import { PublishSuccessOverlay } from "../../components/examLibrary/publishSuccessOverlay";
 import { SetSessionCodeModal } from "../../components/examLibrary/setSessionCodeModal";
 import { EditSettingsModal } from "../../components/examLibrary/editSettingsModal";
 import { CreateExamModal } from "../../components/examLibrary/createExamModal";
-import { CreateNewCard } from "../../components/examLibrary/createNewCard";
-import { SubjectCardTile } from "../../components/examLibrary/subjectCardTile";
 import { ManageClassesModal } from "../../components/examLibrary/manageClassesModal";
 import { AttachClassModal } from "../../components/examLibrary/attachClassModal";
 import { useRouterLogic } from "../../router/routerLogic";
@@ -30,22 +28,16 @@ type ConfirmAction =
   | { type: "endClassExam"; classExamId: string }
   | { type: "deleteExam"; examId: string };
 
-export function ExamLibraryScreen({
-  exams: examsProp,
-  searchQuery: externalSearch,
-  onSearchChange,
-  onFilter,
-  onToggleView,
-  onCreateNewAssessment,
-}: ExamLibraryScreenProps) {
-  const [localSearch, setLocalSearch] = useState("");
-  const search = externalSearch ?? localSearch;
+export function ExamLibraryScreen() {
+  const [search, setSearch] = useState("");
 
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  const { exams: fetchedExams, isLoading: isLoadingExams, refetch } = useExamLibrary();
-  const exams = examsProp ?? fetchedExams;
+  const { exams, isLoading: isLoadingExams, refetch } = useExamLibrary();
 
+  // The library now has two levels: subjects first, then the exams under the
+  // chosen subject. Which subject is open lives in a store so returning from
+  // the builder lands back in the same subject.
   const selectedSubjectId = useExamLibraryStore((state) => state.selectedSubjectId);
   const setSelectedSubjectId = useExamLibraryStore((state) => state.setSelectedSubjectId);
   const {
@@ -91,24 +83,18 @@ export function ExamLibraryScreen({
       setCurrentExamId(newExamId);
       setOpenedFromEditExam(false); // brand new exam, not editing a live one
       setIsCreateModalOpen(false);
-      onCreateNewAssessment?.();
       navigateTo("examBuilder");
     }
   };
 
-  const handleSearch = (q: string) => {
-    setLocalSearch(q);
-    onSearchChange?.(q);
-  };
-
-  // opens a subject to show its exams
+  // the search box means different things on each level, so clear it when switching
   const openSubject = (subjectId: string) => {
     setSelectedSubjectId(subjectId);
-    handleSearch("");
+    setSearch("");
   };
   const backToSubjects = () => {
     setSelectedSubjectId(null);
-    handleSearch("");
+    setSearch("");
   };
 
   const handleCardCta = (examId: string, status: "draft" | "saved", hasAttachments: boolean) => {
@@ -186,8 +172,10 @@ export function ExamLibraryScreen({
 
   const query = search.toLowerCase();
 
+  // top level: subjects matching the search
   const filteredSubjects = subjects.filter((s) => s.name.toLowerCase().includes(query));
 
+  // inside a subject: only that subject's exams, matching the search
   const filtered = exams.filter(
     (e) =>
       e.subjectId === selectedSubject?.id &&
@@ -205,13 +193,13 @@ export function ExamLibraryScreen({
           className="flex-1 overflow-y-auto px-8 py-6"
           style={{ color: "var(--color-base-content)" }}
         >
-          <p className="text-xs opacity-60 mb-2">
+          <p className="text-[13px] mb-3 opacity-60">
             Teacher Portal &gt;{" "}
             {selectedSubject ? (
               <>
                 <button
                   onClick={backToSubjects}
-                  className="p-0 border-none bg-transparent cursor-pointer text-inherit text-xs hover:underline"
+                  className="p-0 border-none bg-transparent cursor-pointer text-inherit text-[13px] hover:underline"
                 >
                   Exam Library
                 </button>{" "}
@@ -222,28 +210,17 @@ export function ExamLibraryScreen({
             )}
           </p>
 
-          <div className="flex items-start justify-between gap-6 mb-7">
+          <div className="flex items-end justify-between gap-6 mb-7">
             <div>
-              {selectedSubject && (
-                <button
-                  onClick={backToSubjects}
-                  className="flex items-center gap-1.5 mb-2 p-0 border-none bg-transparent cursor-pointer text-[13px] font-medium text-[var(--color-base-content)] opacity-70 transition-opacity hover:opacity-100"
-                >
-                  <ArrowLeft size={14} />
-                  All subjects
-                </button>
-              )}
-              <h1 className="text-2xl font-bold mb-1">
-                {selectedSubject ? selectedSubject.name : "Academic Inventory"}
+              <h1 className="text-2xl font-bold">
+                {selectedSubject ? selectedSubject.name : "Exam Library"}
               </h1>
-              <p className="text-sm opacity-70 max-w-md leading-relaxed">
-                {selectedSubject
-                  ? "Exams under this subject. Build an exam once, then publish it to any of your classes in the subject."
-                  : "Pick a subject to manage its exams and deploy them to your classes. Ensure rigor and academic integrity with Cont/x's structured exam environment."}
+              <p className="text-sm opacity-70 mt-1">
+                {selectedSubject ? "Exams in this subject." : "Choose a subject to see its exams."}
               </p>
             </div>
 
-            <div className="flex flex-col items-end gap-2 shrink-0">
+            <div className="flex items-center gap-3 shrink-0">
               <div className="flex items-center gap-2 px-3 py-2 rounded-lg border w-[280px] border-[var(--color-base-300)] bg-[var(--color-base-100)]">
                 <svg
                   width="14"
@@ -262,28 +239,22 @@ export function ExamLibraryScreen({
                 </svg>
                 <input
                   type="text"
-                  placeholder={selectedSubject ? "Search exams by title or code" : "Search subjects by name"}
+                  placeholder={selectedSubject ? "Search exams by title or code" : "Search subjects"}
                   value={search}
-                  onChange={(e) => handleSearch(e.target.value)}
+                  onChange={(e) => setSearch(e.target.value)}
                   className="flex-grow text-[13px] outline-none bg-transparent border-none text-[var(--color-base-content)] font-[inherit]"
                 />
               </div>
 
-              <div className="flex items-center gap-2">
+              {selectedSubject?.isAssigned && (
                 <button
-                  onClick={onFilter}
-                  className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] text-[13px] text-[var(--color-base-content)] bg-[var(--color-base-100)] font-medium cursor-pointer transition-opacity hover:opacity-70"
+                  onClick={() => setIsCreateModalOpen(true)}
+                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)]"
                 >
-                  <Filter size={13} />
-                  Filter
+                  <Plus size={14} />
+                  New Exam
                 </button>
-                <button
-                  onClick={onToggleView}
-                  className="p-2 rounded-lg border border-[var(--color-base-300)] text-[var(--color-base-content)] bg-[var(--color-base-100)] cursor-pointer transition-opacity hover:opacity-70"
-                >
-                  <LayoutGrid size={15} />
-                </button>
-              </div>
+              )}
             </div>
           </div>
 
@@ -297,6 +268,7 @@ export function ExamLibraryScreen({
           )}
 
           {!selectedSubject ? (
+            // ── Level 1: subjects ──────────────────────────────────────────
             isLoadingSubjects || isLoadingExams ? (
               <p className="text-[13px] opacity-60">Loading subjects...</p>
             ) : subjectsError ? (
@@ -313,19 +285,36 @@ export function ExamLibraryScreen({
             ) : (
               <div className="grid grid-cols-3 gap-5">
                 {filteredSubjects.map((subject) => (
-                  <SubjectCardTile
+                  <SubjectTile
                     key={subject.id}
-                    subject={subject}
+                    name={subject.name}
+                    note={subject.isAssigned ? undefined : "You're no longer assigned to this subject."}
+                    badge={
+                      subject.liveClassCount > 0
+                        ? `Live in ${subject.liveClassCount} ${subject.liveClassCount === 1 ? "class" : "classes"}`
+                        : undefined
+                    }
+                    stats={[
+                      { label: "Exams", value: subject.examCount },
+                      { label: "Your classes", value: subject.classCount },
+                    ]}
                     onClick={() => openSubject(subject.id)}
                   />
                 ))}
               </div>
             )
           ) : (
+          // ── Level 2: the exams under the chosen subject ────────────────
+          filtered.length === 0 ? (
+            <p className="text-[13px] opacity-60">
+              {exams.some((e) => e.subjectId === selectedSubject.id)
+                ? `No exams match "${search}".`
+                : selectedSubject.isAssigned
+                  ? "No exams in this subject yet. Use New Exam to create one."
+                  : "No exams to show."}
+            </p>
+          ) : (
           <div className="grid grid-cols-3 gap-5">
-            {selectedSubject.isAssigned && (
-              <CreateNewCard onClick={() => setIsCreateModalOpen(true)} />
-            )}
             {filtered.map((exam) => {
               const hasAttachments = exam.classAttachments.length > 0;
               const hasActiveAttachment = exam.classAttachments.some((a) => a.status === "active");
@@ -340,10 +329,8 @@ export function ExamLibraryScreen({
                   onClick={() => handleCardCta(exam.id, exam.status, hasAttachments)}
                   menu={
                     <ExamCardMenu
-                      status={exam.status}
                       hasClassAttachments={hasAttachments}
                       isProcessing={isProcessing}
-                      onManageClasses={() => handleCardCta(exam.id, exam.status, hasAttachments)}
                       onDelete={() => requestDelete(exam.id)}
                       onEditExam={() => {
                         setCurrentExamId(exam.id);
@@ -356,6 +343,7 @@ export function ExamLibraryScreen({
               );
             })}
           </div>
+          )
           )}
         </main>
       </div>

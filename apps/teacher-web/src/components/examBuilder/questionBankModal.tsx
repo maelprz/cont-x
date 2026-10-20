@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState } from "react";
 import { Search, Plus, Check, Tag as TagIcon } from "lucide-react";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { getBankQuestionById } from "../../services/questionBankService";
@@ -49,17 +49,17 @@ export function QuestionBankModal({
   const [selected, setSelected] = useState<Map<string, BankQuestionSummary>>(new Map());
   const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding">("all");
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
-  const [destination, setDestination] = useState<string>(SPECIFIED); // SPECIFIED | NEW_POOL | `pool:<id>`
+  // what the teacher picked in "Add as" — null until they touch it, so the starting choice
+  // (the pool this was opened from, or "Always included") is worked out below, not stored
+  const [pickedDestination, setPickedDestination] = useState<string | null>(null);
   const [pickCount, setPickCount] = useState(1); // only used when making a new pool
   const [isSubmitting, setIsSubmitting] = useState(false);
   const [submitError, setSubmitError] = useState<string | null>(null);
 
-  // each time the modal opens, start on the right destination
-  useEffect(() => {
-    if (isOpen) setDestination(defaultPoolId ? `pool:${defaultPoolId}` : SPECIFIED);
-  }, [isOpen, defaultPoolId]);
-
   if (!isOpen) return null; // render nothing when the modal is closed
+
+  // SPECIFIED | NEW_POOL | `pool:<id>`
+  const destination = pickedDestination ?? (defaultPoolId ? `pool:${defaultPoolId}` : SPECIFIED);
 
   const resetAndClose = () => {
     setSearch("");
@@ -69,7 +69,7 @@ export function QuestionBankModal({
     setActiveTagIds([]);
     setIncludeShared(false);
     setPickCount(1);
-    setDestination(SPECIFIED);
+    setPickedDestination(null);
     onClose();
   };
 
@@ -317,7 +317,7 @@ export function QuestionBankModal({
               <label className="text-[12px] opacity-60 font-medium whitespace-nowrap">Add as</label>
               <select
                 value={destination}
-                onChange={(e) => setDestination(e.target.value)}
+                onChange={(e) => setPickedDestination(e.target.value)}
                 className="px-2 py-1.5 rounded-lg border text-[13px] outline-none bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)] max-w-[220px]"
               >
                 <option value={SPECIFIED}>Always included</option>
