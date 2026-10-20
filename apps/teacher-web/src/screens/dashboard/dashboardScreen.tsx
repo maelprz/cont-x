@@ -9,7 +9,10 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { useExamLibraryStore } from "../../store/useExamLibraryStore";
-import { StatusBadge, ClassExamStatusBadge } from "../../components/examLibrary/statusBadge";
+import {
+  StatusBadge,
+  ClassExamStatusBadge,
+} from "../../components/examLibrary/statusBadge";
 
 function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
   return (
@@ -50,8 +53,14 @@ export function DashboardScreen({}: DashboardScreenProps) {
   const setOpenedFromEditExam = useExamBuilderStore(
     (state) => state.setOpenedFromEditExam,
   );
-  const setSelectedSubjectId = useExamLibraryStore((state) => state.setSelectedSubjectId);
-  const openExam = (examId: string, status: "draft" | "saved", subjectId: string) => {
+  const setSelectedSubjectId = useExamLibraryStore(
+    (state) => state.setSelectedSubjectId,
+  );
+  const openExam = (
+    examId: string,
+    status: "draft" | "saved",
+    subjectId: string,
+  ) => {
     if (status === "draft") {
       setCurrentExamId(examId);
       setOpenedFromEditExam(false); // still being authored, not a live-exam edit
@@ -197,7 +206,9 @@ export function DashboardScreen({}: DashboardScreenProps) {
                       <td className="py-3.5 px-5">
                         <div className="flex items-center gap-1.5">
                           <StatusBadge status={exam.status} />
-                          {hasActiveAttachment && <ClassExamStatusBadge status="active" />}
+                          {hasActiveAttachment && (
+                            <ClassExamStatusBadge status="active" />
+                          )}
                         </div>
                       </td>
                       <td className="py-3.5 px-5 text-sm opacity-70">
@@ -208,7 +219,9 @@ export function DashboardScreen({}: DashboardScreenProps) {
                       </td>
                       <td className="py-3.5 px-5">
                         <button
-                          onClick={() => openExam(exam.id, exam.status, exam.subjectId)}
+                          onClick={() =>
+                            openExam(exam.id, exam.status, exam.subjectId)
+                          }
                           className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80"
                           style={{
                             borderColor: "var(--color-base-300)",
@@ -226,7 +239,10 @@ export function DashboardScreen({}: DashboardScreenProps) {
             </table>
           </div>
 
-          <p className="text-xs opacity-50 mt-3">Showing 3 of 3 exams</p>
+          <p className="text-xs opacity-50 mt-3">
+            Showing {recentExams.length} of{" "}
+            {isLoading ? "…" : (data?.totalExams ?? 0)} exams
+          </p>
         </main>
       </div>
     </div>
