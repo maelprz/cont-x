@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import type { StudentOption } from "../../services/subjectsClassesService";
+import { EnrollCsvPanel } from "./enrollCsvPanel";
 
 export function EnrollStudentModal({
   isOpen,
@@ -25,9 +26,11 @@ export function EnrollStudentModal({
   const [isSearching, setIsSearching] = useState(false); // true while the search is in progress
   const [searchError, setSearchError] = useState<string | null>(null);
   const [selected, setSelected] = useState<StudentOption | null>(null); // the student the admin clicked on
+  const [mode, setMode] = useState<"manual" | "csv">("manual");
 
   useEffect(() => {
     if (isOpen) {
+      setMode("manual");
       setSearch("");
       setResults([]);
       setSearchError(null);
@@ -80,7 +83,7 @@ export function EnrollStudentModal({
     >
       <div
         onClick={(e) => e.stopPropagation()} // clicking inside the modal does not close it
-        className="w-[460px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]"
+        className={`${mode === "csv" ? "w-[560px]" : "w-[460px]"} p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]`}
       >
         <h2
           className="text-[17px] font-bold mb-1"
@@ -94,124 +97,169 @@ export function EnrollStudentModal({
         >
           Adding to {classTitle} ({classCode}).
         </p>
-        <label
-          className="text-[12px] font-medium opacity-70 block mb-1.5"
-          style={{ color: "var(--color-base-content)" }}
-        >
-          Find student
-        </label>
-        <input
-          autoFocus // put the cursor in the box straight away
-          type="text"
-          value={search} // shows what has been typed
-          onChange={(e) => setSearch(e.target.value)} // keeps the typed text in state
-          onKeyDown={(e) =>
-            e.key === "Enter" && canSubmit && selected && onSubmit(selected)
-          } // Enter confirms when a student is chosen
-          placeholder="Type a name or ID number (2+ characters)"
-          className="w-full px-3 py-2.5 rounded-lg border text-[14px] outline-none mb-2"
-          style={{
-            borderColor: "var(--color-base-300)",
-            backgroundColor: "var(--color-base-200)",
-            color: "var(--color-base-content)",
-          }}
-        />
+
         <div
-          className="max-h-44 overflow-y-auto rounded-lg border"
-          style={{ borderColor: "var(--color-base-300)" }}
+          role="tablist"
+          className="flex gap-1 mb-4 p-1 rounded-lg"
+          style={{ backgroundColor: "var(--color-base-200)" }}
         >
-          {search.trim().length < 2 && ( // nothing searched yet
-            <p
-              className="text-[13px] opacity-60 p-3"
-              style={{ color: "var(--color-base-content)" }}
-            >
-              Start typing to search students.
-            </p>
-          )}
-          {search.trim().length >= 2 &&
-            isSearching && ( // a search is running
-              <p
-                className="text-[13px] opacity-60 p-3"
-                style={{ color: "var(--color-base-content)" }}
-              >
-                Searching...
-              </p>
-            )}
-          {search.trim().length >= 2 &&
-            !isSearching &&
-            !searchError &&
-            results.length === 0 && ( // search finished with no matches
-              <p
-                className="text-[13px] opacity-60 p-3"
-                style={{ color: "var(--color-base-content)" }}
-              ></p>
-            )}
-          {results.map((s) => (
-            // one row per matching student
+          {(["manual", "csv"] as const).map((m) => (
+            // one button per mode
             <button
+              key={m} // unique key for React
               type="button" // not a form button
-              key={s.id} // unique key for React
-              onClick={() => setSelected(s)} // choose this student
-              className="w-full text-left px-3 py-2 text-[13px] cursor-pointer border-none flex items-center justify-between"
+              role="tab" // tells screen readers this is a tab
+              aria-selected={mode === m} // marks the active tab
+              disabled={isSaving} // cannot switch while a save is running
+              onClick={() => setMode(m)} // switch to this mode
+              className="flex-1 px-3 py-1.5 rounded-md border text-[13px] font-medium cursor-pointer disabled:opacity-40" // "border" is always on now, "border-none" is gone
               style={{
+                borderColor:
+                  mode === m ? "var(--color-primary)" : "var(--color-base-300)", // visible outline on both tabs, accent colour on the active one
                 backgroundColor:
-                  selected?.id === s.id
-                    ? "var(--color-primary)"
-                    : "transparent", // highlight the chosen student
+                  mode === m ? "var(--color-primary)" : "transparent", // highlight the active tab
                 color:
-                  selected?.id === s.id
+                  mode === m
                     ? "var(--color-primary-content)"
                     : "var(--color-base-content)", // readable text on the highlight
               }}
             >
-              <span className="font-medium">{s.fullName}</span>
-              <span className="text-[12px] opacity-70">{s.idNumber}</span>
+              {m === "manual" ? "Single student" : "Upload CSV"}
             </button>
           ))}
         </div>
-        {selected && (
-          <p
-            className="text-[12px] mt-3"
-            style={{ color: "var(--color-base-content)" }}
-          >
-            Selected: <span className="font-semibold">{selected.fullName}</span>{" "}
-            ({selected.idNumber})
-          </p>
+
+        {mode === "csv" ? (
+          <EnrollCsvPanel onClose={onClose} /> // the CSV tab
+        ) : (
+          <>
+            <label
+              className="text-[12px] font-medium opacity-70 block mb-1.5"
+              style={{ color: "var(--color-base-content)" }}
+            >
+              Find student
+            </label>
+            <input
+              autoFocus // put the cursor in the box straight away
+              type="text"
+              value={search} // shows what has been typed
+              onChange={(e) => setSearch(e.target.value)} // keeps the typed text in state
+              onKeyDown={(e) =>
+                e.key === "Enter" && canSubmit && selected && onSubmit(selected)
+              } // Enter confirms when a student is chosen
+              placeholder="Type a name or ID number (2+ characters)"
+              className="w-full px-3 py-2.5 rounded-lg border text-[14px] outline-none mb-2"
+              style={{
+                borderColor: "var(--color-base-300)",
+                backgroundColor: "var(--color-base-200)",
+                color: "var(--color-base-content)",
+              }}
+            />
+            <div
+              className="max-h-44 overflow-y-auto rounded-lg border"
+              style={{ borderColor: "var(--color-base-300)" }}
+            >
+              {search.trim().length < 2 && ( // nothing searched yet
+                <p
+                  className="text-[13px] opacity-60 p-3"
+                  style={{ color: "var(--color-base-content)" }}
+                >
+                  Start typing to search students.
+                </p>
+              )}
+              {search.trim().length >= 2 &&
+                isSearching && ( // a search is running
+                  <p
+                    className="text-[13px] opacity-60 p-3"
+                    style={{ color: "var(--color-base-content)" }}
+                  >
+                    Searching...
+                  </p>
+                )}
+              {search.trim().length >= 2 &&
+                !isSearching &&
+                !searchError &&
+                results.length === 0 && ( // search finished with no matches
+                  <p
+                    className="text-[13px] opacity-60 p-3"
+                    style={{ color: "var(--color-base-content)" }}
+                  >
+                    No students found.
+                  </p>
+                )}
+              {results.map((s) => (
+                // one row per matching student
+                <button
+                  type="button" // not a form button
+                  key={s.id} // unique key for React
+                  onClick={() => setSelected(s)} // choose this student
+                  className="w-full text-left px-3 py-2 mb-1 last:mb-0 rounded-md border text-[13px] cursor-pointer flex items-center justify-between" // "border" replaces "border-none", mb-1 spaces the rows apart
+                  style={{
+                    borderColor:
+                      selected?.id === s.id
+                        ? "var(--color-primary)"
+                        : "var(--color-base-300)", // every row has an outline, the chosen one uses the accent colour
+                    backgroundColor:
+                      selected?.id === s.id
+                        ? "var(--color-primary)"
+                        : "transparent", // highlight the chosen student
+                    color:
+                      selected?.id === s.id
+                        ? "var(--color-primary-content)"
+                        : "var(--color-base-content)", // readable text on the highlight
+                  }}
+                >
+                  <span className="font-medium">{s.fullName}</span>
+                  <span className="text-[12px] opacity-70">{s.idNumber}</span>
+                </button>
+              ))}
+            </div>
+            {selected && (
+              <p
+                className="text-[12px] mt-3"
+                style={{ color: "var(--color-base-content)" }}
+              >
+                Selected:{" "}
+                <span className="font-semibold">{selected.fullName}</span> (
+                {selected.idNumber})
+              </p>
+            )}
+            {/* errors: search problems first, then enrollment problems */}
+            {(searchError || error) && (
+              <p
+                className="text-[12px] mt-3"
+                style={{ color: "var(--color-error)" }}
+              >
+                {searchError ?? error}
+              </p>
+            )}
+            <div className="flex gap-2 mt-5">
+              <button
+                onClick={onClose} // cancel
+                disabled={isSaving} // cannot cancel mid-save
+                className="flex-1 px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 disabled:opacity-40"
+                style={{
+                  borderColor: "var(--color-base-300)",
+                  color: "var(--color-base-content)",
+                  backgroundColor: "transparent",
+                }}
+              >
+                Cancel
+              </button>
+              <button
+                onClick={() => selected && onSubmit(selected)} // enroll the chosen student
+                disabled={!canSubmit} // needs a chosen student and no save in progress
+                className="flex-1 px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 disabled:opacity-40"
+                style={{
+                  backgroundColor: "var(--color-primary)",
+                  color: "var(--color-primary-content)",
+                }}
+              >
+                {isSaving ? "Enrolling..." : "Enroll Student"}
+              </button>
+            </div>
+          </>
         )}
-        {/* errors: search problems first, then enrollment problems */}
-        {(searchError || error) && (
-          <p
-            className="text-[12px] mt-3"
-            style={{ color: "var(--color-error)" }}
-          >
-            {searchError ?? error}
-          </p>
-        )}
-        <div className="flex gap-2 mt-5">
-          <button
-            onClick={onClose} // cancel
-            disabled={isSaving} // cannot cancel mid-save
-            className="flex-1 px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 disabled:opacity-40"
-            style={{
-              borderColor: "var(--color-base-300)",
-              color: "var(--color-base-content)",
-              backgroundColor: "transparent",
-            }}
-          >
-            Cancel
-          </button>
-          <button
-            onClick={() => selected && onSubmit(selected)} // enroll the chosen student
-            disabled={!canSubmit} // needs a chosen student and no save in progress
-            className="flex-1 px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 disabled:opacity-40"
-            style={{
-              backgroundColor: "var(--color-primary)",
-              color: "var(--color-primary-content)",
-            }}
-          >
-            {isSaving ? "Enrolling..." : "Enroll Student"}
-          </button>
-        </div>
       </div>
     </div>
   );
