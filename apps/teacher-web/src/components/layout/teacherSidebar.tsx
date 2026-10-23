@@ -150,7 +150,7 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
       <div className="border-t border-[rgba(248,248,248,0.1)]">
         <button
           type="button"
-          onClick={() => navigateTo("login")}
+          onClick={handleLogout}
           className={`${navItemBase} px-4 py-3 rounded-none`}
           style={{ color: "rgba(248,248,248,0.7)" }}
         >
