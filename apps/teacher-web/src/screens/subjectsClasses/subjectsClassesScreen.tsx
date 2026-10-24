@@ -11,6 +11,7 @@ import { EnrollStudentModal } from "../../components/subjectsClasses/enrollStude
 import type {
   ClassSummary,
   StudentOption,
+  CsvEnrollResult,
 } from "../../services/subjectsClassesService";
 
 export function SubjectsClassesScreen() {
@@ -23,6 +24,7 @@ export function SubjectsClassesScreen() {
     addClass,
     findStudents,
     enrollInClass,
+    enrollCsvInClass,
   } = useSubjectsClasses();
   const { showToast } = useToast(); // shows the success message
 
@@ -92,6 +94,22 @@ export function SubjectsClassesScreen() {
       setEnrollError(
         err instanceof Error ? err.message : "Could not enroll the student.",
       ); // show the safe message in the modal
+    } finally {
+      setIsEnrolling(false); // saving is over either way
+    }
+  }
+
+  async function handleEnrollCsv(entries: string[]): Promise<CsvEnrollResult> {
+    if (!enrollTarget) throw new Error("No class selected.");
+    setIsEnrolling(true); // block double clicks
+    try {
+      const result = await enrollCsvInClass(enrollTarget.id, entries); // the database function does every check and the audit log
+      const enrolled = result.counts.enrolled ?? 0;
+      if (enrolled > 0)
+        showToast(
+          `${enrolled} student${enrolled === 1 ? "" : "s"} enrolled in ${enrollTarget.name}.`,
+        );
+      return result; // return the full report to the caller
     } finally {
       setIsEnrolling(false); // saving is over either way
     }
@@ -265,6 +283,7 @@ export function SubjectsClassesScreen() {
         onClose={() => setEnrollTarget(null)} // cancel
         onSearch={findStudents} // search function from the hook
         onSubmit={handleEnroll} // enroll
+        onSubmitCsv={handleEnrollCsv} // enroll from CSV
       />
     </div>
   );

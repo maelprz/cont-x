@@ -30,6 +30,25 @@ export interface StudentOption {
   idNumber: string;
 }
 
+export type CsvRowOutcome =
+  | "enrolled"
+  | "already_enrolled"
+  | "not_found"
+  | "not_a_student"
+  | "invalid_format"
+  | "duplicate_in_file";
+
+export interface CsvRowResult {
+  position: number;
+  idNumber: string;
+  outcome: CsvRowOutcome;
+}
+
+export interface CsvEnrollResult {
+  counts: Partial<Record<CsvRowOutcome, number>>;
+  results: CsvRowResult[];
+}
+
 type TeacherRel = { first_name: string; last_name: string }; // the nested teacher name from the query
 type ClassRow = {
   id: string;
@@ -187,4 +206,34 @@ export async function enrollStudent(
     p_student_id: studentId,
   }); // the function checks rights, the class, the student, and writes the audit row
   if (error) throw new Error(toFriendlyMessage(error)); // stop with a safe message
+}
+
+export async function enrollStudentsCsv(
+  classId: string,
+  idNumbers: string[],
+): Promise<CsvEnrollResult> {
+  const { data, error } = await supabase.rpc("enroll_students_csv", {
+    p_class_id: classId, // must match the SQL parameter name exactly
+    p_id_numbers: idNumbers, // supabase-js sends a string[] as a Postgres text[]
+  });
+
+  if (error) throw new Error(toFriendlyMessage(error));
+
+  const payload = data as {
+    counts?: CsvEnrollResult["counts"];
+    results?: { position: number; id_number: string; outcome: CsvRowOutcome }[];
+  } | null; // jsonb arrives untyped, so we describe what we expect
+  if (!payload || !Array.isArray(payload.results)) {
+    // guards against a stale function version returning something else
+    throw new Error("Unexpected response from the server."); // safe message, no internals leaked
+  }
+
+  return {
+    counts: payload.counts ?? {}, // empty object if nothing was tallied
+    results: payload.results.map((r) => ({
+      position: r.position, // keep the position as is
+      idNumber: r.id_number, // convert snake_case to camelCase
+      outcome: r.outcome, // keep the outcome label
+    })),
+  };
 }
