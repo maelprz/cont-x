@@ -1,26 +1,18 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  getAllUsers, 
+  getAllUsers,
   createUser,
-  updateUser, 
-  deleteUser, 
-  setUserAdmin, 
-  type UserRecord, 
-  type CreateUserPayload, 
-  type UpdateUserPayload, 
-} from "../services/userManagementService"; 
-
-interface UseUserManagementReturn { 
-  users: UserRecord[]; 
-  isLoading: boolean; 
-  error: string | null; 
-  refetch: () => Promise<void>; 
-  createNewUser: (payload: CreateUserPayload) => Promise<void>; 
-  editUser: (userId: string, payload: UpdateUserPayload) => Promise<void>; 
-  removeUser: (userId: string) => Promise<void>;
-  changeAdminRole: (userId: string, grant: boolean) => Promise<void>; 
-} 
-
+  updateUser,
+  deleteUser,
+  setUserAdmin,
+  createUsersBulk,
+  type UserRecord,
+  type CreateUserPayload,
+  type UpdateUserPayload,
+  type BulkAccountRow,
+  type BulkCreateResult,
+  type BulkRole,
+} from "../services/userManagementService";
 import { logAdminAction } from "../services/auditLogService";
 import { getCurrentUser } from "../services/authService";
 
@@ -32,10 +24,18 @@ interface UseUserManagementReturn {
   createNewUser: (payload: CreateUserPayload) => Promise<void>;
   editUser: (userId: string, payload: UpdateUserPayload) => Promise<void>;
   removeUser: (userId: string) => Promise<void>;
+  changeAdminRole: (userId: string, grant: boolean) => Promise<void>;
+  createNewUsersBulk: (
+    role: BulkRole,
+    accounts: BulkAccountRow[],
+  ) => Promise<BulkCreateResult>;
 }
 
 // builds a short description of what fields changed during an update
-function describeUpdate(before: UserRecord, changes: UpdateUserPayload): string {
+function describeUpdate(
+  before: UserRecord,
+  changes: UpdateUserPayload,
+): string {
   const parts: string[] = [];
 
   if (changes.first_name && changes.first_name !== before.first_name) {
@@ -54,7 +54,9 @@ function describeUpdate(before: UserRecord, changes: UpdateUserPayload): string 
     parts.push(`ID number from ${before.id_number} to ${changes.id_number}`);
   }
 
-  return parts.length > 0 ? `Updated ${parts.join(", ")}` : "Updated account details";
+  return parts.length > 0
+    ? `Updated ${parts.join(", ")}`
+    : "Updated account details";
 }
 
 export function useUserManagement(): UseUserManagementReturn {
@@ -82,29 +84,38 @@ export function useUserManagement(): UseUserManagementReturn {
   }, [refetch]);
 
   // creates a user, logs the action, then refreshes the list
-  async function createNewUser(payload: CreateUserPayload): Promise<void> { 
-    const newUserId = await createUser(payload); 
+  async function createNewUser(payload: CreateUserPayload): Promise<void> {
+    const newUserId = await createUser(payload);
 
     const admin = await getCurrentUser(); // fetch the logged in admin so we know who performed this action
-    if (admin) { 
-      await logAdminAction({ 
-        adminId: admin.id, 
-        adminName: admin.fullName, 
-        actionType: "create", 
-        targetUserId: newUserId, 
-        targetName: `${payload.first_name} ${payload.last_name}`, 
-        targetRole: payload.role, 
-        details: `Created ${payload.role} account with email ${payload.email}`, 
-      }); 
-    } 
+    if (admin) {
+      await logAdminAction({
+        adminId: admin.id,
+        adminName: admin.fullName,
+        actionType: "create",
+        targetUserId: newUserId,
+        targetName: `${payload.first_name} ${payload.last_name}`,
+        targetRole: payload.role,
+        details: `Created ${payload.role} account with email ${payload.email}`,
+      });
+    }
 
-    await refetch(); 
-  } 
+    await refetch();
+  }
+
+  async function createNewUsersBulk(
+    role: BulkRole,
+    accounts: BulkAccountRow[],
+  ): Promise<BulkCreateResult> {
+    const result = await createUsersBulk(role, accounts);
+    if (result.summary.created > 0) await refetch();
+    return result;
+  }
 
   // updates a user, logs what changed, then refreshes the list
   async function editUser(
     userId: string,
-    payload: UpdateUserPayload
+    payload: UpdateUserPayload,
   ): Promise<void> {
     // grab the current row before updating, so we can describe what changed
     const existingUser = users.find((u) => u.id === userId);
@@ -149,10 +160,24 @@ export function useUserManagement(): UseUserManagementReturn {
     await refetch();
   }
 
-  async function changeAdminRole(userId: string, grant: boolean): Promise<void> { // grants or revokes the admin role
+  async function changeAdminRole(
+    userId: string,
+    grant: boolean,
+  ): Promise<void> {
+    // grants or revokes the admin role
     await setUserAdmin(userId, grant); // the server checks rank and writes its own audit entry, so we do not log here
     await refetch(); // reloads so the badge and toggle match the database
   } // end of changeAdminRole
 
-  return { users, isLoading, error, refetch, createNewUser, editUser, removeUser, changeAdminRole }; // exposes the new function to the screen
+  return {
+    users,
+    isLoading,
+    error,
+    refetch,
+    createNewUser,
+    editUser,
+    removeUser,
+    changeAdminRole,
+    createNewUsersBulk,
+  }; // exposes the new function to the screen
 }
