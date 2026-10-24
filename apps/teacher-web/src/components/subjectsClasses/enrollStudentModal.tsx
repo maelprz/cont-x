@@ -1,6 +1,7 @@
 import { useEffect, useState } from "react";
 import type { StudentOption } from "../../services/subjectsClassesService";
 import { EnrollCsvPanel } from "./enrollCsvPanel";
+import type { CsvEnrollResult } from "../../services/subjectsClassesService";
 
 export function EnrollStudentModal({
   isOpen,
@@ -11,6 +12,7 @@ export function EnrollStudentModal({
   onClose,
   onSearch,
   onSubmit,
+  onSubmitCsv,
 }: {
   isOpen: boolean;
   classTitle: string;
@@ -20,6 +22,7 @@ export function EnrollStudentModal({
   onClose: () => void;
   onSearch: (term: string) => Promise<StudentOption[]>;
   onSubmit: (student: StudentOption) => void;
+  onSubmitCsv: (entries: string[]) => Promise<CsvEnrollResult>;
 }) {
   const [search, setSearch] = useState(""); //what admin typed
   const [results, setResults] = useState<StudentOption[]>([]); //students returned from the search
@@ -130,7 +133,11 @@ export function EnrollStudentModal({
         </div>
 
         {mode === "csv" ? (
-          <EnrollCsvPanel onClose={onClose} /> // the CSV tab
+          <EnrollCsvPanel
+            isSaving={isSaving}
+            onSubmit={onSubmitCsv}
+            onClose={onClose}
+          /> // the CSV tab
         ) : (
           <>
             <label
