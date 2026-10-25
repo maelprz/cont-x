@@ -8,6 +8,7 @@ import {
   enrollStudent,
   enrollStudentsCsv,
   archiveClass,
+  unarchiveClass,
   type SubjectSummary, // the subject shape
   type TeacherOption, // the teacher shape
   type CsvEnrollResult, // the CSV result shape
@@ -64,6 +65,11 @@ export function useSubjectsClasses() {
     await reload(false); // quiet refresh, so the open modal updates in place
   }, [reload]); // depends only on reload
 
+  const unarchiveClassById = useCallback(async (classId: string) => { // makes a class active again, then refreshes the list
+    await unarchiveClass(classId); // throws a safe message if the database refuses
+    await reload(false); // quiet refresh, so the open modal updates in place
+  }, [reload]); // depends only on reload
+
   const findStudents = useCallback((term: string) => searchStudents(term), []); // passes the typed text through the service
 
   const enrollInClass = useCallback(
@@ -91,5 +97,6 @@ export function useSubjectsClasses() {
     enrollInClass,
     enrollCsvInClass,
     archiveClassById,
+    unarchiveClassById,
   };
 }

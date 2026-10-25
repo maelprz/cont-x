@@ -171,9 +171,14 @@ export async function createClass(
   return { id: row.id, name: row.name, offerCode: row.class_offer_code }; // hand back what the screen needs
 }
 
-export async function archiveClass(classId: string): Promise<void> { // asks the database to archive a class
-  const { error } = await supabase.rpc("archive_class", { p_class_id: classId }); // the function checks rights and refuses if an exam is active
-  if (error) throw new Error(toFriendlyMessage(error)); // stop with a safe message, such as the active exam notice
+export async function archiveClass(classId: string): Promise<void> { 
+  const { error } = await supabase.rpc("archive_class", { p_class_id: classId }); 
+  if (error) throw new Error(toFriendlyMessage(error));
+}
+
+export async function unarchiveClass(classId: string): Promise<void> {
+  const { error } = await supabase.rpc("unarchive_class", { p_class_id: classId }); 
+  if (error) throw new Error(toFriendlyMessage(error)); 
 }
 
 export async function searchStudents(term: string): Promise<StudentOption[]> {

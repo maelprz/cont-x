@@ -12,12 +12,16 @@ export function SubjectDetailModal({
   onAddClass,
   onEnroll,
   onArchiveClass,
+  onUnarchiveClass, 
+  unarchivingClassId,
 }: {
   subject: SubjectSummary | null;
   onClose: () => void;
   onAddClass: () => void;
   onEnroll: (cls: ClassSummary) => void;
-  onArchiveClass: (classId: string, className: string) => void; // opens the archive confirmation
+  onArchiveClass: (classId: string, className: string) => void; 
+  onUnarchiveClass: (classId: string, className: string) => void; 
+  unarchivingClassId: string | null; 
 }) {
   const [showArchived, setShowArchived] = useState(false); // whether archived classes are visible
 
@@ -169,13 +173,13 @@ export function SubjectDetailModal({
                           {isArchived ? "Archived" : "Active"}
                         </span>
                       </td>
-                                            <td className="py-2.5 text-right">
-                        {!isArchived && ( // only active classes can be enrolled into or archived
-                          <div className="flex justify-end gap-2">
-                            <button
-                              onClick={() => onEnroll(c)} // opens the enroll modal for this class
-                              className="px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-                              style={{
+                        <td className="py-2.5 text-right">
+                          {!isArchived && ( // only active classes can be enrolled into or archived
+                            <div className="flex justify-end gap-2">
+                              <button
+                                onClick={() => onEnroll(c)} // opens the enroll modal for this class
+                                className="px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
+                                style={{
                                 backgroundColor: "var(--color-primary)",
                                 color: "var(--color-primary-content)",
                               }}
@@ -193,6 +197,19 @@ export function SubjectDetailModal({
                               Archive
                             </button>
                           </div>
+                        )}
+                        {isArchived && ( // archived rows get an Unarchive button instead
+                          <button
+                            onClick={() => onUnarchiveClass(c.id, c.name)} // makes this class active again
+                            disabled={unarchivingClassId === c.id} // blocks double clicks while it runs
+                            className="px-2.5 py-1 rounded-lg border text-[12px] cursor-pointer transition-opacity hover:opacity-70 bg-transparent disabled:opacity-40"
+                            style={{
+                              borderColor: "var(--color-base-300)",
+                              color: "var(--color-base-content)",
+                            }}
+                          >
+                            {unarchivingClassId === c.id ? "Unarchiving..." : "Unarchive"}
+                          </button>
                         )}
                       </td>
                     </tr>

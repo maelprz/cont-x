@@ -27,6 +27,7 @@ export function SubjectsClassesScreen() {
     enrollInClass,
     enrollCsvInClass,
     archiveClassById,
+    unarchiveClassById,
   } = useSubjectsClasses();
   const { showToast } = useToast(); // shows the success message
 
@@ -60,6 +61,7 @@ export function SubjectsClassesScreen() {
   } | null>(null); // the class waiting for confirmation
   const [isArchiving, setIsArchiving] = useState(false); // true while the archive call runs
   const [archiveError, setArchiveError] = useState<string | null>(null); // error shown inside the confirmation modal
+  const [unarchivingClassId, setUnarchivingClassId] = useState<string | null>(null); // the class currently being unarchived
 
   function openNewSubjectModal() {
     // runs when the New Subject button is clicked
@@ -169,6 +171,18 @@ export function SubjectsClassesScreen() {
       ); // show the safe message, such as the active exam notice
     } finally {
       setIsArchiving(false); // saving is over either way
+    }
+  }
+
+  async function handleUnarchive(classId: string, className: string) { // runs when an archived row's Unarchive button is clicked
+    setUnarchivingClassId(classId); // disable that row's button
+    try {
+      await unarchiveClassById(classId); // ask the database to make it active, then refresh the list
+      showToast(`${className} is active again.`); // tell the admin it worked
+    } catch (err) {
+      showToast(err instanceof Error ? err.message : "Could not unarchive the class.", "error"); // there is no modal here, so show the safe message as an error toast
+    } finally {
+      setUnarchivingClassId(null); // saving is over either way
     }
   }
 
@@ -289,7 +303,9 @@ export function SubjectsClassesScreen() {
         onClose={() => setSelectedSubjectId(null)}
         onAddClass={openNewClassModal}
         onEnroll={openEnrollModal}
-        onArchiveClass={openArchiveModal} // opens the archive confirmation for a class
+        onArchiveClass={openArchiveModal} 
+        onUnarchiveClass={handleUnarchive}
+        unarchivingClassId={unarchivingClassId}
       />
 
       {/* the create modal sits on top of everything */}
