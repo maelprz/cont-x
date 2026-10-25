@@ -1,11 +1,11 @@
 import { create } from "zustand";
 
 interface ExamResultState {
-  currentExamId: string | null;
-  setCurrentExamId: (examId: string | null) => void;
+  currentClassExamId: string | null; // one exam as delivered to one class
+  setCurrentClassExamId: (classExamId: string | null) => void;
 }
 
 export const useExamResultsStore = create<ExamResultState>((set) => ({
-  currentExamId: null,
-  setCurrentExamId: (examId) => set({ currentExamId: examId }),
+  currentClassExamId: null,
+  setCurrentClassExamId: (classExamId) => set({ currentClassExamId: classExamId }),
 }));

@@ -1,36 +1,39 @@
 import { useEffect, useState } from "react";
-import { getExamResults } from "../services/examResultService";
+import { getClassExamResults } from "../services/examResultService";
 import type { ExamResultsData } from "../services/examResultService";
 
-export function useExamResults(examId: string | null) {
+export function useExamResults(classExamId: string | null) {
   const [data, setData] = useState<ExamResultsData | null>(null);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
+  const [reloadKey, setReloadKey] = useState(0); // bumping this re-runs the fetch
 
   useEffect(() => {
-    if (!examId) return; // nothing to fetch without an exam selected
+    if (!classExamId) return; // nothing to fetch without a class exam selected
 
-    let isActive = true; // prevents stale updates if examId changes mid-fetch
+    let isActive = true; // prevents stale updates if classExamId changes mid-fetch
 
     async function load(id: string) {
       setIsLoading(true);
       setError(null);
       try {
-        const result = await getExamResults(id);
+        const result = await getClassExamResults(id);
         if (isActive) setData(result);
-      } catch (err) {
+      } catch {
         if (isActive) setError("Could not load exam results. Try again.");
       } finally {
         if (isActive) setIsLoading(false);
       }
     }
 
-    load(examId);
+    load(classExamId);
 
     return () => {
       isActive = false;
     };
-  }, [examId]);
+  }, [classExamId, reloadKey]);
 
-  return { data, isLoading, error };
+  const refetch = () => setReloadKey((key) => key + 1);
+
+  return { data, isLoading, error, refetch };
 }

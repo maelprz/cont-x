@@ -47,16 +47,21 @@ export function EditSettingsModal({
   // session code can only be changed before this class goes live
   const canEditVerificationCode = settings?.status === "scheduled";
 
+  // pass mark is a percent of the exam's total points; blank means no minimum
+  const passMarkNumber = passMarkInput.trim() === "" ? null : Number(passMarkInput);
+  const passMarkInvalid =
+    passMarkNumber !== null &&
+    (!Number.isFinite(passMarkNumber) || passMarkNumber < 0 || passMarkNumber > 100);
+
   const handleSave = async () => {
-    if (!classExamId) return;
+    if (!classExamId || passMarkInvalid) return;
 
     const totalMinutes = durationHours * 60 + durationMinutesInput;
-    const trimmedPassMark = passMarkInput.trim();
 
     const didSave = await saveSettings(classExamId, {
       maxAttempts,
       durationMinutes: totalMinutes,
-      passMark: trimmedPassMark === "" ? null : Number(trimmedPassMark),
+      passMark: passMarkNumber,
       randomizeOrder,
       ...(canEditVerificationCode ? { verificationCode: verificationCode.trim() } : {}),
       startsAt: isScheduled ? localInputValueToIso(startsAtInput) : null,
@@ -173,11 +178,12 @@ export function EditSettingsModal({
               </div>
               <div>
                 <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
-                  Pass Mark <span style={{ opacity: 0.5, fontWeight: 400 }}>(optional)</span>
+                  Pass Mark (%) <span style={{ opacity: 0.5, fontWeight: 400 }}>(optional)</span>
                 </label>
                 <input
                   type="number"
                   min={0}
+                  max={100}
                   value={passMarkInput}
                   onChange={(e) => setPassMarkInput(e.target.value)}
                   placeholder="No minimum"
@@ -185,6 +191,15 @@ export function EditSettingsModal({
                 />
               </div>
             </div>
+
+            <p
+              className="text-[12px] -mt-2 mb-4"
+              style={passMarkInvalid ? { color: "var(--color-error)" } : { opacity: 0.6 }}
+            >
+              {passMarkInvalid
+                ? "Pass mark must be a percent from 0 to 100."
+                : "Percent of the exam's total points a student needs to pass. Leave blank for no minimum."}
+            </p>
 
             <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
               Session Code
@@ -235,7 +250,7 @@ export function EditSettingsModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={isSaving || !settings}
+            disabled={isSaving || !settings || passMarkInvalid}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? "Saving..." : "Save Settings"}

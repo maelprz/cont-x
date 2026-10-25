@@ -9,18 +9,21 @@ export function ExamResultsListScreen() {
   // reuses the same fetch-all-exams hook Exam Library already uses
   const { exams, isLoading, error } = useExamLibrary();
 
-  const setCurrentExamId = useExamResultsStore(
-    (state) => state.setCurrentExamId,
+  const setCurrentClassExamId = useExamResultsStore(
+    (state) => state.setCurrentClassExamId,
   );
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  const endedExams = exams.filter((exam) =>
-    exam.classAttachments.some((attachment) => attachment.status === "ended"),
+  // one entry per class the exam has ended in, so results are never mixed across classes
+  const endedEntries = exams.flatMap((exam) =>
+    exam.classAttachments
+      .filter((attachment) => attachment.status === "ended")
+      .map((attachment) => ({ exam, attachment })),
   );
 
-  // saves which exam was picked, then opens its results detail screen
-  const openResultsFor = (examId: string) => {
-    setCurrentExamId(examId);
+  // saves which class's attempt was picked, then opens its results detail screen
+  const openResultsFor = (classExamId: string) => {
+    setCurrentClassExamId(classExamId);
     navigateTo("examResults");
   };
 
@@ -42,7 +45,7 @@ export function ExamResultsListScreen() {
           <div className="mb-7">
             <h1 className="text-2xl font-bold mb-1">Exam Results</h1>
             <p className="text-sm opacity-70 max-w-md leading-relaxed">
-              Review outcomes for exams that have ended.
+              Review outcomes for each class an exam has ended in.
             </p>
           </div>
 
@@ -62,20 +65,22 @@ export function ExamResultsListScreen() {
           )}
 
           {/* shows if there are no ended exams yet */}
-          {!isLoading && !error && endedExams.length === 0 && (
+          {!isLoading && !error && endedEntries.length === 0 && (
             <p className="text-sm opacity-60">No exams have ended yet.</p>
           )}
 
           <div className="grid grid-cols-3 gap-5">
-            {endedExams.map((exam) => (
+            {endedEntries.map(({ exam, attachment }) => (
               <ExamCardTile
-                key={exam.id}
+                key={attachment.classExamId}
                 exam={{
-                  ...exam, // keeps title, description, counts, etc.
+                  ...exam, // keeps description, question count, etc.
+                  title: `${exam.title} · ${attachment.className}`,
+                  classAttachments: [attachment], // so the footer counts only this class
                   ctaLabel: "View Results",
-                  onCta: () => openResultsFor(exam.id),
+                  onCta: () => openResultsFor(attachment.classExamId),
                 }}
-                onClick={() => openResultsFor(exam.id)} // card body click does the same
+                onClick={() => openResultsFor(attachment.classExamId)} // card body click does the same
               />
             ))}
           </div>

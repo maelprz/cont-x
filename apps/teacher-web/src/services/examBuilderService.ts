@@ -421,6 +421,31 @@ export async function saveQuestion(
 ): Promise<void> {
   const dbType = question.type === "multiple-choice" ? "mcq" : "coding"; // matches db's check constraint
 
+  // if the points changed on a question students may already have answered, the database
+  // rescales every stored score (and total) by the same ratio and logs the change
+  const { data: existing, error: existingError } = await supabase
+    .from("questions")
+    .select("max_points")
+    .eq("id", question.id)
+    .maybeSingle();
+  if (existingError) throw existingError;
+
+  if (existing && existing.max_points !== question.points) {
+    const { count, error: countError } = await supabase
+      .from("exam_sessions")
+      .select("id", { count: "exact", head: true })
+      .eq("exam_id", examId);
+    if (countError) throw countError;
+
+    if ((count ?? 0) > 0) {
+      const { error: rescaleError } = await supabase.rpc("rescale_question_points", {
+        p_question_id: question.id,
+        p_new_max: question.points,
+      });
+      if (rescaleError) throw rescaleError;
+    }
+  }
+
   const { error: questionError } = await supabase.from("questions").upsert({
     id: question.id, // real uuid, insert or update depending on if it exists
     exam_id: examId,

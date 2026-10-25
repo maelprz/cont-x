@@ -51,7 +51,7 @@ export function ExamLibraryScreen() {
   const { createExam, isCreating, error: createError } = useCreateExam();
   const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
   const setOpenedFromEditExam = useExamBuilderStore((state) => state.setOpenedFromEditExam);
-  const setCurrentExamIdResult = useExamResultsStore((state) => state.setCurrentExamId);
+  const setCurrentClassExamIdResult = useExamResultsStore((state) => state.setCurrentClassExamId);
   const setCurrentExamIdViolation = useViolationMonitoringStore((state) => state.setCurrentExamId);
 
   const { handleDelete, isProcessing: isDeleting, error: deleteError } = useExamCardActions();
@@ -158,12 +158,12 @@ export function ExamLibraryScreen() {
   };
 
   const handleNavigateFromClassExam = (
-    _classExamId: string,
+    classExamId: string,
     targetScreen: "violationMonitoring" | "examResults",
     examId: string,
   ) => {
     if (targetScreen === "examResults") {
-      setCurrentExamIdResult(examId);
+      setCurrentClassExamIdResult(classExamId); // results are shown for this one class
     } else {
       setCurrentExamIdViolation(examId);
     }

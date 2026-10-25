@@ -2,6 +2,9 @@
 export type StudentResultRow = {
   sessionId: string; // maps to exam_sessions.id
   studentName: string; // maps to users.first_name + last_name
+  studentIdNumber: string | null; // maps to users.id_number
+  scoreAdjustment: number; // manual change on top of the auto-graded score (0 when none)
+  adjustmentReason: string | null; // why the teacher adjusted it
   totalScore: number; // maps to exam_sessions.total_score
   maxScore: number; // sum of questions.max_points for this exam
   attemptNumber: number; // maps to exam_sessions.attempt_number
@@ -22,6 +25,6 @@ export type ExamResultsScreenProps = {
   examTitle?: string;
   examCode?: string;
   durationMinutes?: number;
-  passMark?: number;
+  passMark?: number | null;
   rows?: StudentResultRow[];
 };

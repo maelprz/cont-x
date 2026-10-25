@@ -8,6 +8,13 @@ import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useExamResults } from "../../hooks/useExamResults";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
+import { AdjustScoreModal } from "../../components/examResult/adjustScoreModal";
+import {
+  buildResultsCsv,
+  downloadCsv,
+  safeFileName,
+  scorePercent,
+} from "../../lib/resultsCsv";
 
 // picks an icon and color for a question cell based on its status
 function StatusIcon({
@@ -24,37 +31,55 @@ function StatusIcon({
 export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
   const [search, setSearch] = useState(""); // search box text, local only
 
-  // reads which exam's results to show, set when a card was clicked on the list screen
-  const currentExamId = useExamResultsStore((state) => state.currentExamId);
-  const { data, isLoading, error } = useExamResults(currentExamId);
+  // reads which class's results to show, set when a card or a Manage Classes row was clicked
+  const currentClassExamId = useExamResultsStore(
+    (state) => state.currentClassExamId,
+  );
+  const { data, isLoading, error, refetch } = useExamResults(currentClassExamId);
+  const [adjustingRow, setAdjustingRow] = useState<StudentResultRow | null>(null); // attempt being adjusted
 
   // uses real fetched rows unless a prop override was passed in (e.g. for testing)
   const rows = rowsProp ?? data?.rows ?? [];
 
   const examTitle = data?.examTitle ?? "";
   const examCode = data?.examCode ?? "";
+  const className = data?.className ?? "";
   const durationMinutes = data?.durationMinutes ?? 0;
-  const passMark = data?.passMark ?? 0;
+  const passMark = data?.passMark ?? null; // percent; null means no minimum was set
 
   // filters rows by student name, case-insensitive
   const filtered = rows.filter((row) =>
     row.studentName.toLowerCase().includes(search.toLowerCase()),
   );
 
-  // derived stats from real rows
+  // derived stats from real rows; the pass mark is a percent, so compare percents
   const classAverage =
     rows.length > 0
-      ? Math.round(rows.reduce((sum, r) => sum + r.totalScore, 0) / rows.length)
+      ? Math.round(
+          rows.reduce((sum, r) => sum + scorePercent(r), 0) / rows.length,
+        )
       : 0;
-  const passCount = rows.filter((r) => r.totalScore >= passMark).length;
+  const passCount =
+    passMark === null
+      ? 0
+      : rows.filter((r) => scorePercent(r) >= passMark).length;
   const highestScore =
     rows.length > 0 ? Math.max(...rows.map((r) => r.totalScore)) : 0;
+  const maxScore = rows[0]?.maxScore ?? 0;
+
+  // exports every attempt (not just the searched ones) as the full results sheet
+  const handleExportCsv = () => {
+    downloadCsv(
+      safeFileName(examTitle, className, "results"),
+      buildResultsCsv(rows, passMark),
+    );
+  };
 
   // question column headers, taken from the first row's shape
   const questionColumns = rows[0]?.questionScores ?? [];
 
   // shown while no exam has been selected yet (e.g. direct navigation without a card click)
-  if (!currentExamId) {
+  if (!currentClassExamId) {
     return (
       <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
         <TeacherSidebar activeItem="examResultsList" />
@@ -106,8 +131,9 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                     Exam Results: {examTitle}
                   </h1>
                   <p className="text-sm opacity-70">
-                    {examCode} &middot; {durationMinutes} min &middot; pass mark{" "}
-                    {passMark}
+                    {examCode} &middot; {className} &middot; {durationMinutes} min
+                    &middot; pass mark{" "}
+                    {passMark === null ? "none" : `${passMark}%`}
                     &middot; {rows.length} sessions
                   </p>
                 </div>
@@ -115,7 +141,9 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                 <div className="flex gap-2 shrink-0">
                   <button
                     type="button"
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-base-300)] text-[13px] font-medium bg-[var(--color-base-100)] hover:opacity-70"
+                    onClick={handleExportCsv}
+                    disabled={rows.length === 0}
+                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-base-300)] text-[13px] font-medium bg-[var(--color-base-100)] hover:opacity-70 disabled:opacity-40"
                   >
                     <Download size={14} />
                     Export CSV
@@ -141,12 +169,16 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                     className="text-2xl font-bold"
                     style={{ color: "var(--color-success)" }}
                   >
-                    {passCount} of {rows.length}
+                    {passMark === null
+                      ? "No pass mark"
+                      : `${passCount} of ${rows.length}`}
                   </p>
                 </div>
                 <div className="rounded-xl p-4 bg-[var(--color-base-100)] border border-[var(--color-base-300)]">
                   <p className="text-xs opacity-60 mb-1">Highest Score</p>
-                  <p className="text-2xl font-bold">{highestScore}</p>
+                  <p className="text-2xl font-bold">
+                    {highestScore}/{maxScore}
+                  </p>
                 </div>
               </div>
 
@@ -206,6 +238,15 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                         <td className="px-4 py-3">#{row.attemptNumber}</td>
                         <td className="px-4 py-3 font-bold">
                           {row.totalScore}/{row.maxScore}
+                          {row.scoreAdjustment !== 0 && (
+                            <span
+                              title={row.adjustmentReason ?? "Adjusted by the teacher"}
+                              className="ml-1.5 text-[11px] font-medium opacity-60"
+                            >
+                              ({row.scoreAdjustment > 0 ? "+" : ""}
+                              {row.scoreAdjustment} adj.)
+                            </span>
+                          )}
                         </td>
                         {row.questionScores.map((q) => (
                           <td key={q.questionId} className="px-4 py-3">
@@ -216,12 +257,21 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                           </td>
                         ))}
                         <td className="px-4 py-3">
-                          <button
-                            type="button"
-                            className="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] hover:opacity-70"
-                          >
-                            View Answers
-                          </button>
+                          <div className="flex items-center gap-2">
+                            <button
+                              type="button"
+                              className="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] hover:opacity-70"
+                            >
+                              View Answers
+                            </button>
+                            <button
+                              type="button"
+                              onClick={() => setAdjustingRow(row)}
+                              className="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] hover:opacity-70"
+                            >
+                              Adjust Score
+                            </button>
+                          </div>
                         </td>
                       </tr>
                     ))}
@@ -236,6 +286,15 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
           )}
         </main>
       </div>
+
+      {adjustingRow && (
+        <AdjustScoreModal
+          key={adjustingRow.sessionId} // fresh form state for each attempt
+          row={adjustingRow}
+          onClose={() => setAdjustingRow(null)}
+          onSaved={refetch}
+        />
+      )}
     </div>
   );
 }

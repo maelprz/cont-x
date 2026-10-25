@@ -16,50 +16,74 @@ type QuestionRow = {
 type SessionRow = {
   id: string; // session id
   attempt_number: number;
-  total_score: number;
-  student: { first_name: string; last_name: string } | null; // joined from users
+  total_score: number | null; // null until the session is graded
+  score_adjustment: number; // manual change on top of the auto-graded score
+  adjustment_reason: string | null;
   student_answers: { question_id: string; score: number }[]; // joined answers
 };
 
-// raw shape of the exam's header info
-type ExamMetaRow = {
-  title: string;
-  exam_code: string;
-  duration_minutes: number;
-  pass_mark: number;
+// one row from get_class_exam_results_students (teachers can't read users directly)
+type StudentNameRow = {
+  session_id: string;
+  id_number: string;
+  first_name: string;
+  last_name: string;
 };
+
+// one class_exams row plus the exam and class it points to; supabase may type a
+// to-one embed as an object or a one-item array, so both are accepted
+type One<T> = T | T[] | null;
+type ClassExamMetaRow = {
+  id: string;
+  exam_id: string;
+  duration_minutes: number;
+  pass_mark: number | string | null; // numeric column, a percent
+  classes: One<{ name: string }>;
+  exams: One<{ title: string; exam_code: string | null }>;
+};
+
+function unwrapOne<T>(value: One<T>): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
 
 export type ExamResultsData = {
   examTitle: string;
   examCode: string;
+  className: string;
   durationMinutes: number;
-  passMark: number;
+  passMark: number | null; // percent; null means the teacher set no minimum
   rows: StudentResultRow[];
 };
 
-// fetches everything the results screen needs for one exam
-export async function getExamResults(examId: string): Promise<ExamResultsData> {
-  // grabs exam header info (title, code, duration, pass mark)
-  const { data: examData, error: examError } = await supabase
-    .from("exams")
-    .select("title, exam_code, duration_minutes, pass_mark")
-    .eq("id", examId)
+// fetches everything the results screen needs for one exam as delivered to one class
+export async function getClassExamResults(
+  classExamId: string,
+): Promise<ExamResultsData> {
+  // header info: duration and pass mark live on class_exams, title and code on exams
+  const { data: metaData, error: metaError } = await supabase
+    .from("class_exams")
+    .select(
+      "id, exam_id, duration_minutes, pass_mark, classes(name), exams(title, exam_code)",
+    )
+    .eq("id", classExamId)
     .single();
 
-  if (examError || !examData) throw examError ?? new Error("Exam not found.");
-  const exam = examData as ExamMetaRow;
+  if (metaError || !metaData) throw metaError ?? new Error("Class exam not found.");
+  const meta = metaData as unknown as ClassExamMetaRow;
+  const exam = unwrapOne(meta.exams);
+  const classRow = unwrapOne(meta.classes);
 
-  // grabs all questions for this exam, ordered for column display
+  // all questions of the exam, ordered for column display
   const { data: questionData, error: questionError } = await supabase
     .from("questions")
     .select("id, title, max_points, order_index")
-    .eq("exam_id", examId)
+    .eq("exam_id", meta.exam_id)
     .order("order_index", { ascending: true });
 
   if (questionError) throw questionError;
   const questions = (questionData as QuestionRow[]) ?? [];
 
-  // grabs one row per submitted/timed-out session, with student name + answers
+  // one row per submitted/timed-out session of THIS class only, with student + answers
   const { data: sessionData, error: sessionError } = await supabase
     .from("exam_sessions")
     .select(
@@ -67,15 +91,26 @@ export async function getExamResults(examId: string): Promise<ExamResultsData> {
       id,
       attempt_number,
       total_score,
-      student:users(first_name, last_name),
+      score_adjustment,
+      adjustment_reason,
       student_answers(question_id, score)
     `,
     )
-    .eq("exam_id", examId)
+    .eq("class_exam_id", classExamId)
     .in("status", ["submitted", "timed_out"]); // excludes sessions that never finished
 
   if (sessionError) throw sessionError;
   const sessions = (sessionData as unknown as SessionRow[]) ?? [];
+
+  // student names come from a function that only returns ID number + name for this teacher's class
+  const { data: nameData, error: nameError } = await supabase.rpc(
+    "get_class_exam_results_students",
+    { p_class_exam_id: classExamId },
+  );
+  if (nameError) throw nameError;
+  const namesBySession = new Map(
+    ((nameData as StudentNameRow[] | null) ?? []).map((n) => [n.session_id, n]),
+  );
 
   // total points possible, used for the "X/Y" total column
   const maxScore = questions.reduce((sum, q) => sum + q.max_points, 0);
@@ -98,23 +133,43 @@ export async function getExamResults(examId: string): Promise<ExamResultsData> {
       };
     });
 
+    const student = namesBySession.get(session.id);
     return {
       sessionId: session.id,
-      studentName: session.student
-        ? `${session.student.first_name} ${session.student.last_name}`
-        : "Unknown Student", // fallback if the join somehow comes back empty
-      totalScore: session.total_score,
+      studentName: student
+        ? `${student.first_name} ${student.last_name}`
+        : "Unknown Student", // fallback if no name came back for this attempt
+      studentIdNumber: student?.id_number ?? null,
+      totalScore: session.total_score ?? 0,
       maxScore,
       attemptNumber: session.attempt_number,
+      scoreAdjustment: session.score_adjustment ?? 0,
+      adjustmentReason: session.adjustment_reason,
       questionScores,
     };
   });
 
   return {
-    examTitle: exam.title,
-    examCode: exam.exam_code,
-    durationMinutes: exam.duration_minutes,
-    passMark: exam.pass_mark,
+    examTitle: exam?.title ?? "",
+    examCode: exam?.exam_code ?? "",
+    className: classRow?.name ?? "Unknown class",
+    durationMinutes: meta.duration_minutes,
+    passMark: meta.pass_mark === null ? null : Number(meta.pass_mark),
     rows,
   };
+}
+
+// sets one student's total score by hand (extra credit, corrections); the database checks
+// that the caller teaches this class, keeps the auto-graded base, and logs the change
+export async function overrideSessionScore(
+  sessionId: string,
+  newTotal: number,
+  reason: string,
+): Promise<void> {
+  const { error } = await supabase.rpc("override_session_score", {
+    p_session_id: sessionId,
+    p_new_total: newTotal,
+    p_reason: reason,
+  });
+  if (error) throw error;
 }
