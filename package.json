@@ -5,9 +5,7 @@
   "description": "",
   "main": "index.js",
   "overrides": {
-    "react": "19.2.7",
-    "react-dom": "19.2.7",
-    "dompurify": "3.4.11"
+    "dompurify": "^3.4.17"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -42,5 +40,8 @@
     "electron-winstaller@5.4.0": true,
     "esbuild@0.28.1": true,
     "win-audio@3.0.5": true
+  },
+  "dependencies": {
+    "monaco-editor": "^0.57.0"
   }
 }
