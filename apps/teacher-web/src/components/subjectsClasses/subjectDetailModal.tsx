@@ -5,17 +5,19 @@ import type {
   ClassSummary,
 } from "../../services/subjectsClassesService";
 
-// Modal showing one subject and its classes. Display only for now; adding and archiving come in later pieces.
+// Modal showing one subject and its classes, with add class, enroll student, and archive actions.
 export function SubjectDetailModal({
   subject,
   onClose,
   onAddClass,
   onEnroll,
+  onArchiveClass,
 }: {
   subject: SubjectSummary | null;
   onClose: () => void;
   onAddClass: () => void;
   onEnroll: (cls: ClassSummary) => void;
+  onArchiveClass: (classId: string, className: string) => void; // opens the archive confirmation
 }) {
   const [showArchived, setShowArchived] = useState(false); // whether archived classes are visible
 
@@ -167,13 +169,11 @@ export function SubjectDetailModal({
                           {isArchived ? "Archived" : "Active"}
                         </span>
                       </td>
-                      <td className="py-2.5 text-right">
-                        {!isArchived && ( // only active classes can be archived
+                                            <td className="py-2.5 text-right">
+                        {!isArchived && ( // only active classes can be enrolled into or archived
                           <div className="flex justify-end gap-2">
-                            {" "}
-                            {/* puts the two buttons side by side */}
                             <button
-                              onClick={() => onEnroll(c)} // open the enroll modal for this class
+                              onClick={() => onEnroll(c)} // opens the enroll modal for this class
                               className="px-2.5 py-1 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
                               style={{
                                 backgroundColor: "var(--color-primary)",
@@ -183,9 +183,8 @@ export function SubjectDetailModal({
                               Enroll student
                             </button>
                             <button
-                              disabled // still wired up in a later piece
-                              title="Coming in a later step"
-                              className="px-2.5 py-1 rounded-lg border text-[12px] opacity-40 cursor-not-allowed bg-transparent"
+                              onClick={() => onArchiveClass(c.id, c.name)} // opens the archive confirmation for this class
+                              className="px-2.5 py-1 rounded-lg border text-[12px] cursor-pointer transition-opacity hover:opacity-70 bg-transparent"
                               style={{
                                 borderColor: "var(--color-base-300)",
                                 color: "var(--color-base-content)",

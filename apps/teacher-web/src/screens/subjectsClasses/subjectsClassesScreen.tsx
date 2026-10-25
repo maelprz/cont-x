@@ -8,6 +8,7 @@ import { SubjectDetailModal } from "../../components/subjectsClasses/subjectDeta
 import { useSubjectsClasses } from "../../hooks/useSubjectsClasses";
 import { useToast } from "../../hooks/useToast";
 import { EnrollStudentModal } from "../../components/subjectsClasses/enrollStudentModal";
+import { ArchiveClassModal } from "../../components/subjectsClasses/archiveClassModal";
 import type {
   ClassSummary,
   StudentOption,
@@ -25,6 +26,7 @@ export function SubjectsClassesScreen() {
     findStudents,
     enrollInClass,
     enrollCsvInClass,
+    archiveClassById,
   } = useSubjectsClasses();
   const { showToast } = useToast(); // shows the success message
 
@@ -51,6 +53,13 @@ export function SubjectsClassesScreen() {
   const [enrollTarget, setEnrollTarget] = useState<ClassSummary | null>(null); // which class is being enrolled into; null means the modal is closed
   const [isEnrolling, setIsEnrolling] = useState(false); // true while the enroll request runs
   const [enrollError, setEnrollError] = useState<string | null>(null);
+
+  const [classToArchive, setClassToArchive] = useState<{
+    id: string;
+    name: string;
+  } | null>(null); // the class waiting for confirmation
+  const [isArchiving, setIsArchiving] = useState(false); // true while the archive call runs
+  const [archiveError, setArchiveError] = useState<string | null>(null); // error shown inside the confirmation modal
 
   function openNewSubjectModal() {
     // runs when the New Subject button is clicked
@@ -136,6 +145,30 @@ export function SubjectsClassesScreen() {
       ); // show the safe message in the modal
     } finally {
       setIsSavingClass(false); // saving is over either way
+    }
+  }
+
+  function openArchiveModal(classId: string, className: string) {
+    // runs when a row's Archive button is clicked
+    setArchiveError(null); // clear any old error
+    setClassToArchive({ id: classId, name: className }); // show the confirmation for this class
+  }
+
+  async function handleConfirmArchive() {
+    // runs when the admin confirms
+    if (!classToArchive) return; // nothing selected, nothing to archive
+    setIsArchiving(true); // block double clicks
+    setArchiveError(null); // clear any old error
+    try {
+      await archiveClassById(classToArchive.id); // ask the database to archive it, then refresh the list
+      showToast(`${classToArchive.name} archived.`); // tell the admin it worked
+      setClassToArchive(null); // close the confirmation
+    } catch (err) {
+      setArchiveError(
+        err instanceof Error ? err.message : "Could not archive the class.",
+      ); // show the safe message, such as the active exam notice
+    } finally {
+      setIsArchiving(false); // saving is over either way
     }
   }
 
@@ -249,13 +282,16 @@ export function SubjectsClassesScreen() {
           )}
         </main>
       </div>
+
+      {/* the detail modal */}
       <SubjectDetailModal
         subject={selectedSubject}
         onClose={() => setSelectedSubjectId(null)}
         onAddClass={openNewClassModal}
         onEnroll={openEnrollModal}
-      />{" "}
-      {/* the detail modal */}
+        onArchiveClass={openArchiveModal} // opens the archive confirmation for a class
+      />
+
       {/* the create modal sits on top of everything */}
       <NewSubjectModal
         isOpen={showNewSubjectModal}
@@ -284,6 +320,13 @@ export function SubjectsClassesScreen() {
         onSearch={findStudents} // search function from the hook
         onSubmit={handleEnroll} // enroll
         onSubmitCsv={handleEnrollCsv} // enroll from CSV
+      />
+      <ArchiveClassModal
+        target={classToArchive} // the class waiting for confirmation, or null
+        isSaving={isArchiving} // saving state
+        error={archiveError} // inline error
+        onClose={() => setClassToArchive(null)} // cancel
+        onConfirm={handleConfirmArchive} // archive
       />
     </div>
   );
