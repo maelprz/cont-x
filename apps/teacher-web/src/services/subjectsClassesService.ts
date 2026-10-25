@@ -171,6 +171,16 @@ export async function createClass(
   return { id: row.id, name: row.name, offerCode: row.class_offer_code }; // hand back what the screen needs
 }
 
+export async function archiveClass(classId: string): Promise<void> { 
+  const { error } = await supabase.rpc("archive_class", { p_class_id: classId }); 
+  if (error) throw new Error(toFriendlyMessage(error));
+}
+
+export async function unarchiveClass(classId: string): Promise<void> {
+  const { error } = await supabase.rpc("unarchive_class", { p_class_id: classId }); 
+  if (error) throw new Error(toFriendlyMessage(error)); 
+}
+
 export async function searchStudents(term: string): Promise<StudentOption[]> {
   const clean = term.replace(/[^\p{L}\p{N}\s-]/gu, "").trim();
   if (clean.length < 2) return [];
