@@ -3,6 +3,8 @@ import type {
   StudentResultRow,
   QuestionScoreCell,
 } from "../screens/examResult/examResultsScreen.types";
+import { buildPoolScores } from "../lib/resultsPools";
+import type { PoolDrawRow } from "../lib/resultsPools";
 
 // raw shape of one question, used to build table columns
 type QuestionRow = {
@@ -19,7 +21,11 @@ type SessionRow = {
   total_score: number | null; // null until the session is graded
   score_adjustment: number; // manual change on top of the auto-graded score
   adjustment_reason: string | null;
-  student_answers: { question_id: string; score: number }[]; // joined answers
+  student_answers: {
+    question_id: string | null; // null for an answer to a pooled question
+    pool_draw_id: string | null; // set for an answer to a pooled question
+    score: number;
+  }[]; // joined answers
 };
 
 // one row from get_class_exam_results_students (teachers can't read users directly)
@@ -93,7 +99,7 @@ export async function getClassExamResults(
       total_score,
       score_adjustment,
       adjustment_reason,
-      student_answers(question_id, score)
+      student_answers(question_id, pool_draw_id, score)
     `,
     )
     .eq("class_exam_id", classExamId)
@@ -101,6 +107,18 @@ export async function getClassExamResults(
 
   if (sessionError) throw sessionError;
   const sessions = (sessionData as unknown as SessionRow[]) ?? [];
+
+  // the pooled questions each student drew (empty until the student app draws them)
+  const sessionIds = sessions.map((session) => session.id);
+  let draws: PoolDrawRow[] = [];
+  if (sessionIds.length > 0) {
+    const { data: drawData, error: drawError } = await supabase
+      .from("session_pool_questions")
+      .select("id, session_id, pool_id, pool_title, pool_order_index, max_points")
+      .in("session_id", sessionIds);
+    if (drawError) throw drawError;
+    draws = (drawData as PoolDrawRow[] | null) ?? [];
+  }
 
   // student names come from a function that only returns ID number + name for this teacher's class
   const { data: nameData, error: nameError } = await supabase.rpc(
@@ -112,8 +130,8 @@ export async function getClassExamResults(
     ((nameData as StudentNameRow[] | null) ?? []).map((n) => [n.session_id, n]),
   );
 
-  // total points possible, used for the "X/Y" total column
-  const maxScore = questions.reduce((sum, q) => sum + q.max_points, 0);
+  // points from the exam's fixed questions; pooled questions add to this per student below
+  const fixedMaxScore = questions.reduce((sum, q) => sum + q.max_points, 0);
 
   // turns each session into one table row, one cell per question
   const rows: StudentResultRow[] = sessions.map((session) => {
@@ -127,6 +145,7 @@ export async function getClassExamResults(
       return {
         questionId: q.id,
         label: `Q${index + 1}`, // built from position, not stored text
+        title: q.title,
         maxPoints: q.max_points,
         score,
         status: score >= q.max_points ? "correct" : "incorrect", // binary only, no partial
@@ -134,6 +153,13 @@ export async function getClassExamResults(
     });
 
     const student = namesBySession.get(session.id);
+    const poolScores = buildPoolScores(
+      draws.filter((draw) => draw.session_id === session.id),
+      session.student_answers,
+    );
+    const maxScore =
+      fixedMaxScore + poolScores.reduce((sum, cell) => sum + cell.maxPoints, 0);
+
     return {
       sessionId: session.id,
       studentName: student
@@ -146,6 +172,7 @@ export async function getClassExamResults(
       scoreAdjustment: session.score_adjustment ?? 0,
       adjustmentReason: session.adjustment_reason,
       questionScores,
+      poolScores,
     };
   });
 

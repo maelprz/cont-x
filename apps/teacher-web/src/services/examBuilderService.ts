@@ -524,3 +524,13 @@ export async function updateExamDetails(
     .eq("id", examId);
   if (error) throw error;
 }
+// how many attempts exist for this exam across every class; used to warn before a points
+// change rescales scores students already earned
+export async function countExamAttempts(examId: string): Promise<number> {
+  const { count, error } = await supabase
+    .from("exam_sessions")
+    .select("id", { count: "exact", head: true })
+    .eq("exam_id", examId);
+  if (error) throw error;
+  return count ?? 0;
+}

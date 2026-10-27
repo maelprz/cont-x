@@ -1,4 +1,4 @@
-import { useState, useEffect } from "react";
+import { useState, useEffect, useRef } from "react";
 import type {
   ExamBuilderScreenProps,
   BuilderQuestion,
@@ -14,7 +14,9 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { useRouterLogic } from "../../router/routerLogic";
 import { saveBankQuestion } from "../../services/questionBankService";
-import { saveQuestion as persistExamQuestion, savePools } from "../../services/examBuilderService";
+import { saveQuestion as persistExamQuestion, savePools, countExamAttempts } from "../../services/examBuilderService";
+import { findPointChanges } from "../../lib/pointChanges";
+import type { PointChange } from "../../lib/pointChanges";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { QuestionListPanel } from "../../components/examBuilder/questionListPanel";
@@ -86,6 +88,9 @@ export function ExamBuilderScreen({
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
 
   const [pendingLeaveScreen, setPendingLeaveScreen] = useState<ScreenName | null>(null); // where the user tried to go, while we ask them to confirm
+  // asks before a points change rescales scores students already earned
+  const [rescalePrompt, setRescalePrompt] = useState<{ changes: PointChange[]; attempts: number } | null>(null);
+  const rescaleResolver = useRef<((confirmed: boolean) => void) | null>(null); // settles the save that is waiting on the answer
   const setNavigationGuard = useRouterLogic((state) => state.setNavigationGuard);
   const forceNavigateTo = useRouterLogic((state) => state.forceNavigateTo);
 
@@ -142,9 +147,37 @@ export function ExamBuilderScreen({
     activeQuestion?.type ?? "multiple-choice",
   );
 
+  // resolves true straight away unless a changed question already has attempts; then it asks first
+  const confirmRescaleIfNeeded = async (toCheck: BuilderQuestion[]): Promise<boolean> => {
+    if (!examData?.id) return true;
+    const changes = findPointChanges(toCheck, questions, savedQuestions);
+    if (changes.length === 0) return true; // no points changed, nothing to rescale
+
+    let attempts = 0;
+    try {
+      attempts = await countExamAttempts(examData.id);
+    } catch {
+      return true; // the save itself will report a real problem
+    }
+    if (attempts === 0) return true; // nobody has answered yet
+
+    return new Promise<boolean>((resolve) => {
+      rescaleResolver.current = resolve;
+      setRescalePrompt({ changes, attempts });
+    });
+  };
+
+  // the teacher's answer to the rescale dialog lets the waiting save continue or stop
+  const answerRescalePrompt = (confirmed: boolean) => {
+    rescaleResolver.current?.(confirmed);
+    rescaleResolver.current = null;
+    setRescalePrompt(null);
+  };
+
   // teacher chose to save first, then continue to wherever they were headed
   const handleSaveAndLeave = async () => {
     if (!pendingLeaveScreen || !examData?.id) return;
+    if (!(await confirmRescaleIfNeeded(questions))) return; // stays on the unsaved-changes prompt
 
     setIsSavingDraftState(true);
     const saveProblem = await persistAllQuestions();
@@ -359,6 +392,7 @@ export function ExamBuilderScreen({
   // saves the active question to the bank (if new) and updates the savedQuestions snapshot
   const handleSaveAndContinue = async () => {
     if (!activeQuestion || !examData?.id) return; // nothing selected, nothing to save
+    if (!(await confirmRescaleIfNeeded([activeQuestion]))) return;
 
     const isNewQuestion = pendingBankSaveIds.has(activeQuestion.id);
 
@@ -432,6 +466,7 @@ export function ExamBuilderScreen({
 
   // quick save — persists all question edits, marks the exam as draft, returns to the library
   const handleSaveDraft = async (): Promise<boolean> => {
+    if (!(await confirmRescaleIfNeeded(questions))) return false;
     setIsSavingDraftState(true);
     const saveProblem = await persistAllQuestions();
     if (saveProblem || !examData?.id) {
@@ -456,7 +491,8 @@ export function ExamBuilderScreen({
 
   const handleSaveExam = async (): Promise<boolean> => {
     if (!examData?.id) return false;
-    
+    if (!(await confirmRescaleIfNeeded(questions))) return false;
+
     setIsSavingExamState(true);
     const saveProblem = await persistAllQuestions();
     if (saveProblem) {
@@ -574,6 +610,26 @@ export function ExamBuilderScreen({
         onSave={handleSaveAndLeave}
         onLeaveWithoutSaving={handleLeaveWithoutSaving}
         onCancel={handleCancelLeave}
+      />
+
+      {/* last, so it sits on top of the unsaved-changes prompt when Save & Leave triggers it */}
+      <ConfirmActionDialog
+        isOpen={rescalePrompt !== null}
+        title="Rescale existing scores?"
+        message={
+          rescalePrompt
+            ? `Changing points rescales scores students have already earned. ${rescalePrompt.attempts} ${
+                rescalePrompt.attempts === 1 ? "attempt" : "attempts"
+              } across every class using this exam will change (${rescalePrompt.changes
+                .map((change) => `${change.label}: ${change.from} to ${change.to}`)
+                .join(", ")}). Manual adjustments are kept.`
+            : ""
+        }
+        confirmLabel="Rescale and Save"
+        isProcessing={false}
+        error={null}
+        onConfirm={() => answerRescalePrompt(true)}
+        onCancel={() => answerRescalePrompt(false)}
       />
     </div>
   );
