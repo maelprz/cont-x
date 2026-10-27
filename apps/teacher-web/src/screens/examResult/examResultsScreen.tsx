@@ -9,6 +9,8 @@ import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useExamResults } from "../../hooks/useExamResults";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
 import { AdjustScoreModal } from "../../components/examResult/adjustScoreModal";
+import { computeQuestionStats } from "../../lib/resultsAnalytics.ts";
+import { collectPoolColumns } from "../../lib/resultsPools.ts";
 import {
   buildResultsCsv,
   downloadCsv,
@@ -65,7 +67,11 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
       : rows.filter((r) => scorePercent(r) >= passMark).length;
   const highestScore =
     rows.length > 0 ? Math.max(...rows.map((r) => r.totalScore)) : 0;
-  const maxScore = rows[0]?.maxScore ?? 0;
+  // students draw different pooled questions, so show the maximum of whoever scored highest
+  const highestRow = rows.find((r) => r.totalScore === highestScore);
+  const maxScore = highestRow?.maxScore ?? 0;
+
+  const questionStats = computeQuestionStats(rows); // per-question performance for the panel
 
   // exports every attempt (not just the searched ones) as the full results sheet
   const handleExportCsv = () => {
@@ -77,6 +83,7 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
 
   // question column headers, taken from the first row's shape
   const questionColumns = rows[0]?.questionScores ?? [];
+  const poolColumns = collectPoolColumns(rows); // one column per random pool, in exam order
 
   // shown while no exam has been selected yet (e.g. direct navigation without a card click)
   if (!currentClassExamId) {
@@ -182,6 +189,74 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                 </div>
               </div>
 
+              {questionStats.length > 0 && (
+                <div className="rounded-xl mb-6 overflow-x-auto bg-[var(--color-base-100)] border border-[var(--color-base-300)]">
+                  <div className="px-4 pt-4 pb-2">
+                    <h2 className="text-lg font-bold">Question Performance</h2>
+                    <p className="text-xs opacity-60">
+                      Based on {rows.length} {rows.length === 1 ? "attempt" : "attempts"}. Full
+                      marks means the student earned every point on the question.
+                      {poolColumns.length > 0 &&
+                        " Random-pool questions are scored per pool in the table below."}
+                    </p>
+                  </div>
+                  <table className="w-full text-[13px]">
+                    <thead>
+                      <tr className="border-b border-[var(--color-base-300)]">
+                        <th className="text-left px-4 py-3 font-medium opacity-60">Question</th>
+                        <th className="text-left px-4 py-3 font-medium opacity-60">Average</th>
+                        <th className="text-left px-4 py-3 font-medium opacity-60 w-[200px]">
+                          Average %
+                        </th>
+                        <th className="text-left px-4 py-3 font-medium opacity-60">Full marks</th>
+                        <th className="text-left px-4 py-3 font-medium opacity-60">Zero</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {questionStats.map((stat) => (
+                        <tr
+                          key={stat.questionId}
+                          className="border-b border-[var(--color-base-300)] last:border-0"
+                        >
+                          <td className="px-4 py-3">
+                            <span className="font-medium">{stat.label}</span>
+                            <span className="opacity-60"> {stat.title}</span>
+                            {stat.isHardest && (
+                              <span
+                                className="ml-2 text-[11px] font-medium"
+                                style={{ color: "var(--color-error)" }}
+                              >
+                                Hardest
+                              </span>
+                            )}
+                          </td>
+                          <td className="px-4 py-3">
+                            {Math.round(stat.averageScore * 10) / 10}/{stat.maxPoints}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 flex-1 rounded-full bg-[var(--color-base-300)]">
+                                <div
+                                  className="h-2 rounded-full bg-[var(--color-primary)]"
+                                  style={{
+                                    width: `${Math.min(100, Math.max(0, stat.averagePercent))}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="w-10 text-right">
+                                {Math.round(stat.averagePercent)}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">{Math.round(stat.fullMarksPercent)}%</td>
+                          <td className="px-4 py-3">{Math.round(stat.zeroPercent)}%</td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+              )}
+
               <div className="flex items-center justify-between mb-3">
                 <h2 className="text-lg font-bold">Detailed Breakdown</h2>
                 <div className="flex items-center gap-2 px-3 py-2 rounded-lg border w-[240px] border-[var(--color-base-300)] bg-[var(--color-base-100)]">
@@ -223,6 +298,14 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                           {q.label} ({q.maxPoints})
                         </th>
                       ))}
+                      {poolColumns.map((pool) => (
+                        <th
+                          key={pool.poolKey}
+                          className="text-left px-4 py-3 font-medium opacity-60"
+                        >
+                          {pool.label} {pool.title}
+                        </th>
+                      ))}
                       <th className="text-left px-4 py-3 font-medium opacity-60">
                         Actions
                       </th>
@@ -256,6 +339,14 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                             </span>
                           </td>
                         ))}
+                        {poolColumns.map((pool) => {
+                          const cell = row.poolScores.find((c) => c.poolKey === pool.poolKey);
+                          return (
+                            <td key={pool.poolKey} className="px-4 py-3">
+                              {cell ? `${cell.score}/${cell.maxPoints}` : "-"}
+                            </td>
+                          );
+                        })}
                         <td className="px-4 py-3">
                           <div className="flex items-center gap-2">
                             <button

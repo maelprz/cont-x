@@ -1,4 +1,5 @@
 import type { StudentResultRow } from "../screens/examResult/examResultsScreen.types";
+import { collectPoolColumns } from "./resultsPools";
 
 // percent of the exam's points this attempt earned (0 when the exam has no points)
 export function scorePercent(row: StudentResultRow): number {
@@ -20,6 +21,7 @@ export function buildResultsCsv(
   passMark: number | null, // percent, or null when the class exam has no minimum
 ): string {
   const questionColumns = rows[0]?.questionScores ?? [];
+  const poolColumns = collectPoolColumns(rows); // students draw different pooled questions, so one column per pool
 
   const header = [
     "Student ID",
@@ -32,6 +34,7 @@ export function buildResultsCsv(
     "Manual Adjustment",
     "Adjustment Reason",
     ...questionColumns.map((q) => `${q.label} (${q.maxPoints})`),
+    ...poolColumns.map((pool) => `${pool.label} ${pool.title}`),
   ];
 
   const lines = rows.map((row) => {
@@ -48,6 +51,10 @@ export function buildResultsCsv(
       row.scoreAdjustment,
       row.adjustmentReason,
       ...row.questionScores.map((q) => q.score),
+      // blank when this student drew nothing from that pool
+      ...poolColumns.map(
+        (pool) => row.poolScores.find((cell) => cell.poolKey === pool.poolKey)?.score ?? null,
+      ),
     ];
   });
 
