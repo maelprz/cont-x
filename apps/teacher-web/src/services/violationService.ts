@@ -10,8 +10,15 @@ type SessionRow = {
   joined_at: string;
   submitted_at: string | null;
   attempt_number: number;
-  users: { id: string; first_name: string; last_name: string } | null;
   violation_logs: { count: number }[];
+};
+
+// one row from get_exam_session_students (teachers can't read the users table directly)
+type StudentNameRow = {
+  session_id: string;
+  id_number: string;
+  first_name: string;
+  last_name: string;
 };
 
 function formatTimestamp(iso: string): string {
@@ -24,12 +31,15 @@ function formatTimestamp(iso: string): string {
   });
 }
 
-function mapSessionRowToTableRow(row: SessionRow): ViolationSessionRow {
+function mapSessionRowToTableRow(
+  row: SessionRow,
+  student: StudentNameRow | undefined,
+): ViolationSessionRow {
   return {
     id: row.id,
-    studentIdNumber: row.users?.id ?? "—", // dash if student record is missing
-    studentName: row.users
-      ? `${row.users.first_name} ${row.users.last_name}` // combine into one display name
+    studentIdNumber: student?.id_number ?? "—", // dash if no student came back for this attempt
+    studentName: student
+      ? `${student.first_name} ${student.last_name}` // combine into one display name
       : "Unknown Student",
     attemptNumber: row.attempt_number,
     status: row.status,
@@ -51,7 +61,6 @@ export async function getSessionsForExam(
       joined_at,
       submitted_at,
       attempt_number,
-      users:student_id ( id_number, first_name, last_name ),
       violation_logs(count)
     `,
     )
@@ -60,7 +69,19 @@ export async function getSessionsForExam(
 
   if (error) throw error; // let the hook decide how to show this error
 
-  return (data as unknown as SessionRow[]).map(mapSessionRowToTableRow);
+  // names and ID numbers come from a function that only returns this teacher's own students
+  const { data: nameData, error: nameError } = await supabase.rpc(
+    "get_exam_session_students",
+    { p_exam_id: examId },
+  );
+  if (nameError) throw nameError;
+  const studentsBySession = new Map(
+    ((nameData as StudentNameRow[] | null) ?? []).map((n) => [n.session_id, n]),
+  );
+
+  return (data as unknown as SessionRow[]).map((row) =>
+    mapSessionRowToTableRow(row, studentsBySession.get(row.id)),
+  );
 }
 
 type ViolationLogRow = {

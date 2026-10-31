@@ -19,8 +19,7 @@ type ExamRow = {
   class_exams: {
     id: string;
     status: ClassExamStatus;
-    classes: { id: string; name: string } | null;
-    exam_sessions: { count: number }[];
+    classes: { id: string; name: string; class_students: { count: number }[] } | null;
   }[];
 };
 
@@ -38,7 +37,7 @@ function mapExamRowToCard(row: ExamRow): ExamCard {
     classId: ce.classes?.id ?? "",
     className: ce.classes?.name ?? "Unknown class",
     status: ce.status,
-    studentCount: ce.exam_sessions[0]?.count ?? 0,
+    studentCount: ce.classes?.class_students[0]?.count ?? 0, // students enrolled in the class
   }));
 
   return {
@@ -83,8 +82,7 @@ export async function getExamsByTeacherId(
       class_exams(
         id,
         status,
-        classes(id, name),
-        exam_sessions(count)
+        classes(id, name, class_students(count))
       )
     `,
     )
@@ -94,6 +92,17 @@ export async function getExamsByTeacherId(
   if (error) throw error; // let the hook decide how to show this error
 
   return (data as unknown as ExamRow[]).map(mapExamRowToCard);
+}
+
+// how many different students are enrolled in this teacher's active classes
+export async function getTeacherStudentCount(teacherId: string): Promise<number> {
+  const { data, error } = await supabase
+    .from("class_students")
+    .select("student_id, classes!inner(teacher_id, archived_at)")
+    .eq("classes.teacher_id", teacherId)
+    .is("classes.archived_at", null);
+  if (error) throw error;
+  return new Set((data ?? []).map((row) => row.student_id)).size; // a student in two classes counts once
 }
 
 // don't let a teacher delete an exam that's attached to any class

@@ -114,6 +114,7 @@ export interface ExamBuilderData {
   description: string; // empty string when not set, never null in the UI
   questions: BuilderQuestion[];
   pools: BuilderPool[]; // random "pick N of M" groups, in display order
+  attachedClassCount: number; // how many classes this exam is attached to; an attached exam can't be a draft
 }
 
 // turns one mcq question row into the shape the MCQ editor expects
@@ -221,6 +222,12 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
 
   const row = data as unknown as ExamBuilderRow;
 
+  const { count: attachedClassCount, error: attachedError } = await supabase
+    .from("class_exams")
+    .select("id", { count: "exact", head: true })
+    .eq("exam_id", examId);
+  if (attachedError) throw attachedError;
+
   return {
     id: row.id,
     subjectId: row.subject_id,
@@ -232,6 +239,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
       .map(mapQuestionRow)
       .filter((q): q is BuilderQuestion => q !== null), // drop unsupported/bad rows
     pools: row.exam_question_pools.map(mapPoolRow),
+    attachedClassCount: attachedClassCount ?? 0,
   };
 }
 

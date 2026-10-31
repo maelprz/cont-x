@@ -1,11 +1,11 @@
 import { useEffect, useState } from "react"; // tracks fetch state on mount
-import { getExamsByTeacherId } from "../services/examService"; // existing query, already has everything needed
+import { getExamsByTeacherId, getTeacherStudentCount } from "../services/examService";
 import type { ExamCard } from "../screens/examLibrary/examLibraryScreen.types"; // shape of one exam row
 
 // What the Dashboard screen needs, derived from the teacher's exam list.
 export interface TeacherDashboardData {
   totalExams: number; // count of all exams, any status
-  totalStudents: number; // sum of student sessions across all exams — see caveat below
+  totalStudents: number; // different students enrolled in this teacher's active classes
   recentExams: ExamCard[]; // exams sorted newest first, for the table
 }
 
@@ -29,18 +29,15 @@ export function useTeacherDashboard(teacherId: string | undefined) {
       setError(null); // clear any previous error
 
       try {
-        const exams = await getExamsByTeacherId(teacherId!); // reuse the existing query as-is
+        const [exams, totalStudents] = await Promise.all([
+          getExamsByTeacherId(teacherId!), // reuse the existing query as-is
+          getTeacherStudentCount(teacherId!),
+        ]);
 
         if (!isCancelled) {
-          const totalStudents = exams.reduce(
-            (sum, exam) =>
-              sum + exam.classAttachments.reduce((a, attachment) => a + attachment.studentCount, 0),
-            0,
-          );
-
           setData({
             totalExams: exams.length, // count of every exam, regardless of status
-            totalStudents, // summed session count — see the module doc comment above
+            totalStudents, // from the class rosters, each student counted once
             recentExams: exams, // already sorted newest-first by the service
           });
         }

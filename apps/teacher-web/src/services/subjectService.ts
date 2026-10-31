@@ -24,7 +24,8 @@ export async function getClassCountsBySubject(teacherId: string): Promise<Record
   const { data, error } = await supabase
     .from("classes")
     .select("subject_id")
-    .eq("teacher_id", teacherId);
+    .eq("teacher_id", teacherId)
+    .is("archived_at", null); // archived classes no longer count
 
   if (error) throw error;
 

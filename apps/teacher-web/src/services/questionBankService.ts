@@ -304,10 +304,10 @@ export async function saveBankQuestion(
 export async function deleteBankQuestion(id: string): Promise<void> {
   const { error } = await supabase.from("question_bank").delete().eq("id", id);
   if (error) {
-    // 23503 = foreign key violation: an exam's random pool still points at this question
+    // 23503 = foreign key violation: an exam's random pool, or a student's drawn question, still points at it
     if (error.code === "23503") {
       throw new Error(
-        "This question is part of a random pool in an exam, so it can't be deleted while it's in use.",
+        "This question is in use (in an exam's random pool, or already drawn by students), so it can't be deleted.",
       );
     }
     throw error;

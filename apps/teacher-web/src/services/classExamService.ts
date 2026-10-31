@@ -31,7 +31,8 @@ export async function getAttachableClasses(
     .from("classes")
     .select("id, name")
     .eq("teacher_id", teacherId)
-    .eq("subject_id", examRow.subject_id);
+    .eq("subject_id", examRow.subject_id)
+    .is("archived_at", null); // an archived class can't take new exams
 
   if (excludeIds.length > 0) {
     query = query.not("id", "in", `(${excludeIds.join(",")})`);

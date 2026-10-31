@@ -74,6 +74,16 @@ export function ExamBuilderScreen({
 
   // tracks which questions are brand-new and need a bank copy saved before the exam can be saved
   const [pendingBankSaveIds, setPendingBankSaveIds] = useState<Set<string>>(new Set());
+  // one bank id per new question, kept across retries so a retry updates the same bank copy
+  // instead of creating a second one (which would take over the first copy's options/test cases)
+  const bankIdByQuestionId = useRef<Map<string, string>>(new Map());
+  const bankIdFor = (questionId: string): string => {
+    const existing = bankIdByQuestionId.current.get(questionId);
+    if (existing) return existing;
+    const created = crypto.randomUUID();
+    bankIdByQuestionId.current.set(questionId, created);
+    return created;
+  };
 
   // tracks the original bank version of each question, so we can revert to it if the user discards changes
   const [bankOriginSnapshots, setBankOriginSnapshots] = useState<Map<string, BuilderQuestion>>(new Map());
@@ -86,6 +96,7 @@ export function ExamBuilderScreen({
   const [isSavingDraftState, setIsSavingDraftState] = useState(false);
   const [isSavingExamState, setIsSavingExamState] = useState(false); // Save Draft / Save Exam's bulk persist in flight
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
+  const [statusError, setStatusError] = useState<string | null>(null); // why the draft/saved status change failed
 
   const [pendingLeaveScreen, setPendingLeaveScreen] = useState<ScreenName | null>(null); // where the user tried to go, while we ask them to confirm
   // asks before a points change rescales scores students already earned
@@ -142,7 +153,8 @@ export function ExamBuilderScreen({
   const activePool = pools.find((p) => p.id === activePoolId) ?? null;
   // A saved exam may already be in a class, so "Save Draft" must never push it back to draft
   // (the library would then hide Manage Classes for an exam that could even be live).
-  const isAlreadySaved = examData?.status === "saved";
+  // an exam that is in a class can never be a draft again, whatever its stored status says
+  const isAlreadySaved = examData?.status === "saved" || (examData?.attachedClassCount ?? 0) > 0;
   const [editorTab, setEditorTab] = useState<QuestionType>(
     activeQuestion?.type ?? "multiple-choice",
   );
@@ -187,10 +199,12 @@ export function ExamBuilderScreen({
       return;
     }
 
-    const didSave = isAlreadySaved ? await saveExam(examData.id) : await saveDraft(examData.id);
+    setStatusError(null);
+    const statusProblem = isAlreadySaved ? await saveExam(examData.id) : await saveDraft(examData.id);
     setIsSavingDraftState(false);
-    if (!didSave) {
-      showToast(statusError ?? "Could not save changes.", "error");
+    if (statusProblem) {
+      setStatusError(statusProblem);
+      showToast(statusProblem, "error");
       return;
     }
 
@@ -400,7 +414,7 @@ export function ExamBuilderScreen({
     setBankSaveError(null);
     try {
       if (isNewQuestion && teacherId && examData?.subjectId) {
-        await saveBankQuestion(teacherId, examData.subjectId, { ...activeQuestion, id: crypto.randomUUID() });
+        await saveBankQuestion(teacherId, examData.subjectId, { ...activeQuestion, id: bankIdFor(activeQuestion.id) });
         setPendingBankSaveIds((prev) => {
           const next = new Set(prev);
           next.delete(activeQuestion.id);
@@ -437,7 +451,7 @@ export function ExamBuilderScreen({
       for (const q of questions) {
         if (pendingBankSaveIds.has(q.id) && teacherId && examData.subjectId) {
           // reusable copy in this exam's subject bank, first time only
-          await saveBankQuestion(teacherId, examData.subjectId, { ...q, id: crypto.randomUUID() });
+          await saveBankQuestion(teacherId, examData.subjectId, { ...q, id: bankIdFor(q.id) });
           // clear it right away so a retry after a later failure doesn't save a second copy
           setPendingBankSaveIds((prev) => {
             const next = new Set(prev);
@@ -458,11 +472,7 @@ export function ExamBuilderScreen({
     }
   };
 
-  const {
-    saveDraft,
-    saveExam,
-    error: statusError,
-  } = useUpdateExamStatus();
+  const { saveDraft, saveExam } = useUpdateExamStatus();
 
   // quick save — persists all question edits, marks the exam as draft, returns to the library
   const handleSaveDraft = async (): Promise<boolean> => {
@@ -475,18 +485,19 @@ export function ExamBuilderScreen({
       return false;
     }
 
-    const didSave = await saveDraft(examData.id);
+    setStatusError(null);
+    const statusProblem = await saveDraft(examData.id);
     setIsSavingDraftState(false);
-    
-    if (didSave) {
+
+    if (!statusProblem) {
       showToast("Draft saved.", "success");
       setLibrarySubject(examData.subjectId);
       navigateTo("examLibrary");
       return true;
-    } else {
-      showToast(statusError ?? "Could not save draft.", "error");
-      return false;
     }
+    setStatusError(statusProblem);
+    showToast(statusProblem, "error");
+    return false;
   };
 
   const handleSaveExam = async (): Promise<boolean> => {
@@ -500,16 +511,18 @@ export function ExamBuilderScreen({
       setIsSavingExamState(false);
       return false;
     }
-    const didSave = await saveExam(examData.id);
+    setStatusError(null);
+    const statusProblem = await saveExam(examData.id);
     setIsSavingExamState(false);
-    if (didSave) {
+    if (!statusProblem) {
       showToast(openedFromEditExam ? "Exam updated." : "Exam saved.", "success");
       setLibrarySubject(examData.subjectId);
       navigateTo("examLibrary");
-    } else {
-      showToast(statusError ?? "Could not save exam.", "error");
+      return true;
     }
-    return didSave;
+    setStatusError(statusProblem);
+    showToast(statusProblem, "error");
+    return false;
   };
 
   return (

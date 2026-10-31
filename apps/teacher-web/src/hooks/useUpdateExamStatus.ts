@@ -1,37 +1,25 @@
-import { useState } from "react";
 import { updateExamStatus } from "../services/examBuilderService";
 
-// manages loading and error state for Save/Publish transitions
+// Save/Publish transitions. Each call resolves to null on success, or to the reason it failed,
+// so the caller can show that exact reason right away (state set here would not be visible yet).
 export function useUpdateExamStatus() {
-  const [error, setError] = useState<string | null>(null);
-
-  // marks the exam as draft but not yet visible to students
-  async function saveDraft(examId: string): Promise<boolean> {
-    setError(null);
+  async function changeStatus(
+    examId: string,
+    status: "draft" | "saved",
+  ): Promise<string | null> {
     try {
-      await updateExamStatus(examId, "draft");
-      return true;
-      } catch (error) {
-        setError(
-          error instanceof Error ? error.message : "Could not save exam. Try again.",
-        );
-      return false;
+      await updateExamStatus(examId, status);
+      return null;
+    } catch (error) {
+      return error instanceof Error ? error.message : "Could not save exam. Try again.";
     }
   }
 
-  // marks the exam as saved but not yet visible to students
-  async function saveExam(examId: string): Promise<boolean> {
-    setError(null);
-    try {
-      await updateExamStatus(examId, "saved");
-      return true;
-      } catch (error) {
-        setError(
-          error instanceof Error ? error.message : "Could not save exam. Try again.",
-        );
-      return false;
-    }
-  }
+  // marks the exam as draft, not yet attachable to a class
+  const saveDraft = (examId: string) => changeStatus(examId, "draft");
 
-  return { saveDraft, saveExam, error };
+  // marks the exam as saved, ready to attach to a class
+  const saveExam = (examId: string) => changeStatus(examId, "saved");
+
+  return { saveDraft, saveExam };
 }
