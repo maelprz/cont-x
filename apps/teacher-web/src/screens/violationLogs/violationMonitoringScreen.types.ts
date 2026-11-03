@@ -15,7 +15,3 @@ export type ViolationDetailRow = {
   details: string | null;
   loggedAt: string;
 };
-
-export type ViolationMonitoringScreenProps = {
-  examTitle?: string;
-};

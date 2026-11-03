@@ -1,11 +1,8 @@
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useViolationMonitoring } from "../../hooks/useViolationMonitoring";
-import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // reads which exam is selected
-import type {
-  ViolationDetailRow,
-  ViolationMonitoringScreenProps,
-} from "./violationMonitoringScreen.types";
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // reads which class exam is selected
+import type { ViolationDetailRow } from "./violationMonitoringScreen.types";
 
 // turns a raw violation_type value into a readable label
 function getViolationTypeLabel(
@@ -125,12 +122,11 @@ function ViolationDetailModal({
   );
 }
 
-export function ViolationMonitoringScreen({
-  examTitle,
-}: ViolationMonitoringScreenProps) {
-  const examId = useViolationMonitoringStore((state) => state.currentExamId);
+export function ViolationMonitoringScreen() {
+  const classExamId = useViolationMonitoringStore((state) => state.currentClassExamId);
   const {
     sessions,
+    header,
     isLoading,
     error,
     refetch,
@@ -140,7 +136,7 @@ export function ViolationMonitoringScreen({
     violationsError,
     openViolationModal,
     closeViolationModal,
-  } = useViolationMonitoring(examId);
+  } = useViolationMonitoring(classExamId);
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
@@ -161,9 +157,9 @@ export function ViolationMonitoringScreen({
             <div>
               <h1 className="text-2xl font-bold mb-1">Violation Monitoring</h1>
               <p className="text-sm opacity-70 max-w-md leading-relaxed">
-                {examTitle
-                  ? `Reviewing attempts for "${examTitle}".` // shows the exam name if given
-                  : "Reviewing attempts for this exam."}
+                {header
+                  ? `Reviewing attempts for "${header.examTitle}" in ${header.className}.` // exam and class this screen is scoped to
+                  : "Reviewing attempts for this class exam."}
               </p>
             </div>
 
@@ -198,18 +194,18 @@ export function ViolationMonitoringScreen({
                 </tr>
               </thead>
               <tbody>
-                {examId === null && (
+                {classExamId === null && (
                   <tr>
                     <td
                       colSpan={7}
                       className="px-5 py-6 text-center opacity-60"
                     >
-                      No exam selected. Open this screen from an exam card.
+                      No class exam selected. Open this screen from an exam card.
                     </td>
                   </tr>
                 )}
 
-                {examId !== null && isLoading && (
+                {classExamId !== null && isLoading && (
                   <tr>
                     <td
                       colSpan={7}
@@ -220,18 +216,18 @@ export function ViolationMonitoringScreen({
                   </tr>
                 )}
 
-                {examId !== null && !isLoading && sessions.length === 0 && (
+                {classExamId !== null && !isLoading && sessions.length === 0 && (
                   <tr>
                     <td
                       colSpan={7}
                       className="px-5 py-6 text-center opacity-60"
                     >
-                      No attempts have been recorded for this exam yet.
+                      No attempts have been recorded for this class yet.
                     </td>
                   </tr>
                 )}
 
-                {examId !== null &&
+                {classExamId !== null &&
                   !isLoading &&
                   sessions.map((session) => (
                     <tr
