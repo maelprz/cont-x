@@ -22,7 +22,7 @@ import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { useExamLibraryStore } from "../../store/useExamLibraryStore";
 import type { NewExamSettings } from "../../services/examBuilderService";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
-import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which exam Violation Monitoring shows
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which class exam Violation Monitoring shows
 
 type ConfirmAction =
   | { type: "endClassExam"; classExamId: string }
@@ -52,7 +52,7 @@ export function ExamLibraryScreen() {
   const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
   const setOpenedFromEditExam = useExamBuilderStore((state) => state.setOpenedFromEditExam);
   const setCurrentClassExamIdResult = useExamResultsStore((state) => state.setCurrentClassExamId);
-  const setCurrentExamIdViolation = useViolationMonitoringStore((state) => state.setCurrentExamId);
+  const setCurrentClassExamIdViolation = useViolationMonitoringStore((state) => state.setCurrentClassExamId);
 
   const { handleDelete, isProcessing: isDeleting, error: deleteError } = useExamCardActions();
   const {
@@ -160,12 +160,11 @@ export function ExamLibraryScreen() {
   const handleNavigateFromClassExam = (
     classExamId: string,
     targetScreen: "violationMonitoring" | "examResults",
-    examId: string,
   ) => {
     if (targetScreen === "examResults") {
       setCurrentClassExamIdResult(classExamId); // results are shown for this one class
     } else {
-      setCurrentExamIdViolation(examId);
+      setCurrentClassExamIdViolation(classExamId); // progress is shown for this one class
     }
     navigateTo(targetScreen);
   };
@@ -385,9 +384,7 @@ export function ExamLibraryScreen() {
         onEnd={requestEnd}
         onRemove={handleRemoveAttachment}
         onEditSettings={(classExamId) => setSettingsClassExamId(classExamId)}
-        onNavigate={(classExamId, targetScreen) =>
-          manageClassesExamId && handleNavigateFromClassExam(classExamId, targetScreen, manageClassesExamId)
-        }
+        onNavigate={handleNavigateFromClassExam}
       />
 
       <AttachClassModal

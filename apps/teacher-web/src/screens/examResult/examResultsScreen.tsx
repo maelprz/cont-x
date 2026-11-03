@@ -9,7 +9,7 @@ import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useExamResults } from "../../hooks/useExamResults";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
 import { AdjustScoreModal } from "../../components/examResult/adjustScoreModal";
-import { computeQuestionStats } from "../../lib/resultsAnalytics.ts";
+import { computePoolStats, computeQuestionStats } from "../../lib/resultsAnalytics.ts";
 import { collectPoolColumns } from "../../lib/resultsPools.ts";
 import {
   buildResultsCsv,
@@ -72,6 +72,7 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
   const maxScore = highestRow?.maxScore ?? 0;
 
   const questionStats = computeQuestionStats(rows); // per-question performance for the panel
+  const poolStats = computePoolStats(rows); // one row per random pool, shown under the fixed questions
 
   // exports every attempt (not just the searched ones) as the full results sheet
   const handleExportCsv = () => {
@@ -189,15 +190,15 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                 </div>
               </div>
 
-              {questionStats.length > 0 && (
+              {(questionStats.length > 0 || poolStats.length > 0) && (
                 <div className="rounded-xl mb-6 overflow-x-auto bg-[var(--color-base-100)] border border-[var(--color-base-300)]">
                   <div className="px-4 pt-4 pb-2">
                     <h2 className="text-lg font-bold">Question Performance</h2>
                     <p className="text-xs opacity-60">
                       Based on {rows.length} {rows.length === 1 ? "attempt" : "attempts"}. Full
                       marks means the student earned every point on the question.
-                      {poolColumns.length > 0 &&
-                        " Random-pool questions are scored per pool in the table below."}
+                      {poolStats.length > 0 &&
+                        " Students draw different questions from a random pool, so each pool is one row covering whatever each student drew."}
                     </p>
                   </div>
                   <table className="w-full text-[13px]">
@@ -232,6 +233,40 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                           </td>
                           <td className="px-4 py-3">
                             {Math.round(stat.averageScore * 10) / 10}/{stat.maxPoints}
+                          </td>
+                          <td className="px-4 py-3">
+                            <div className="flex items-center gap-2">
+                              <div className="h-2 flex-1 rounded-full bg-[var(--color-base-300)]">
+                                <div
+                                  className="h-2 rounded-full bg-[var(--color-primary)]"
+                                  style={{
+                                    width: `${Math.min(100, Math.max(0, stat.averagePercent))}%`,
+                                  }}
+                                />
+                              </div>
+                              <span className="w-10 text-right">
+                                {Math.round(stat.averagePercent)}%
+                              </span>
+                            </div>
+                          </td>
+                          <td className="px-4 py-3">{Math.round(stat.fullMarksPercent)}%</td>
+                          <td className="px-4 py-3">{Math.round(stat.zeroPercent)}%</td>
+                        </tr>
+                      ))}
+                      {poolStats.map((stat) => (
+                        <tr
+                          key={stat.poolKey}
+                          className="border-b border-[var(--color-base-300)] last:border-0"
+                        >
+                          <td className="px-4 py-3">
+                            <span className="font-medium">{stat.label}</span>
+                            <span className="opacity-60"> {stat.title}</span>
+                            <span className="ml-2 text-[11px] opacity-60">
+                              random pool, {Math.round(stat.averageDrawn * 10) / 10} drawn per attempt
+                            </span>
+                          </td>
+                          <td className="px-4 py-3">
+                            {Math.round(stat.averageScore * 10) / 10}/{Math.round(stat.averageMax * 10) / 10}
                           </td>
                           <td className="px-4 py-3">
                             <div className="flex items-center gap-2">

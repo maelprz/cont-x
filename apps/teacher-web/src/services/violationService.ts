@@ -13,7 +13,7 @@ type SessionRow = {
   violation_logs: { count: number }[];
 };
 
-// one row from get_exam_session_students (teachers can't read the users table directly)
+// one row from get_class_exam_results_students (teachers can't read the users table directly)
 type StudentNameRow = {
   session_id: string;
   id_number: string;
@@ -49,8 +49,49 @@ function mapSessionRowToTableRow(
   };
 }
 
-export async function getSessionsForExam(
-  examId: string,
+// one class_exams row plus the class and exam it points to; supabase may type a
+// to-one embed as an object or a one-item array, so both are accepted
+type One<T> = T | T[] | null;
+type ClassExamHeaderRow = {
+  classes: One<{ name: string }>;
+  exams: One<{ title: string; exam_code: string | null }>;
+};
+
+function unwrapOne<T>(value: One<T>): T | null {
+  return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+// the exam title, code and class name shown at the top of the monitoring screen
+export type ClassExamHeader = {
+  examTitle: string;
+  examCode: string;
+  className: string;
+};
+
+export async function getClassExamHeader(
+  classExamId: string,
+): Promise<ClassExamHeader> {
+  const { data, error } = await supabase
+    .from("class_exams")
+    .select("classes(name), exams(title, exam_code)")
+    .eq("id", classExamId)
+    .single();
+
+  if (error || !data) throw error ?? new Error("Class exam not found.");
+  const row = data as unknown as ClassExamHeaderRow;
+  const exam = unwrapOne(row.exams);
+  const classRow = unwrapOne(row.classes);
+
+  return {
+    examTitle: exam?.title ?? "",
+    examCode: exam?.exam_code ?? "",
+    className: classRow?.name ?? "Unknown class",
+  };
+}
+
+// every attempt made in ONE class's delivery of an exam
+export async function getSessionsForClassExam(
+  classExamId: string,
 ): Promise<ViolationSessionRow[]> {
   const { data, error } = await supabase
     .from("exam_sessions")
@@ -64,15 +105,15 @@ export async function getSessionsForExam(
       violation_logs(count)
     `,
     )
-    .eq("exam_id", examId)
+    .eq("class_exam_id", classExamId)
     .order("joined_at", { ascending: false }); // most recent attempts first
 
   if (error) throw error; // let the hook decide how to show this error
 
-  // names and ID numbers come from a function that only returns this teacher's own students
+  // names and ID numbers come from a function that only returns this teacher's own class
   const { data: nameData, error: nameError } = await supabase.rpc(
-    "get_exam_session_students",
-    { p_exam_id: examId },
+    "get_class_exam_results_students",
+    { p_class_exam_id: classExamId },
   );
   if (nameError) throw nameError;
   const studentsBySession = new Map(

@@ -1,18 +1,21 @@
 import { useState, useEffect, useCallback } from "react";
 import {
-  getSessionsForExam,
+  getClassExamHeader,
+  getSessionsForClassExam,
   getViolationsForSession,
 } from "../services/violationService";
+import type { ClassExamHeader } from "../services/violationService";
 import type {
   ViolationSessionRow,
   ViolationDetailRow,
 } from "../screens/violationLogs/violationMonitoringScreen.types";
 
 // holds all state needed by the Violation Monitoring screen
-export function useViolationMonitoring(examId: string | null) {
+export function useViolationMonitoring(classExamId: string | null) {
   const [sessions, setSessions] = useState<ViolationSessionRow[]>([]);
   const [isLoading, setIsLoading] = useState(true); // true while the session list loads
   const [error, setError] = useState<string | null>(null);
+  const [header, setHeader] = useState<ClassExamHeader | null>(null); // exam title and class name for the page heading
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
@@ -21,11 +24,12 @@ export function useViolationMonitoring(examId: string | null) {
   const [isViolationsLoading, setIsViolationsLoading] = useState(false); // true while modal data loads
   const [violationsError, setViolationsError] = useState<string | null>(null);
 
-  // loads every session for this exam from the service
+  // loads every session of this class exam, plus its heading, from the service
   const fetchSessions = useCallback(async () => {
     // nothing selected yet — skip the query, show empty state instead
-    if (examId === null) {
+    if (classExamId === null) {
       setSessions([]); // clear out any stale rows
+      setHeader(null); // and the heading
       setError(null); // this isn't an error, just nothing to show
       setIsLoading(false); // stop the loading spinner
       return;
@@ -34,16 +38,20 @@ export function useViolationMonitoring(examId: string | null) {
     setIsLoading(true);
     setError(null);
     try {
-      const rows = await getSessionsForExam(examId);
+      const [rows, headerInfo] = await Promise.all([
+        getSessionsForClassExam(classExamId),
+        getClassExamHeader(classExamId),
+      ]);
       setSessions(rows);
+      setHeader(headerInfo);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Failed to load sessions.");
     } finally {
       setIsLoading(false);
     }
-  }, [examId]);
+  }, [classExamId]);
 
-  // runs once on mount, and again if the exam id changes
+  // runs once on mount, and again if the class exam id changes
   useEffect(() => {
     fetchSessions();
   }, [fetchSessions]);
@@ -74,6 +82,7 @@ export function useViolationMonitoring(examId: string | null) {
 
   return {
     sessions,
+    header,
     isLoading,
     error,
     refetch: fetchSessions, // wired to the manual Refresh button
