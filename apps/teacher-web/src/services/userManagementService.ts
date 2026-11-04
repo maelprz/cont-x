@@ -153,7 +153,7 @@ export async function createUsersBulk(
   role: BulkRole,
   accounts: BulkAccountRow[],
 ): Promise<BulkCreateResult> {
-  const { data, error } = await supabase.functions.invoke("create-users-bulk", {
+  const { data, error } = await supabase.functions.invoke("create-user-bulk", {
     body: { role, accounts },
   });
 
