@@ -47,7 +47,7 @@ export function QuestionBankModal({
   const [search, setSearch] = useState(""); // filters the bank list by title
   // chosen questions, kept as summaries so a pick survives the list being re-filtered
   const [selected, setSelected] = useState<Map<string, BankQuestionSummary>>(new Map());
-  const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding">("all");
+  const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding" | "fill-in-the-blank">("all");
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
   // what the teacher picked in "Add as" — null until they touch it, so the starting choice
   // (the pool this was opened from, or "Always included") is worked out below, not stored
@@ -141,6 +141,15 @@ export function QuestionBankModal({
             ...bankQuestion,
             id: crypto.randomUUID(), // fresh id — independent copy, not yet saved anywhere
             number: startingNumber + i + 1,
+            // a fill-in-the-blank copy gets its own answer ids, so two copies never share a row
+            ...(bankQuestion.type === "fill-in-the-blank"
+              ? {
+                  acceptedAnswers: bankQuestion.acceptedAnswers.map((a) => ({
+                    ...a,
+                    id: crypto.randomUUID(),
+                  })),
+                }
+              : {}),
           });
         }
         onQuestionsAdded(newExamQuestions);
@@ -212,7 +221,7 @@ export function QuestionBankModal({
           {/* Type filter — same control as the bank screen */}
           <div className="flex items-center gap-2 mb-2">
             <span className="text-[12px] opacity-60 font-medium">Type:</span>
-            {(["all", "multiple-choice", "coding"] as const).map((type) => (
+            {(["all", "multiple-choice", "coding", "fill-in-the-blank"] as const).map((type) => (
               <button
                 key={type}
                 onClick={() => setActiveTypeFilter(type)}
@@ -223,7 +232,7 @@ export function QuestionBankModal({
                   color: activeTypeFilter === type ? "white" : "var(--color-base-content)",
                 }}
               >
-                {type === "all" ? "All" : type === "multiple-choice" ? "Multiple Choice" : "Coding"}
+                {type === "all" ? "All" : type === "multiple-choice" ? "Multiple Choice" : type === "coding" ? "Coding" : "Fill in the Blank"}
               </button>
             ))}
           </div>
@@ -296,7 +305,7 @@ export function QuestionBankModal({
                       )}
                     </p>
                     <p className="text-[12px] opacity-60" style={{ color: "var(--color-base-content)" }}>
-                      {q.type === "multiple-choice" ? "Multiple Choice" : "Coding"} • {q.points} pts
+                      {q.type === "multiple-choice" ? "Multiple Choice" : q.type === "coding" ? "Coding" : "Fill in the Blank"} • {q.points} pts
                     </p>
                   </div>
                 </button>

@@ -10,6 +10,8 @@ export type PoolDrawRow = {
   pool_id: string | null; // null once the pool itself was deleted
   pool_title: string | null;
   pool_order_index: number;
+  question_bank_id: string; // which bank question was drawn
+  title: string; // that question's title when drawn
   max_points: number;
 };
 
@@ -38,12 +40,19 @@ export function buildPoolScores(
         drawnCount: 0,
         score: 0,
         maxPoints: 0,
+        questions: [],
       };
 
     const answer = answers.find((a) => a.pool_draw_id === draw.id);
     cell.drawnCount += 1;
     cell.maxPoints += draw.max_points;
     cell.score += answer?.score ?? 0;
+    cell.questions.push({
+      bankQuestionId: draw.question_bank_id,
+      title: draw.title,
+      score: answer?.score ?? 0,
+      maxPoints: draw.max_points,
+    });
     byPool.set(poolKey, cell);
   }
 

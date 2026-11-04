@@ -21,6 +21,15 @@ export type PoolScoreCell = {
   drawnCount: number; // how many questions this student drew from it
   score: number; // points earned across those questions
   maxPoints: number; // points those questions were worth
+  questions: PoolQuestionScore[]; // the individual questions drawn, so each keeps its own stats
+};
+
+// What one student earned on one specific question they drew from a pool.
+export type PoolQuestionScore = {
+  bankQuestionId: string; // maps to session_pool_questions.question_bank_id
+  title: string; // the question's title when it was drawn
+  score: number; // maps to student_answers.score (0 when never answered)
+  maxPoints: number; // what this question was worth for this student
 };
 
 // One per-question cell in a result row.

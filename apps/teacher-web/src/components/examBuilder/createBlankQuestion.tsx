@@ -1,4 +1,4 @@
-import type { MCQBuilderQuestion, CodingBuilderQuestion, CodingProgramType } from "../../screens/examBuilder/examBuilderScreen.types";
+import type { MCQBuilderQuestion, CodingBuilderQuestion, FITBBuilderQuestion, CodingProgramType } from "../../screens/examBuilder/examBuilderScreen.types";
 
 // blank starting point for a brand new multiple-choice question
 export function createBlankMCQuestion(id: string, number: number): MCQBuilderQuestion {
@@ -75,5 +75,20 @@ export function createBlankCodingQuestion(
     mainCode: mainCodeFor(programType),
     deductionPerAttempt: 0,
     referenceSolution: "",
+  };
+}
+
+// blank starting point for a brand new fill-in-the-blank question, with one empty answer row
+export function createBlankFitbQuestion(id: string, number: number): FITBBuilderQuestion {
+  return {
+    id,
+    number,
+    title: "Untitled Question",
+    type: "fill-in-the-blank",
+    points: 1,
+    description: "Description of the question goes here.",
+    acceptedAnswers: [{ id: crypto.randomUUID(), text: "" }],
+    caseSensitive: false,
+    ignoreExtraSpaces: true,
   };
 }

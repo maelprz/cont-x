@@ -28,6 +28,7 @@ import { ExamBuilderEditorPanel } from "../../components/examBuilder/examBuilder
 import {
   createBlankMCQuestion,
   createBlankCodingQuestion,
+  createBlankFitbQuestion,
   starterCodeFor,
   mainCodeFor,
 } from "../../components/examBuilder/createBlankQuestion";
@@ -236,7 +237,9 @@ export function ExamBuilderScreen({
     const newQuestion =
       type === "multiple-choice"
         ? createBlankMCQuestion(crypto.randomUUID(), questions.length + 1)
-        : createBlankCodingQuestion(crypto.randomUUID(), questions.length + 1);
+        : type === "fill-in-the-blank"
+          ? createBlankFitbQuestion(crypto.randomUUID(), questions.length + 1)
+          : createBlankCodingQuestion(crypto.randomUUID(), questions.length + 1);
 
     setQuestions((prev) => [...prev, newQuestion]);
     setPendingBankSaveIds((prev) => new Set(prev).add(newQuestion.id)); // needs a bank copy on first save
@@ -302,7 +305,9 @@ export function ExamBuilderScreen({
       savedVersion ??
       (activeQuestion.type === "multiple-choice"
         ? createBlankMCQuestion(activeQuestion.id, activeQuestion.number)
-        : createBlankCodingQuestion(activeQuestion.id, activeQuestion.number));
+        : activeQuestion.type === "fill-in-the-blank"
+          ? createBlankFitbQuestion(activeQuestion.id, activeQuestion.number)
+          : createBlankCodingQuestion(activeQuestion.id, activeQuestion.number));
 
     setQuestions((prev) =>
       prev.map((q) => (q.id === revertedQuestion.id ? revertedQuestion : q)),
@@ -386,6 +391,14 @@ export function ExamBuilderScreen({
               { id: crypto.randomUUID(), text: "", isCorrect: true },
               { id: crypto.randomUUID(), text: "", isCorrect: false },
             ],
+          }
+        : tab === "fill-in-the-blank"
+        ? {
+            ...base,
+            type: "fill-in-the-blank",
+            acceptedAnswers: [{ id: crypto.randomUUID(), text: "" }],
+            caseSensitive: false,
+            ignoreExtraSpaces: true,
           }
         : {
             ...base,
@@ -554,7 +567,6 @@ export function ExamBuilderScreen({
             error={error}
             activeQuestion={activeQuestion}
             editorTab={editorTab}
-            isMCQ={editorTab === "multiple-choice"}
             isSavingDraft={isSavingDraftState}
             isSavingExam={isSavingExamState}
             statusError={statusError}

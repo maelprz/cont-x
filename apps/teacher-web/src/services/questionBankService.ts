@@ -1,7 +1,9 @@
 import { supabase } from "./supabaseClient";
+import { requireFitbAnswer } from "../lib/fitbAnswers";
 import type {
   BuilderQuestion,
   CodingProgramType,
+  FITBAnswer,
   MCQOption,
   TestCase,
 } from "../screens/examBuilder/examBuilderScreen.types"; // reusing the same shapes exam builder uses
@@ -11,6 +13,12 @@ type MCQBankOptionRow = {
   id: string;
   option_text: string;
   is_correct: boolean;
+};
+
+// one row of fitb_bank_answer exactly as stored in the database
+type FitbBankAnswerRow = {
+  id: string;
+  answer_text: string;
 };
 
 // one row of test_case_bank exactly as stored in the database
@@ -33,11 +41,16 @@ type QuestionBankRow = {
   teacher_id: string; // owner — differs from the viewer for questions shared by a colleague
   subject_id: string;
   title: string;
-  type: "mcq" | "coding";
+  type: "mcq" | "coding" | "fitb";
   prompt: string;
   max_points: number;
   created_at: string;
   mcq_bank_question: { mcq_bank_option: MCQBankOptionRow[] } | null;
+  fitb_bank_question: {
+    case_sensitive: boolean;
+    ignore_extra_spaces: boolean;
+    fitb_bank_answer: FitbBankAnswerRow[];
+  } | null;
   coding_bank_question: {
     starter_code: string | null;
     program_type: CodingProgramType;
@@ -55,7 +68,7 @@ export interface BankQuestionSummary {
   subjectId: string;
   isOwn: boolean; // false = shared with this teacher by someone else (read-only here)
   title: string;
-  type: "multiple-choice" | "coding";
+  type: "multiple-choice" | "coding" | "fill-in-the-blank";
   points: number;
   createdAt: string; // display string, e.g. "Oct 12, 2023"
   tags: BankTag[];
@@ -77,6 +90,23 @@ function mapBankRowToBuilderQuestion(row: QuestionBankRow): BuilderQuestion | nu
         text: o.option_text,
         isCorrect: o.is_correct,
       })),
+    };
+  }
+
+  if (row.type === "fitb" && row.fitb_bank_question) {
+    return {
+      id: row.id,
+      number: 0,
+      title: row.title,
+      type: "fill-in-the-blank",
+      points: row.max_points,
+      description: row.prompt,
+      acceptedAnswers: row.fitb_bank_question.fitb_bank_answer.map((a) => ({
+        id: a.id,
+        text: a.answer_text,
+      })),
+      caseSensitive: row.fitb_bank_question.case_sensitive,
+      ignoreExtraSpaces: row.fitb_bank_question.ignore_extra_spaces,
     };
   }
 
@@ -112,7 +142,12 @@ function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuesti
     subjectId: row.subject_id,
     isOwn: row.teacher_id === viewerId,
     title: row.title,
-    type: row.type === "mcq" ? "multiple-choice" : "coding",
+    type:
+      row.type === "mcq"
+        ? "multiple-choice"
+        : row.type === "fitb"
+          ? "fill-in-the-blank"
+          : "coding",
     points: row.max_points,
     createdAt: new Date(row.created_at).toLocaleDateString("en-US", {
       month: "short",
@@ -135,6 +170,11 @@ const BANK_SELECT = `
   created_at,
   mcq_bank_question (
     mcq_bank_option ( id, option_text, is_correct )
+  ),
+  fitb_bank_question (
+    case_sensitive,
+    ignore_extra_spaces,
+    fitb_bank_answer ( id, answer_text )
   ),
   coding_bank_question (
     starter_code,
@@ -228,6 +268,33 @@ async function syncMcqBankOptions(bankQuestionId: string, options: MCQOption[]):
   }
 }
 
+// deletes accepted answers no longer in the current list, then upserts the rest
+async function syncFitbBankAnswers(bankQuestionId: string, answers: FITBAnswer[]): Promise<void> {
+  const { data: existingRows, error: fetchError } = await supabase
+    .from("fitb_bank_answer")
+    .select("id")
+    .eq("fitb_bank_question_id", bankQuestionId);
+  if (fetchError) throw fetchError;
+
+  const existingIds = new Set((existingRows ?? []).map((r) => r.id));
+  const currentIds = new Set(answers.map((a) => a.id));
+  const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id));
+
+  if (idsToDelete.length > 0) {
+    const { error: deleteError } = await supabase.from("fitb_bank_answer").delete().in("id", idsToDelete);
+    if (deleteError) throw deleteError;
+  }
+
+  const { error: upsertError } = await supabase.from("fitb_bank_answer").upsert(
+    answers.map((a) => ({
+      id: a.id,
+      fitb_bank_question_id: bankQuestionId,
+      answer_text: a.text,
+    })),
+  );
+  if (upsertError) throw upsertError;
+}
+
 // deletes test cases no longer in the current list, then upserts the rest
 async function syncTestCaseBank(bankQuestionId: string, testCases: TestCase[]): Promise<void> {
   const { data: existingRows, error: fetchError } = await supabase
@@ -265,7 +332,16 @@ export async function saveBankQuestion(
   subjectId: string, // every bank question lives under a subject now (NOT NULL in the db)
   question: BuilderQuestion,
 ): Promise<void> {
-  const dbType = question.type === "multiple-choice" ? "mcq" : "coding"; // matches db's check constraint
+  // checked before anything is written, so a question with no usable answer never reaches the database
+  const fitbAnswers =
+    question.type === "fill-in-the-blank" ? requireFitbAnswer(question.acceptedAnswers) : [];
+
+  const dbType =
+    question.type === "multiple-choice"
+      ? "mcq"
+      : question.type === "fill-in-the-blank"
+        ? "fitb"
+        : "coding"; // matches db's check constraint
 
   const { error: questionError } = await supabase.from("question_bank").upsert({
     id: question.id, // real uuid, insert or update depending on if it exists
@@ -285,6 +361,15 @@ export async function saveBankQuestion(
     if (mcqError) throw mcqError;
 
     await syncMcqBankOptions(question.id, question.options);
+  } else if (question.type === "fill-in-the-blank") {
+    const { error: fitbError } = await supabase.from("fitb_bank_question").upsert({
+      question_bank_id: question.id,
+      case_sensitive: question.caseSensitive,
+      ignore_extra_spaces: question.ignoreExtraSpaces,
+    });
+    if (fitbError) throw fitbError;
+
+    await syncFitbBankAnswers(question.id, fitbAnswers);
   } else {
     const { error: codingError } = await supabase.from("coding_bank_question").upsert({
       question_bank_id: question.id,
