@@ -3,7 +3,7 @@ export type ViolationSessionRow = {
   studentIdNumber: string;
   studentName: string;
   attemptNumber: number;
-  status: "in_progress" | "submitted" | "timed_out";
+  status: "in_progress" | "submitted" | "timed_out" | "removed";
   joinedAt: string;
   submittedAt: string | null;
   violationCount: number;

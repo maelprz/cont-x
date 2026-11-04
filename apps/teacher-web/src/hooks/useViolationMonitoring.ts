@@ -3,12 +3,14 @@ import {
   getClassExamHeader,
   getSessionsForClassExam,
   getViolationsForSession,
+  removeStudentFromExam,
 } from "../services/violationService";
 import type { ClassExamHeader } from "../services/violationService";
 import type {
   ViolationSessionRow,
   ViolationDetailRow,
 } from "../screens/violationLogs/violationMonitoringScreen.types";
+import { useToast } from "./useToast";
 
 // holds all state needed by the Violation Monitoring screen
 export function useViolationMonitoring(classExamId: string | null) {
@@ -80,6 +82,50 @@ export function useViolationMonitoring(classExamId: string | null) {
     setViolationsError(null);
   }, []);
 
+  const { showToast } = useToast();
+  const [sessionToRemove, setSessionToRemove] =
+    useState<ViolationSessionRow | null>(null);
+  const [isRemoving, setIsRemoving] = useState(false);
+  const [removeError, setRemoveError] = useState<string | null>(null);
+
+  // opens the confirm dialog for one row
+  const requestRemove = useCallback((session: ViolationSessionRow) => {
+    setRemoveError(null);
+    setSessionToRemove(session);
+  }, []);
+
+  // closes the dialog, unless a removal is already in flight
+  const cancelRemove = useCallback(() => {
+    if (isRemoving) return; // don't let the dialog vanish mid-request
+    setSessionToRemove(null); // forget the row
+    setRemoveError(null); // and any error
+  }, [isRemoving]);
+
+  const confirmRemove = useCallback(async () => {
+    if (!sessionToRemove || isRemoving) return; // nothing selected, or already running (double-click guard)
+    setIsRemoving(true); // disable the confirm button
+    setRemoveError(null); // start clean
+    try {
+      const result = await removeStudentFromExam(sessionToRemove.id); // the real call
+      if (result === "removed") {
+        showToast(`${sessionToRemove.studentName} was removed from the exam.`); // success message
+      } else {
+        showToast(
+          "That attempt had already finished, so nothing was changed.",
+          "error",
+        ); // the race case
+      }
+      setSessionToRemove(null); // close the dialog
+      await fetchSessions(); // reload so the row shows its real status
+    } catch (err) {
+      setRemoveError(
+        err instanceof Error ? err.message : "Failed to remove the student.",
+      ); // keep the dialog open with the reason
+    } finally {
+      setIsRemoving(false); // always re-enable the button
+    }
+  }, [sessionToRemove, isRemoving, showToast, fetchSessions]);
+
   return {
     sessions,
     header,
@@ -92,5 +138,11 @@ export function useViolationMonitoring(classExamId: string | null) {
     violationsError,
     openViolationModal,
     closeViolationModal,
+    sessionToRemove,
+    isRemoving,
+    removeError,
+    requestRemove,
+    cancelRemove,
+    confirmRemove,
   };
 }
