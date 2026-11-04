@@ -8,6 +8,8 @@ import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SubmittedAnswer } from "../../services/examService";
 import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — logs violations to the database
+import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; // checks once a minute if the teacher removed this student
+import { checkIfRemoved } from "../../services/removalService"; // one-time check used when a submit fails
 
 import type {
   ExamQuestionScreenProps,
@@ -161,6 +163,7 @@ export function ExamQuestionScreen({
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
   useViolationLogger(sessionId);
+  useRemovalWatcher(sessionId);
   const {
     questions: fetchedQuestions,
     isLoading,
@@ -175,6 +178,7 @@ export function ExamQuestionScreen({
       const result = await submitSession(sessionId, "timed_out", answers); // real grading call
       if (!result) {
         console.error("Failed to mark session as timed out:"); // don't block navigation on this failing
+        if (await checkIfRemoved(sessionId)) return;
       }
     }
     navigateTo("examResult");
@@ -382,6 +386,7 @@ export function ExamQuestionScreen({
       const result = await submitSession(sessionId, "submitted", answers); // real grading call
       if (!result) {
         console.error("Failed to submit exam session:"); // don't block navigation on this failing
+        if (await checkIfRemoved(sessionId)) return;
       }
     }
     onSubmit?.();

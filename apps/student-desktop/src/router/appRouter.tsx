@@ -11,6 +11,8 @@ import { ExamQuestionScreen } from "../screens/examQuestion/examQuestionScreen";
 import { ExamResultScreen } from "../screens/examResult/examResultScreen";
 import { ArchiveScreen } from "../screens/archive/archiveScreen";
 import { AppSidebar } from "../components/layout/appSidebar";
+import { useExamSessionStore } from "../stores/useExamSessionStore"; // holds the removed flag
+import { RemovedFromExamModal } from "../components/modals/removedFromExamModal"; // the modal from step 4
 import "./appRouter.css";
 
 // useAuth is no longer imported here — AppRouter owns the session check directly,
@@ -31,7 +33,7 @@ export function AppRouter() {
   const currentScreen = useRouterLogic((state) => state.currentScreen);
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const { user, isLoading, setUser, setIsLoading } = useAuthStore();
-
+  const removed = useExamSessionStore((state) => state.removed); // true after a teacher removes the student
   // Runs once on mount — checks if a session already exists
   // (e.g. student reopens the app without logging out).
   // This is the ONLY place the session check happens.
@@ -85,6 +87,10 @@ export function AppRouter() {
         INITIALIZING...
       </div>
     );
+  }
+
+  if (removed) {
+    return <RemovedFromExamModal />;
   }
 
   const ScreenComponent = screenComponents[currentScreen];
