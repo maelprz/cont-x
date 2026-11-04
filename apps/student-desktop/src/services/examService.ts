@@ -38,7 +38,7 @@ export async function lookupExamByCode(
     .select("id", { count: "exact", head: true }) // only need the count, not the rows
     .eq("exam_id", exam.id)
     .eq("student_id", user.id)
-    .in("status", ["submitted", "timed_out"]); // these are the statuses that use up an attempt
+    .in("status", ["submitted", "timed_out", "removed"]); // these are the statuses that use up an attempt
 
   if (countError) throw new Error(countError.message); // real DB/network errors bubble up
 
@@ -75,6 +75,8 @@ export async function verifySessionCode(
   const result = data?.[0]; // rpc calls return an array, we only expect one row
 
   if (!result) throw new Error("Verification failed. Please try again.");
+  if (!result.session_id)
+    throw new Error("You have no attempts left for this exam.");
 
   return {
     sessionId: result.session_id, // real session id from the database
