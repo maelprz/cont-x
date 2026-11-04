@@ -114,7 +114,7 @@ export async function getClassExamResults(
   if (sessionIds.length > 0) {
     const { data: drawData, error: drawError } = await supabase
       .from("session_pool_questions")
-      .select("id, session_id, pool_id, pool_title, pool_order_index, max_points")
+      .select("id, session_id, pool_id, pool_title, pool_order_index, question_bank_id, title, max_points")
       .in("session_id", sessionIds);
     if (drawError) throw drawError;
     draws = (drawData as PoolDrawRow[] | null) ?? [];

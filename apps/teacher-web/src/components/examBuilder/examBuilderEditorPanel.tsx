@@ -2,10 +2,12 @@ import { Trash2 } from "lucide-react";
 import type {
   BuilderQuestion,
   CodingBuilderQuestion,
+  FITBBuilderQuestion,
   MCQBuilderQuestion,
   QuestionType,
 } from "../../screens/examBuilder/examBuilderScreen.types";
 import { MCQEditorPanel } from "./mcqEditorPanel";
+import { FITBEditorPanel } from "./fitbEditorPanel";
 import { CodingEditorPanel } from "./codingEditorPanel";
 import { starterCodeFor, mainCodeFor } from "./createBlankQuestion";
 
@@ -14,7 +16,6 @@ interface ExamBuilderEditorPaneProps {
   error: string | null;
   activeQuestion?: BuilderQuestion;
   editorTab: QuestionType;
-  isMCQ: boolean;
   isSavingDraft: boolean;
   isSavingExam: boolean;
   statusError: string | null;
@@ -41,7 +42,6 @@ export function ExamBuilderEditorPanel({
   error,
   activeQuestion,
   editorTab,
-  isMCQ,
   isSavingDraft,
   isSavingExam,
   statusError,
@@ -81,9 +81,11 @@ export function ExamBuilderEditorPanel({
           >
             {poolPanel
               ? "Each student gets a random selection of the questions in this pool."
-              : isMCQ
+              : editorTab === "multiple-choice"
                 ? "Configure your multiple choice question and correct options."
-                : "Configure your coding challenge requirements and test cases."}
+                : editorTab === "fill-in-the-blank"
+                  ? "Configure your fill-in-the-blank question and the answers it accepts."
+                  : "Configure your coding challenge requirements and test cases."}
           </p>
         </div>
         <div className="flex items-center gap-3 flex-shrink-0">
@@ -146,7 +148,7 @@ export function ExamBuilderEditorPanel({
               className="inline-flex rounded-lg p-0.5 mb-6"
               style={{ backgroundColor: "var(--color-base-300)" }}
             >
-              {(["multiple-choice", "coding"] as QuestionType[]).map((tab) => (
+              {(["multiple-choice", "coding", "fill-in-the-blank"] as QuestionType[]).map((tab) => (
                 <button
                   key={tab}
                   onClick={() => onTabSwitch(tab)}
@@ -159,13 +161,13 @@ export function ExamBuilderEditorPanel({
                     opacity: editorTab === tab ? 1 : 0.6,
                   }}
                 >
-                  {tab === "multiple-choice" ? "Multiple Choice" : "Coding Question"}
+                  {tab === "multiple-choice" ? "Multiple Choice" : tab === "coding" ? "Coding Question" : "Fill in the Blank"}
                 </button>
               ))}
             </div>
 
             {activeQuestion &&
-              (isMCQ ? (
+              (editorTab === "multiple-choice" ? (
                 <MCQEditorPanel
                   question={
                     activeQuestion.type === "multiple-choice"
@@ -179,6 +181,22 @@ export function ExamBuilderEditorPanel({
                   onChange={onQuestionChange}
                   onPreviewRendered={onPreviewRendered}
                 />
+              ) : editorTab === "fill-in-the-blank" ? (
+                <FITBEditorPanel
+                  question={
+                    activeQuestion.type === "fill-in-the-blank"
+                      ? (activeQuestion as FITBBuilderQuestion)
+                      : ({
+                          ...activeQuestion,
+                          type: "fill-in-the-blank",
+                          acceptedAnswers: [{ id: crypto.randomUUID(), text: "" }],
+                          caseSensitive: false,
+                          ignoreExtraSpaces: true,
+                        } as FITBBuilderQuestion)
+                  }
+                  onChange={onQuestionChange}
+                  onPreviewRendered={onPreviewRendered}
+                />
               ) : (
                 <CodingEditorPanel
                   question={
@@ -188,7 +206,6 @@ export function ExamBuilderEditorPanel({
                           ...activeQuestion,
                           type: "coding",
                           starterCode: starterCodeFor("cProgram"),
-                          filename: "main.py",
                           testCases: [],
                           programType: "cProgram",
                           mainCode: mainCodeFor("cProgram"),

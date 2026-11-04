@@ -1,4 +1,4 @@
-import { Trash2, Plus, CircleDot, Code2, X } from "lucide-react";
+import { Trash2, Plus, CircleDot, Code2, TextCursorInput, X } from "lucide-react";
 import type { BuilderPool } from "../../screens/examBuilder/examBuilderScreen.types";
 
 // Edits one random pool: how many questions students get, optional fixed
@@ -120,13 +120,15 @@ export function PoolEditorPanel({
             >
               {item.type === "coding" ? (
                 <Code2 size={14} style={{ opacity: 0.5 }} />
+              ) : item.type === "fill-in-the-blank" ? (
+                <TextCursorInput size={14} style={{ opacity: 0.5 }} />
               ) : (
                 <CircleDot size={14} style={{ opacity: 0.5 }} />
               )}
               <div className="flex-1 min-w-0">
                 <p className="text-[14px] font-medium truncate text-[var(--color-base-content)]">{item.title}</p>
                 <p className="text-[12px] opacity-60 text-[var(--color-base-content)]">
-                  {item.type === "coding" ? "Coding" : "Multiple Choice"} • {item.points} pts
+                  {item.type === "coding" ? "Coding" : item.type === "fill-in-the-blank" ? "Fill in the Blank" : "Multiple Choice"} • {item.points} pts
                 </p>
               </div>
               {!readOnly && (

@@ -4,6 +4,7 @@ import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
 import { CodingEditorPanel } from "../../components/examBuilder/codingEditorPanel";
+import { FITBEditorPanel } from "../../components/examBuilder/fitbEditorPanel";
 import { UnsavedChangesPrompt } from "../../components/examBuilder/unsavedChangesPrompt";
 import { useToast } from "../../hooks/useToast";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
@@ -27,11 +28,13 @@ import {
 import {
   createBlankMCQuestion,
   createBlankCodingQuestion,
+  createBlankFitbQuestion,
 } from "../../components/examBuilder/createBlankQuestion";
 import type {
   BuilderQuestion,
   MCQBuilderQuestion,
   CodingBuilderQuestion,
+  FITBBuilderQuestion,
   QuestionType,
 } from "../examBuilder/examBuilderScreen.types";
 
@@ -70,7 +73,7 @@ export function QuestionBankScreen() {
   const [search, setSearch] = useState("");
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
   const [originalTagIds, setOriginalTagIds] = useState<string[]>([]);
-  const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding">("all");
+  const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding" | "fill-in-the-blank">("all");
   const [showNewQuestionModal, setShowNewQuestionModal] = useState(false);
   const [newTagNameInEditor, setNewTagNameInEditor] = useState("");
 
@@ -200,7 +203,9 @@ export function QuestionBankScreen() {
     const blank =
       type === "multiple-choice"
         ? createBlankMCQuestion(crypto.randomUUID(), 0)
-        : createBlankCodingQuestion(crypto.randomUUID(), 0);
+        : type === "fill-in-the-blank"
+          ? createBlankFitbQuestion(crypto.randomUUID(), 0)
+          : createBlankCodingQuestion(crypto.randomUUID(), 0);
     setEditingQuestion(blank);
     setSavedQuestionSnapshot(null); // nothing saved yet — matches the "not yet persisted" state
     setEditingTagIds([]);
@@ -398,6 +403,11 @@ export function QuestionBankScreen() {
                   question={editingQuestion as MCQBuilderQuestion}
                   onChange={(q) => setEditingQuestion(q)}
                 />
+              ) : editingQuestion.type === "fill-in-the-blank" ? (
+                <FITBEditorPanel
+                  question={editingQuestion as FITBBuilderQuestion}
+                  onChange={(q) => setEditingQuestion(q)}
+                />
               ) : (
                 <CodingEditorPanel
                   question={editingQuestion as CodingBuilderQuestion}
@@ -520,7 +530,7 @@ export function QuestionBankScreen() {
 
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-[12px] opacity-60 font-medium">Type:</span>
-                {(["all", "multiple-choice", "coding"] as const).map((type) => (
+                {(["all", "multiple-choice", "coding", "fill-in-the-blank"] as const).map((type) => (
                   <button
                     key={type}
                     onClick={() => setActiveTypeFilter(type)}
@@ -531,7 +541,7 @@ export function QuestionBankScreen() {
                       color: activeTypeFilter === type ? "white" : "var(--color-base-content)",
                     }}
                   >
-                    {type === "all" ? "All" : type === "multiple-choice" ? "Multiple Choice" : "Coding"}
+                    {type === "all" ? "All" : type === "multiple-choice" ? "Multiple Choice" : type === "coding" ? "Coding" : "Fill in the Blank"}
                   </button>
                 ))}
               </div>
@@ -597,7 +607,7 @@ export function QuestionBankScreen() {
                             )}
                           </td>
                           <td className="py-3.5 px-5 text-[13px] border-b border-[var(--color-base-300)] opacity-70">
-                            {q.type === "multiple-choice" ? "Multiple Choice" : "Coding"}
+                            {q.type === "multiple-choice" ? "Multiple Choice" : q.type === "coding" ? "Coding" : "Fill in the Blank"}
                           </td>
                           <td className="py-3.5 px-5 text-[13px] border-b border-[var(--color-base-300)] opacity-70">{q.points}</td>
                           <td className="py-3.5 px-5 text-[13px] border-b border-[var(--color-base-300)]">
