@@ -42,6 +42,13 @@ export function NewQuestionModal({
           >
             Coding Question
           </button>
+          <button
+            onClick={() => onSelectType("fill-in-the-blank")}
+            className="px-4 py-3 rounded-lg border text-left text-[14px] font-medium cursor-pointer transition-opacity hover:opacity-70"
+            style={{ borderColor: "var(--color-base-300)", color: "var(--color-base-content)", backgroundColor: "var(--color-base-200)" }}
+          >
+            Fill in the Blank
+          </button>
         </div>
         <button
           onClick={onClose}

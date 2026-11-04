@@ -1,4 +1,4 @@
-export type QuestionType = "multiple-choice" | "coding";
+export type QuestionType = "multiple-choice" | "coding" | "fill-in-the-blank";
 
 export interface MCQOption {
   id: string;
@@ -13,7 +13,7 @@ export interface TestCase {
   isHidden: boolean;
 }
 
-// Shared fields across both question types
+// Shared fields across all question types
 interface BaseBuilderQuestion {
   id: string;
   number: number;
@@ -40,7 +40,22 @@ export interface CodingBuilderQuestion extends BaseBuilderQuestion {
   referenceSolution: string;
 }
 
-export type BuilderQuestion = MCQBuilderQuestion | CodingBuilderQuestion;
+// One answer a fill-in-the-blank question accepts, e.g. "PPT" and "PowerPoint" are two of them.
+export interface FITBAnswer {
+  id: string;
+  text: string;
+}
+
+// An identification question: the student types an answer, and it is correct if it
+// matches ANY of the accepted answers.
+export interface FITBBuilderQuestion extends BaseBuilderQuestion {
+  type: "fill-in-the-blank";
+  acceptedAnswers: FITBAnswer[];
+  caseSensitive: boolean; // false: "Stack" and "stack" both count
+  ignoreExtraSpaces: boolean; // true: leading, trailing and repeated spaces are ignored
+}
+
+export type BuilderQuestion = MCQBuilderQuestion | CodingBuilderQuestion | FITBBuilderQuestion;
 
 // One bank question sitting inside a random pool. Only enough to show it in
 // the builder — the full question stays in the bank and is what gets served.

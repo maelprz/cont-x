@@ -1,9 +1,11 @@
 import { Plus } from "lucide-react";
-import { CircleDot, Code2, Shuffle } from "lucide-react";
+import { CircleDot, Code2, Shuffle, TextCursorInput } from "lucide-react";
 import type { BuilderPool, BuilderQuestion, QuestionType } from "../../screens/examBuilder/examBuilderScreen.types";
 
 function typeLabel(type: QuestionType) {
-  return type === "multiple-choice" ? "Multiple Choice" : "Coding";
+  if (type === "multiple-choice") return "Multiple Choice";
+  if (type === "fill-in-the-blank") return "Fill in the Blank";
+  return "Coding";
 }
 
 function QuestionListItem({
@@ -37,6 +39,8 @@ function QuestionListItem({
         </p>
         {question.type === "coding" ? (
           <Code2 size={14} style={{ color: isActive ? "var(--color-secondary)" : "var(--color-base-content)", opacity: isActive ? 1 : 0.4 }} />
+        ) : question.type === "fill-in-the-blank" ? (
+          <TextCursorInput size={14} style={{ color: isActive ? "var(--color-secondary)" : "var(--color-base-content)", opacity: isActive ? 1 : 0.4 }} />
         ) : (
           <CircleDot size={14} style={{ color: isActive ? "var(--color-secondary)" : "var(--color-base-content)", opacity: isActive ? 1 : 0.4 }} />
         )}

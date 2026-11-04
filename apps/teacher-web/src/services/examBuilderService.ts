@@ -1,10 +1,13 @@
 import { supabase } from "./supabaseClient";
+import { requireFitbAnswer } from "../lib/fitbAnswers";
 import type {
   BuilderQuestion,
   BuilderPool,
   MCQBuilderQuestion,
   CodingBuilderQuestion,
+  FITBBuilderQuestion,
   CodingProgramType,
+  FITBAnswer,
   MCQOption,
   TestCase,
 } from "../screens/examBuilder/examBuilderScreen.types";
@@ -12,6 +15,12 @@ import type {
 function generateExamCode(): string {
   return `EX-${Math.random().toString(36).slice(2, 8).toUpperCase()}`;
 }
+
+// one row of fitb_answer exactly as stored in the database
+type FitbAnswerRow = {
+  id: string;
+  answer_text: string;
+};
 
 // one row of mc_options exactly as stored in the database
 type MCOptionRow = {
@@ -37,6 +46,11 @@ type QuestionRow = {
   order_index: number;
   max_points: number;
   mcq_question: { mc_options: MCOptionRow[] } | null;
+  fitb_question: {
+    case_sensitive: boolean;
+    ignore_extra_spaces: boolean;
+    fitb_answer: FitbAnswerRow[];
+  } | null;
   coding_question: {
     starter_code: string | null;
     program_type: CodingProgramType;
@@ -58,7 +72,7 @@ type PoolRow = {
     id: string;
     question_bank_id: string;
     // null if the bank question isn't visible to this teacher any more
-    question_bank: { id: string; title: string; type: "mcq" | "coding"; max_points: number } | null;
+    question_bank: { id: string; title: string; type: "mcq" | "coding" | "fitb"; max_points: number } | null;
   }[];
 };
 
@@ -136,6 +150,26 @@ function mapMcqRow(row: QuestionRow): MCQBuilderQuestion | null {
   };
 }
 
+// turns one fill-in-the-blank question row into the shape its editor expects
+function mapFitbRow(row: QuestionRow): FITBBuilderQuestion | null {
+  if (!row.fitb_question) return null; // missing child row, skip this question
+
+  return {
+    id: row.id,
+    number: row.order_index + 1,
+    title: row.title,
+    type: "fill-in-the-blank",
+    points: row.max_points,
+    description: row.prompt,
+    acceptedAnswers: row.fitb_question.fitb_answer.map((a) => ({
+      id: a.id,
+      text: a.answer_text,
+    })),
+    caseSensitive: row.fitb_question.case_sensitive,
+    ignoreExtraSpaces: row.fitb_question.ignore_extra_spaces,
+  };
+}
+
 // turns one coding question row into the shape the coding editor expects
 function mapCodingRow(row: QuestionRow): CodingBuilderQuestion | null {
   if (!row.coding_question) return null; // missing child row, skip this question
@@ -165,6 +199,7 @@ function mapCodingRow(row: QuestionRow): CodingBuilderQuestion | null {
 function mapQuestionRow(row: QuestionRow): BuilderQuestion | null {
   if (row.type === "mcq") return mapMcqRow(row);
   if (row.type === "coding") return mapCodingRow(row);
+  if (row.type === "fitb") return mapFitbRow(row);
   return null; // "fitb" has no builder UI yet, skip until that's built
 }
 
@@ -187,6 +222,11 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
         prompt,
         order_index,
         max_points,
+        fitb_question (
+          case_sensitive,
+          ignore_extra_spaces,
+          fitb_answer ( id, answer_text )
+        ),
         mcq_question (
           mc_options ( id, option_text, is_correct )
         ),
@@ -254,7 +294,12 @@ function mapPoolRow(row: PoolRow): BuilderPool {
       // keep the item even if its bank row can't be read — dropping it here
       // would make the next save delete it from the pool
       title: item.question_bank?.title ?? "Unavailable question",
-      type: item.question_bank?.type === "coding" ? "coding" : "multiple-choice",
+      type:
+        item.question_bank?.type === "coding"
+          ? "coding"
+          : item.question_bank?.type === "fitb"
+            ? "fill-in-the-blank"
+            : "multiple-choice",
       points: item.question_bank?.max_points ?? 0,
     })),
   };
@@ -422,12 +467,48 @@ async function syncTestCases(
   }
 }
 
+// deletes accepted answers no longer in the current list, then upserts the rest
+async function syncFitbAnswers(questionId: string, answers: FITBAnswer[]): Promise<void> {
+  const { data: existingRows, error: fetchError } = await supabase
+    .from("fitb_answer")
+    .select("id")
+    .eq("fitb_question_id", questionId);
+  if (fetchError) throw fetchError;
+
+  const existingIds = new Set((existingRows ?? []).map((r) => r.id));
+  const currentIds = new Set(answers.map((a) => a.id));
+  const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id)); // removed by teacher
+
+  if (idsToDelete.length > 0) {
+    const { error: deleteError } = await supabase.from("fitb_answer").delete().in("id", idsToDelete);
+    if (deleteError) throw deleteError;
+  }
+
+  const { error: upsertError } = await supabase.from("fitb_answer").upsert(
+    answers.map((a) => ({
+      id: a.id,
+      fitb_question_id: questionId,
+      answer_text: a.text,
+    })),
+  );
+  if (upsertError) throw upsertError;
+}
+
 // saves one question (and its type-specific child rows) to the database
 export async function saveQuestion(
   examId: string,
   question: BuilderQuestion,
 ): Promise<void> {
-  const dbType = question.type === "multiple-choice" ? "mcq" : "coding"; // matches db's check constraint
+  // checked before anything is written, so a question with no usable answer never reaches the database
+  const fitbAnswers =
+    question.type === "fill-in-the-blank" ? requireFitbAnswer(question.acceptedAnswers) : [];
+
+  const dbType =
+    question.type === "multiple-choice"
+      ? "mcq"
+      : question.type === "fill-in-the-blank"
+        ? "fitb"
+        : "coding"; // matches db's check constraint
 
   // if the points changed on a question students may already have answered, the database
   // rescales every stored score (and total) by the same ratio and logs the change
@@ -472,6 +553,15 @@ export async function saveQuestion(
     if (mcqError) throw mcqError;
 
     await syncMcOptions(question.id, question.options);
+  } else if (question.type === "fill-in-the-blank") {
+    const { error: fitbError } = await supabase.from("fitb_question").upsert({
+      question_id: question.id,
+      case_sensitive: question.caseSensitive,
+      ignore_extra_spaces: question.ignoreExtraSpaces,
+    });
+    if (fitbError) throw fitbError;
+
+    await syncFitbAnswers(question.id, fitbAnswers);
   } else {
     const { error: codingError } = await supabase
       .from("coding_question")
