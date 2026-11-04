@@ -99,6 +99,7 @@ function ViolationDetailModal({
               <tr className="text-left opacity-60">
                 <th className="pb-2 font-medium">Type</th>
                 <th className="pb-2 font-medium">Details</th>
+                <th className="pb-2 font-medium">Question</th>
                 <th className="pb-2 font-medium">Time</th>
               </tr>
             </thead>
@@ -113,6 +114,9 @@ function ViolationDetailModal({
                   </td>
                   <td className="py-2 pr-3 opacity-80">
                     {violation.details ?? "—"}
+                  </td>
+                  <td className="py-2 pr-3 opacity-80">
+                    {violation.questionTitle ?? "—"}
                   </td>
                   <td className="py-2 opacity-80">{violation.loggedAt}</td>
                 </tr>

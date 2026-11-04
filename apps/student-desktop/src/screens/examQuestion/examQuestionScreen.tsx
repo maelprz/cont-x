@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect } from "react"; // added useMemo for reshaping fetched data
+import { useState, useMemo, useEffect, useRef } from "react"; // added useMemo for reshaping fetched data
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real examId/sessionId from Confirmation
 import { useExamQuestions } from "../../hooks/useExamQuestions"; // real question fetch
@@ -162,7 +162,8 @@ export function ExamQuestionScreen({
   const examId = useExamSessionStore((state) => state.examId); // real exam id from Confirmation
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
-  useViolationLogger(sessionId);
+  const questionIdRef = useRef<string | null>(null);
+  useViolationLogger(sessionId, questionIdRef); // NEW — logs violations to the database
   useRemovalWatcher(sessionId);
   const {
     questions: fetchedQuestions,
@@ -199,6 +200,9 @@ export function ExamQuestionScreen({
 
   // Tracks which question is currently shown, by position in the loaded list.
   const [currentIndex, setCurrentIndex] = useState(0);
+  useEffect(() => {
+    questionIdRef.current = fetchedQuestions[currentIndex]?.id ?? null; // null while loading
+  }, [fetchedQuestions, currentIndex]);
   // Tracks flagged state per question id, kept in memory only for now.
   const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
   // Tracks each question's chosen MCQ option id, kept in memory only for now.

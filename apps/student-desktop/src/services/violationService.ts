@@ -50,6 +50,7 @@ function mapRawViolation(raw: RawViolation): {
 export async function logViolation(
   sessionId: string,
   raw: RawViolation,
+  questionId: string | null = null,
 ): Promise<void> {
   console.log("========== VIOLATION ==========");
   console.log("sessionId:", sessionId);
@@ -96,6 +97,7 @@ export async function logViolation(
     session_id: sessionId,
     violation_type: type,
     details,
+    question_id: questionId,
   };
 
   console.log("Insert payload:", payload);

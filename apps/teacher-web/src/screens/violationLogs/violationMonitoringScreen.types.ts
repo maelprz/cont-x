@@ -14,4 +14,5 @@ export type ViolationDetailRow = {
   violationType: "alt_tab" | "windows" | "screenshot" | "copy_paste";
   details: string | null;
   loggedAt: string;
+  questionTitle: string | null;
 };
