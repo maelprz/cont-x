@@ -1,14 +1,21 @@
-import { create } from "zustand"; // same state library used by useAuthStore/routerLogic
+import { create } from "zustand";
 
 // Shape of the exam data carried from Dashboard to Confirmation.
 interface ExamSessionState {
   examId: string | null; // exams.id — used by the RPC call on Confirmation
-  examTitle: string | null; // shown on the Confirmation screen's header
-  examStatus: string | null; // carried along in case Confirmation needs it later
-  attemptsRemaining: number | null; // shown on the Attempts Left card
-  sessionId: string | null; // filled in only after verification succeeds
-  setExam: (exam: { id: string; title: string; status: string; attemptsRemaining: number }) => void; // called by Dashboard
+  examTitle: string | null;
+  examStatus: string | null;
+  attemptsRemaining: number | null;
+  sessionId: string | null;
+  setExam: (exam: {
+    id: string;
+    title: string;
+    status: string;
+    attemptsRemaining: number;
+  }) => void; // called by Dashboard
   setSessionId: (sessionId: string) => void; // called by Confirmation after success
+  removed: boolean;
+  markRemoved: () => void;
   reset: () => void; // clears everything — call this on logout
 }
 
@@ -26,6 +33,15 @@ export const useExamSessionStore = create<ExamSessionState>((set) => ({
       attemptsRemaining: exam.attemptsRemaining, // save for the Attempts Left card
     }),
   setSessionId: (sessionId) => set({ sessionId }), // save the new session's id
+  removed: false,
+  markRemoved: () => set({ removed: true }),
   reset: () =>
-    set({ examId: null, examTitle: null, examStatus: null, attemptsRemaining: null, sessionId: null }), // wipe on logout
+    set({
+      examId: null,
+      examTitle: null,
+      examStatus: null,
+      attemptsRemaining: null,
+      sessionId: null,
+      removed: false,
+    }), // wipe on logout
 }));
