@@ -132,6 +132,7 @@ type ViolationLogRow = {
   violation_type: "alt_tab" | "windows" | "screenshot" | "copy_paste";
   details: string | null;
   logged_at: string;
+  questions: One<{ title: string }>;
 };
 
 // turns a raw violation row into the shape the modal expects
@@ -141,6 +142,7 @@ function mapViolationRowToDetailRow(row: ViolationLogRow): ViolationDetailRow {
     violationType: row.violation_type,
     details: row.details,
     loggedAt: formatTimestamp(row.logged_at),
+    questionTitle: unwrapOne(row.questions)?.title ?? null,
   };
 }
 
@@ -150,7 +152,7 @@ export async function getViolationsForSession(
 ): Promise<ViolationDetailRow[]> {
   const { data, error } = await supabase
     .from("violation_logs")
-    .select("id, violation_type, details, logged_at")
+    .select("id, violation_type, details, logged_at, questions(title)")
     .eq("session_id", sessionId)
     .order("logged_at", { ascending: true }); // earliest violation shown first
 
