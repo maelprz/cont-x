@@ -6,12 +6,14 @@ import type {
 
 type SessionRow = {
   id: string;
-  status: "in_progress" | "submitted" | "timed_out";
+  status: "in_progress" | "submitted" | "timed_out" | "removed";
   joined_at: string;
   submitted_at: string | null;
   attempt_number: number;
   violation_logs: { count: number }[];
 };
+
+export type RemoveStudentResult = "removed" | "not_in_progress";
 
 // one row from get_class_exam_results_students (teachers can't read the users table directly)
 type StudentNameRow = {
@@ -155,4 +157,16 @@ export async function getViolationsForSession(
   if (error) throw error; // let the hook decide how to show this error
 
   return (data as unknown as ViolationLogRow[]).map(mapViolationRowToDetailRow);
+}
+
+export async function removeStudentFromExam(
+  sessionId: string, // which attempt the teacher wants to remove
+): Promise<RemoveStudentResult> {
+  const { data, error } = await supabase.rpc("remove_student_from_exam", {
+    p_session_id: sessionId, // matches the SQL function's only parameter
+  });
+
+  if (error) throw new Error(error.message); // wrap it so the hook can show the real message (e.g. not authorized)
+
+  return data as RemoveStudentResult; // the function returns plain text, one of the two values above
 }

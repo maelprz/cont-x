@@ -1,5 +1,6 @@
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
+import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog"; // shared yes/no dialog, reused for the Remove confirmation
 import { useViolationMonitoring } from "../../hooks/useViolationMonitoring";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // reads which class exam is selected
 import type { ViolationDetailRow } from "./violationMonitoringScreen.types";
@@ -22,7 +23,7 @@ function getViolationTypeLabel(
 
 // turns a raw session status into a readable label
 function getStatusLabel(
-  status: "in_progress" | "submitted" | "timed_out",
+  status: "in_progress" | "submitted" | "timed_out" | "removed",
 ): string {
   switch (status) {
     case "in_progress":
@@ -31,6 +32,8 @@ function getStatusLabel(
       return "Submitted"; // student submitted their answers
     case "timed_out":
       return "Timed Out"; // the exam timer ran out
+    case "removed":
+      return "Removed"; // the teacher removed the student mid-exam
   }
 }
 
@@ -123,7 +126,9 @@ function ViolationDetailModal({
 }
 
 export function ViolationMonitoringScreen() {
-  const classExamId = useViolationMonitoringStore((state) => state.currentClassExamId);
+  const classExamId = useViolationMonitoringStore(
+    (state) => state.currentClassExamId,
+  );
   const {
     sessions,
     header,
@@ -136,6 +141,12 @@ export function ViolationMonitoringScreen() {
     violationsError,
     openViolationModal,
     closeViolationModal,
+    sessionToRemove, // the row waiting for the teacher's confirmation
+    isRemoving, // true while the remove call is running
+    removeError, // failure reason shown inside the confirm dialog
+    requestRemove, // opens the confirm dialog for one row
+    cancelRemove, // closes the dialog without removing anyone
+    confirmRemove, // runs the removal
   } = useViolationMonitoring(classExamId);
 
   return (
@@ -191,16 +202,18 @@ export function ViolationMonitoringScreen() {
                   <th className="px-5 py-3 font-medium">Joined</th>
                   <th className="px-5 py-3 font-medium">Submitted</th>
                   <th className="px-5 py-3 font-medium">Violations</th>
+                  <th className="px-5 py-3 font-medium">Actions</th>
                 </tr>
               </thead>
               <tbody>
                 {classExamId === null && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-5 py-6 text-center opacity-60"
                     >
-                      No class exam selected. Open this screen from an exam card.
+                      No class exam selected. Open this screen from an exam
+                      card.
                     </td>
                   </tr>
                 )}
@@ -208,7 +221,7 @@ export function ViolationMonitoringScreen() {
                 {classExamId !== null && isLoading && (
                   <tr>
                     <td
-                      colSpan={7}
+                      colSpan={8}
                       className="px-5 py-6 text-center opacity-60"
                     >
                       Loading sessions...
@@ -216,16 +229,18 @@ export function ViolationMonitoringScreen() {
                   </tr>
                 )}
 
-                {classExamId !== null && !isLoading && sessions.length === 0 && (
-                  <tr>
-                    <td
-                      colSpan={7}
-                      className="px-5 py-6 text-center opacity-60"
-                    >
-                      No attempts have been recorded for this class yet.
-                    </td>
-                  </tr>
-                )}
+                {classExamId !== null &&
+                  !isLoading &&
+                  sessions.length === 0 && (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-5 py-6 text-center opacity-60"
+                      >
+                        No attempts have been recorded for this class yet.
+                      </td>
+                    </tr>
+                  )}
 
                 {classExamId !== null &&
                   !isLoading &&
@@ -258,6 +273,17 @@ export function ViolationMonitoringScreen() {
                           {session.violationCount}
                         </button>
                       </td>
+
+                      <td className="px-5 py-3">
+                        {session.status === "in_progress" && ( // only a running attempt can be removed
+                          <button
+                            onClick={() => requestRemove(session)} // opens the confirm dialog for this row
+                            className="text-[13px] font-semibold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-error)]"
+                          >
+                            Remove
+                          </button>
+                        )}
+                      </td>
                     </tr>
                   ))}
               </tbody>
@@ -272,6 +298,17 @@ export function ViolationMonitoringScreen() {
         error={violationsError}
         violations={violations}
         onClose={closeViolationModal}
+      />
+
+      <ConfirmActionDialog
+        isOpen={sessionToRemove !== null} // open whenever a row is waiting for confirmation
+        title="Remove student?" // short question
+        message={`${sessionToRemove?.studentName ?? "This student"} will be removed from this exam. Their saved answers are kept, this attempt is used up, and they will be sent back to their dashboard shortly.`} // says exactly what happens
+        confirmLabel="Remove" // red confirm button text
+        isProcessing={isRemoving} // disables the button while the call runs
+        error={removeError} // shows a failure reason inside the dialog
+        onConfirm={confirmRemove} // runs the removal
+        onCancel={cancelRemove} // closes without doing anything
       />
     </div>
   );
