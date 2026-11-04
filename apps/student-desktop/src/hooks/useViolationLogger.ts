@@ -1,9 +1,13 @@
 import { useEffect, useRef } from "react";
 import { logViolation, type RawViolation } from "../services/violationService";
+import type { MutableRefObject } from "react";
 
 const DEBOUNCE_MS = 2000; // minimum time between logs of the same violation
 
-export function useViolationLogger(sessionId: string | null) {
+export function useViolationLogger(
+  sessionId: string | null,
+  questionIdRef: MutableRefObject<string | null>,
+) {
   const lastLoggedAt = useRef<Record<string, number>>({}); // tracks last log time for each violation type
 
   useEffect(() => {
@@ -23,7 +27,11 @@ export function useViolationLogger(sessionId: string | null) {
       if (now - lastTime < DEBOUNCE_MS) return;
 
       lastLoggedAt.current[payload.violationType] = now;
-      logViolation(sessionId, payload.violationType as RawViolation);
+      logViolation(
+        sessionId,
+        payload.violationType as RawViolation,
+        questionIdRef.current,
+      );
     };
 
     const unsubscribe = (window as any).ipcRenderer.onViolation(
