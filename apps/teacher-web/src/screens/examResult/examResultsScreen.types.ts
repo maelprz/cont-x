@@ -1,45 +1,46 @@
 // Shape of one row in the results table.
 export type StudentResultRow = {
-  sessionId: string; // maps to exam_sessions.id
-  studentName: string; // maps to users.first_name + last_name
-  studentIdNumber: string | null; // maps to users.id_number
-  scoreAdjustment: number; // manual change on top of the auto-graded score (0 when none)
-  adjustmentReason: string | null; // why the teacher adjusted it
-  totalScore: number; // maps to exam_sessions.total_score
-  maxScore: number; // fixed questions' max points plus the points of the pooled questions this student drew
-  attemptNumber: number; // maps to exam_sessions.attempt_number
-  questionScores: QuestionScoreCell[]; // one cell per question
-  poolScores: PoolScoreCell[]; // one cell per random pool this student drew from
+  sessionId: string; 
+  studentName: string; 
+  studentIdNumber: string | null; 
+  scoreAdjustment: number; 
+  adjustmentReason: string | null;
+  totalScore: number; 
+  maxScore: number; 
+  attemptNumber: number; 
+  overtimeSeconds: number;
+  questionScores: QuestionScoreCell[]; 
+  poolScores: PoolScoreCell[]; 
 };
 
 // What one student earned in one random pool; students draw different questions,
 // so the pool's maximum is for the questions THIS student drew.
 export type PoolScoreCell = {
-  poolKey: string; // the pool's id, or its position if the pool was deleted later
-  poolOrder: number; // the pool's position in the exam, for column order
-  title: string; // the pool's title, or "Random pool"
-  drawnCount: number; // how many questions this student drew from it
-  score: number; // points earned across those questions
-  maxPoints: number; // points those questions were worth
-  questions: PoolQuestionScore[]; // the individual questions drawn, so each keeps its own stats
+  poolKey: string; 
+  poolOrder: number;
+  title: string; 
+  drawnCount: number; 
+  score: number; 
+  maxPoints: number; 
+  questions: PoolQuestionScore[]; 
 };
 
 // What one student earned on one specific question they drew from a pool.
 export type PoolQuestionScore = {
-  bankQuestionId: string; // maps to session_pool_questions.question_bank_id
-  title: string; // the question's title when it was drawn
-  score: number; // maps to student_answers.score (0 when never answered)
-  maxPoints: number; // what this question was worth for this student
+  bankQuestionId: string; 
+  title: string; 
+  score: number; 
+  maxPoints: number; 
 };
 
 // One per-question cell in a result row.
 export type QuestionScoreCell = {
-  questionId: string; // maps to questions.id
-  label: string; // e.g. "Q1", built from question order
-  title: string; // maps to questions.title
-  maxPoints: number; // maps to questions.max_points
-  score: number; // maps to student_answers.score
-  status: "correct" | "incorrect"; // binary only, derived from score vs maxPoints
+  questionId: string; 
+  label: string; 
+  title: string; 
+  maxPoints: number;
+  score: number; 
+  status: "correct" | "incorrect"; 
 };
 
 // Props for the whole screen — optional overrides, mainly for testing.

@@ -2,6 +2,7 @@ import { useState, useEffect } from "react";
 import { useExamSettings } from "../../hooks/useExamSettings";
 import { useUpdateExamSettingsForm } from "../../hooks/useUpdateExamSettingsForm";
 import { isoToLocalInputValue, localInputValueToIso } from "../../lib/scheduleDateTime";
+import type { OvertimePolicy } from "../../services/classExamService";
 
 // editing setting for a single class attachment
 export function EditSettingsModal({
@@ -27,6 +28,10 @@ export function EditSettingsModal({
   const [passMarkInput, setPassMarkInput] = useState(""); // blank = no minimum
   const [verificationCode, setVerificationCode] = useState("");
   const [randomizeOrder, setRandomizeOrder] = useState(false);
+  const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicy>("accept");
+  const [sequential, setSequential] = useState(false);
+  const [allowReview, setAllowReview] = useState(false);
+  const [deductionInput, setDeductionInput] = useState("0"); // points lost per answer change; 0 = off
 
   // fills the form once real settings arrive for this class attachment
   useEffect(() => {
@@ -37,6 +42,10 @@ export function EditSettingsModal({
     setPassMarkInput(settings.passMark !== null ? String(settings.passMark) : "");
     setVerificationCode(settings.verificationCode ?? "");
     setRandomizeOrder(settings.randomizeOrder);
+    setOvertimePolicy(settings.overtimePolicy);
+    setSequential(settings.sequential);
+    setAllowReview(settings.allowReview);
+    setDeductionInput(String(settings.answerChangeDeduction));
     setIsScheduled(settings.startsAt !== null || settings.endsAt !== null);
     setStartsAtInput(isoToLocalInputValue(settings.startsAt));
     setEndsAtInput(isoToLocalInputValue(settings.endsAt));
@@ -53,8 +62,12 @@ export function EditSettingsModal({
     passMarkNumber !== null &&
     (!Number.isFinite(passMarkNumber) || passMarkNumber < 0 || passMarkNumber > 100);
 
+  // points lost each time a student changes an answer they already gave; blank counts as 0 (off)
+  const deductionNumber = deductionInput.trim() === "" ? 0 : Number(deductionInput);
+  const deductionInvalid = !Number.isFinite(deductionNumber) || deductionNumber < 0;
+
   const handleSave = async () => {
-    if (!classExamId || passMarkInvalid) return;
+    if (!classExamId || passMarkInvalid || deductionInvalid) return;
 
     const totalMinutes = durationHours * 60 + durationMinutesInput;
 
@@ -63,6 +76,10 @@ export function EditSettingsModal({
       durationMinutes: totalMinutes,
       passMark: passMarkNumber,
       randomizeOrder,
+      overtimePolicy,
+      sequential,
+      allowReview,
+      answerChangeDeduction: deductionNumber,
       ...(canEditVerificationCode ? { verificationCode: verificationCode.trim() } : {}),
       startsAt: isScheduled ? localInputValueToIso(startsAtInput) : null,
       endsAt: isScheduled ? localInputValueToIso(endsAtInput) : null,
@@ -222,7 +239,7 @@ export function EditSettingsModal({
               Students enter this right before their session begins.
             </p>
 
-            <label className="flex items-center gap-2 mb-5 cursor-pointer">
+            <label className="flex items-center gap-2 mb-4 cursor-pointer">
               <input
                 type="checkbox"
                 checked={randomizeOrder}
@@ -232,6 +249,70 @@ export function EditSettingsModal({
                 Shuffle question order for each student
               </span>
             </label>
+
+            <label className="flex items-center gap-2 mb-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={sequential}
+                onChange={(e) => setSequential(e.target.checked)}
+              />
+              <span className="text-[13px] text-[var(--color-base-content)]">
+                Students must answer questions in order
+              </span>
+            </label>
+            <p className="text-[11px] mb-4 ml-6 opacity-50 text-[var(--color-base-content)]">
+              They can&apos;t skip ahead past a question they haven&apos;t answered, but can go back.
+            </p>
+
+            <label className="flex items-center gap-2 mb-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allowReview}
+                onChange={(e) => setAllowReview(e.target.checked)}
+              />
+              <span className="text-[13px] text-[var(--color-base-content)]">
+                Let students view their answers after the exam
+              </span>
+            </label>
+            <p className="text-[11px] mb-4 ml-6 opacity-50 text-[var(--color-base-content)]">
+              You can change this after the exam has ended.
+            </p>
+
+            <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
+              When time runs out
+            </label>
+            <select
+              value={overtimePolicy}
+              onChange={(e) => setOvertimePolicy(e.target.value === "zero" ? "zero" : "accept")}
+              className="w-full px-3 py-2 rounded-lg border text-[13px] mb-1 bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
+            >
+              <option value="accept">Students can keep going, and it is logged as overtime</option>
+              <option value="zero">Students can keep going, but answers saved after time score zero</option>
+            </select>
+            <p className="text-[11px] mb-4 opacity-50 text-[var(--color-base-content)]">
+              Overtime shows next to the attempt on the results screen.
+            </p>
+
+            <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
+              Deduction for changing an answer{" "}
+              <span style={{ opacity: 0.5, fontWeight: 400 }}>(points)</span>
+            </label>
+            <input
+              type="number"
+              min={0}
+              step={0.5}
+              value={deductionInput}
+              onChange={(e) => setDeductionInput(e.target.value)}
+              className="w-28 px-3 py-2 rounded-lg border text-[13px] mb-1 bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
+            />
+            <p
+              className="text-[11px] mb-5"
+              style={deductionInvalid ? { color: "var(--color-error)" } : { opacity: 0.5 }}
+            >
+              {deductionInvalid
+                ? "Enter 0 or more."
+                : "Taken each time a student changes an answer they already gave. A question never goes below 0. Leave at 0 for no deduction."}
+            </p>
 
             {saveError && (
               <p className="text-[13px] mb-3" style={{ color: "var(--color-error)" }}>
@@ -250,7 +331,7 @@ export function EditSettingsModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={isSaving || !settings || passMarkInvalid}
+            disabled={isSaving || !settings || passMarkInvalid || deductionInvalid}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? "Saving..." : "Save Settings"}
