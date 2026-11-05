@@ -7,6 +7,7 @@ export type ViolationSessionRow = {
   joinedAt: string;
   submittedAt: string | null;
   violationCount: number;
+  removedAt: string | null;
 };
 
 export type ViolationDetailRow = {
@@ -14,5 +15,16 @@ export type ViolationDetailRow = {
   violationType: "alt_tab" | "windows" | "screenshot" | "copy_paste";
   details: string | null;
   loggedAt: string;
+  questionTitle: string | null;
+};
+
+export type ClassLogEntry = {
+  id: string;
+  kind: "violation" | "removal";
+  occurredAt: string;
+  studentName: string;
+  attemptNumber: number;
+  violationType: ViolationDetailRow["violationType"] | null;
+  details: string | null;
   questionTitle: string | null;
 };

@@ -4,6 +4,7 @@ import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog
 import { useViolationMonitoring } from "../../hooks/useViolationMonitoring";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // reads which class exam is selected
 import type { ViolationDetailRow } from "./violationMonitoringScreen.types";
+import { formatTimestamp } from "../../services/violationService"; // formats the raw log time for display
 
 // turns a raw violation_type value into a readable label
 function getViolationTypeLabel(
@@ -151,6 +152,10 @@ export function ViolationMonitoringScreen() {
     requestRemove, // opens the confirm dialog for one row
     cancelRemove, // closes the dialog without removing anyone
     confirmRemove, // runs the removal
+    activeTab, // which tab is showing
+    setActiveTab, // switches tabs
+    logEntries, // merged log rows (violations + removals), newest first
+    isLogTruncated, // true when the 500-row cap was hit
   } = useViolationMonitoring(classExamId);
 
   return (
@@ -195,104 +200,231 @@ export function ViolationMonitoringScreen() {
             </p>
           )}
 
-          <div className="rounded-2xl border overflow-hidden bg-[var(--color-base-100)] border-[var(--color-base-300)]">
-            <table className="w-full text-[13px] text-[var(--color-base-content)]">
-              <thead>
-                <tr className="text-left border-b border-[var(--color-base-300)] opacity-60">
-                  <th className="px-5 py-3 font-medium">Student</th>
-                  <th className="px-5 py-3 font-medium">ID Number</th>
-                  <th className="px-5 py-3 font-medium">Attempt</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Joined</th>
-                  <th className="px-5 py-3 font-medium">Submitted</th>
-                  <th className="px-5 py-3 font-medium">Violations</th>
-                  <th className="px-5 py-3 font-medium">Actions</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classExamId === null && (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="px-5 py-6 text-center opacity-60"
-                    >
-                      No class exam selected. Open this screen from an exam
-                      card.
-                    </td>
-                  </tr>
-                )}
+          {/* two buttons that switch between the attempts table and the class log */}
+          <div className="flex gap-2 mb-4">
+            {(["attempts", "log"] as const).map((tab) => (
+              <button
+                key={tab} // one button per tab
+                onClick={() => setActiveTab(tab)} // switch to this tab
+                className={`px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer border-[var(--color-base-300)] ${
+                  activeTab === tab
+                    ? "bg-[var(--color-base-100)] font-bold"
+                    : "opacity-60" // highlight the active tab
+                }`}
+              >
+                {tab === "attempts" ? "Attempts" : "Activity Log"}
+              </button>
+            ))}
+          </div>
 
-                {classExamId !== null && isLoading && (
-                  <tr>
-                    <td
-                      colSpan={8}
-                      className="px-5 py-6 text-center opacity-60"
-                    >
-                      Loading sessions...
-                    </td>
+          {/* attempts table: only shown on the attempts tab */}
+          {activeTab === "attempts" && (
+            <div className="rounded-2xl border overflow-hidden bg-[var(--color-base-100)] border-[var(--color-base-300)]">
+              <table className="w-full text-[13px] text-[var(--color-base-content)]">
+                <thead>
+                  <tr className="text-left border-b border-[var(--color-base-300)] opacity-60">
+                    <th className="px-5 py-3 font-medium">Student</th>
+                    <th className="px-5 py-3 font-medium">ID Number</th>
+                    <th className="px-5 py-3 font-medium">Attempt</th>
+                    <th className="px-5 py-3 font-medium">Status</th>
+                    <th className="px-5 py-3 font-medium">Joined</th>
+                    <th className="px-5 py-3 font-medium">Submitted</th>
+                    <th className="px-5 py-3 font-medium">Violations</th>
+                    <th className="px-5 py-3 font-medium">Actions</th>
                   </tr>
-                )}
-
-                {classExamId !== null &&
-                  !isLoading &&
-                  sessions.length === 0 && (
+                </thead>
+                <tbody>
+                  {classExamId === null && (
                     <tr>
                       <td
                         colSpan={8}
                         className="px-5 py-6 text-center opacity-60"
                       >
-                        No attempts have been recorded for this class yet.
+                        No class exam selected. Open this screen from an exam
+                        card.
                       </td>
                     </tr>
                   )}
 
-                {classExamId !== null &&
-                  !isLoading &&
-                  sessions.map((session) => (
-                    <tr
-                      key={session.id}
-                      className="border-t border-[var(--color-base-300)]"
-                    >
-                      <td className="px-5 py-3">{session.studentName}</td>
-                      <td className="px-5 py-3 opacity-80">
-                        {session.studentIdNumber}
-                      </td>
-                      <td className="px-5 py-3 opacity-80">
-                        {session.attemptNumber}
-                      </td>
-                      <td className="px-5 py-3 opacity-80">
-                        {getStatusLabel(session.status)}
-                      </td>
-                      <td className="px-5 py-3 opacity-80">
-                        {session.joinedAt}
-                      </td>
-                      <td className="px-5 py-3 opacity-80">
-                        {session.submittedAt ?? "—"}
-                      </td>
-                      <td className="px-5 py-3">
-                        <button
-                          onClick={() => openViolationModal(session.id)}
-                          className="font-bold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-secondary)]"
-                        >
-                          {session.violationCount}
-                        </button>
-                      </td>
-
-                      <td className="px-5 py-3">
-                        {session.status === "in_progress" && ( // only a running attempt can be removed
-                          <button
-                            onClick={() => requestRemove(session)} // opens the confirm dialog for this row
-                            className="text-[13px] font-semibold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-error)]"
-                          >
-                            Remove
-                          </button>
-                        )}
+                  {classExamId !== null && isLoading && (
+                    <tr>
+                      <td
+                        colSpan={8}
+                        className="px-5 py-6 text-center opacity-60"
+                      >
+                        Loading sessions...
                       </td>
                     </tr>
-                  ))}
-              </tbody>
-            </table>
-          </div>
+                  )}
+
+                  {classExamId !== null &&
+                    !isLoading &&
+                    sessions.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={8}
+                          className="px-5 py-6 text-center opacity-60"
+                        >
+                          No attempts have been recorded for this class yet.
+                        </td>
+                      </tr>
+                    )}
+
+                  {classExamId !== null &&
+                    !isLoading &&
+                    sessions.map((session) => (
+                      <tr
+                        key={session.id}
+                        className="border-t border-[var(--color-base-300)]"
+                      >
+                        <td className="px-5 py-3">{session.studentName}</td>
+                        <td className="px-5 py-3 opacity-80">
+                          {session.studentIdNumber}
+                        </td>
+                        <td className="px-5 py-3 opacity-80">
+                          {session.attemptNumber}
+                        </td>
+                        <td className="px-5 py-3 opacity-80">
+                          {getStatusLabel(session.status)}
+                        </td>
+                        <td className="px-5 py-3 opacity-80">
+                          {session.joinedAt}
+                        </td>
+                        <td className="px-5 py-3 opacity-80">
+                          {session.submittedAt ?? "—"}
+                        </td>
+                        <td className="px-5 py-3">
+                          <button
+                            onClick={() => openViolationModal(session.id)}
+                            className="font-bold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-secondary)]"
+                          >
+                            {session.violationCount}
+                          </button>
+                        </td>
+
+                        <td className="px-5 py-3">
+                          {session.status === "in_progress" && ( // only a running attempt can be removed
+                            <button
+                              onClick={() => requestRemove(session)} // opens the confirm dialog for this row
+                              className="text-[13px] font-semibold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-error)]"
+                            >
+                              Remove
+                            </button>
+                          )}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* class-wide activity log: only shown on the log tab */}
+          {activeTab === "log" && (
+            <div className="rounded-2xl border overflow-hidden bg-[var(--color-base-100)] border-[var(--color-base-300)]">
+              <table className="w-full text-[13px] text-[var(--color-base-content)]">
+                <thead>
+                  <tr className="text-left border-b border-[var(--color-base-300)] opacity-60">
+                    <th className="px-5 py-3 font-medium">Time</th>
+                    <th className="px-5 py-3 font-medium">Student</th>
+                    <th className="px-5 py-3 font-medium">Event</th>
+                    <th className="px-5 py-3 font-medium">Details</th>
+                    <th className="px-5 py-3 font-medium">Question</th>
+                  </tr>
+                </thead>
+                <tbody>
+                  {/* nothing to show until a class exam is selected */}
+                  {classExamId === null && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-5 py-6 text-center opacity-60"
+                      >
+                        No class exam selected. Open this screen from an exam
+                        card.
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* shown while the sessions and violations are loading */}
+                  {classExamId !== null && isLoading && (
+                    <tr>
+                      <td
+                        colSpan={5}
+                        className="px-5 py-6 text-center opacity-60"
+                      >
+                        Loading activity log...
+                      </td>
+                    </tr>
+                  )}
+
+                  {/* shown when nothing has happened yet */}
+                  {classExamId !== null &&
+                    !isLoading &&
+                    logEntries.length === 0 && (
+                      <tr>
+                        <td
+                          colSpan={5}
+                          className="px-5 py-6 text-center opacity-60"
+                        >
+                          No violations or removals recorded for this class
+                          exam.
+                        </td>
+                      </tr>
+                    )}
+
+                  {classExamId !== null &&
+                    !isLoading &&
+                    logEntries.map((entry) => (
+                      <tr
+                        key={entry.id} // prefixed id, unique across violations and removals
+                        className="border-t border-[var(--color-base-300)]"
+                      >
+                        {/* readable time built from the raw timestamp */}
+                        <td className="px-5 py-3 opacity-80">
+                          {formatTimestamp(entry.occurredAt)}
+                        </td>
+                        {/* student name, plus attempt number when known */}
+                        <td className="px-5 py-3">
+                          {entry.studentName}
+                          {entry.attemptNumber > 0
+                            ? ` (Attempt ${entry.attemptNumber})`
+                            : ""}
+                        </td>
+                        {/* removals are bold red so the teacher's action stands out */}
+                        <td
+                          className="px-5 py-3"
+                          style={
+                            entry.kind === "removal"
+                              ? { fontWeight: 700, color: "var(--color-error)" }
+                              : undefined
+                          }
+                        >
+                          {entry.kind === "removal"
+                            ? "Removed from exam"
+                            : getViolationTypeLabel(entry.violationType!)}
+                        </td>
+                        {/* extra text logged with the violation */}
+                        <td className="px-5 py-3 opacity-80">
+                          {entry.details ?? "—"}
+                        </td>
+                        {/* question open at the time, if known */}
+                        <td className="px-5 py-3 opacity-80">
+                          {entry.questionTitle ?? "—"}
+                        </td>
+                      </tr>
+                    ))}
+                </tbody>
+              </table>
+            </div>
+          )}
+
+          {/* tells the teacher older rows exist but were not loaded */}
+          {activeTab === "log" && isLogTruncated && (
+            <p className="text-[12px] opacity-60 mt-2">
+              Showing the newest 500 violations only.
+            </p>
+          )}
         </main>
       </div>
 
