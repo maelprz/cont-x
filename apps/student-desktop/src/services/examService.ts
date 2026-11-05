@@ -32,11 +32,11 @@ export async function lookupExamByCode(
   const exam = unwrapOne(classExam.exams as any); // handles Supabase's array-or-object quirk
   if (!exam) return null;
 
-  // count this student's finished attempts (either submitted or timed out) for this exam
+  // count this student's finished attempts (either submitted or timed out) for this class exam
   const { count, error: countError } = await supabase
     .from("exam_sessions")
     .select("id", { count: "exact", head: true }) // only need the count, not the rows
-    .eq("exam_id", exam.id)
+    .eq("class_exam_id", classExam.id) // CHANGED: attempts are limited per class exam, same as the server
     .eq("student_id", user.id)
     .in("status", ["submitted", "timed_out", "removed"]); // these are the statuses that use up an attempt
 
@@ -55,14 +55,14 @@ export async function lookupExamByCode(
 
 // Shape returned after a successful verification + session start.
 export interface SessionStartResult {
-  sessionId: string; // exam_sessions.id — needed to load the exam question screen
-  status: string; // "in_progress" — confirms the session is now active
+  sessionId: string; // exam_sessions.id, needed to load the exam question screen
+  status: string; // "in_progress" confirms the session is now active
 }
 
 // Calls the server-side RPC to check the code and start the session.
 // The real verification_code never leaves the database in this call.
 export async function verifySessionCode(
-  classExamId: string, // which exam the student is trying to enter
+  classExamId: string, // class_exams.id, which exam the student is trying to enter
   verificationCode: string,
 ): Promise<SessionStartResult> {
   const { data, error } = await supabase.rpc("verify_and_start_session", {
@@ -87,33 +87,33 @@ export async function verifySessionCode(
 // Real detail-card data for the Confirmation screen.
 export interface ExamConfirmationDetails {
   totalQuestions: number; // count of rows in questions for this exam
-  durationMinutes: number; // exams.duration_minutes, set directly by the teacher
-  passMark: number; // exams.pass_mark, e.g. 70
+  durationMinutes: number; // class_exams.duration_minutes, set by the teacher per class
+  passMark: number; // class_exams.pass_mark as a percent, e.g. 70 (0 when the teacher set none)
 }
 
 // Fetches the real numbers behind the Confirmation screen's detail cards.
 export async function getExamConfirmationDetails(
-  examId: string, // which exam to pull details for
+  classExamId: string, // class_exams.id, because duration and pass mark live there now
 ): Promise<ExamConfirmationDetails> {
-  const { data: exam, error: examError } = await supabase
-    .from("exams")
-    .select(`duration_minutes, pass_mark`)
-    .eq("id", examId)
-    .single(); // exactly one exam row expected
+  const { data: classExam, error: classExamError } = await supabase
+    .from("class_exams") // the table that owns the per-class settings
+    .select("duration_minutes, pass_mark") // only the two numbers the cards need
+    .eq("id", classExamId) // only this class's row
+    .single(); // exactly one row expected
 
-  if (examError) throw new Error(examError.message); // bubble up, let the hook decide the message
+  if (classExamError) throw new Error(classExamError.message); // bubble up, let the hook decide the message
 
   const { data: totalQuestions, error: countError } = await supabase.rpc(
-    "get_exam_question_count",
-    { p_exam_id: examId },
+    "get_class_exam_question_count", // CHANGED: new server function that checks class_exams.status and counts pool picks
+    { p_class_exam_id: classExamId }, // it takes the class exam id directly
   );
 
   if (countError) throw new Error(countError.message);
 
   return {
-    totalQuestions: totalQuestions ?? 0, // pull count out of embedded array
-    durationMinutes: exam.duration_minutes, // straight from the column, no math needed
-    passMark: exam.pass_mark,
+    totalQuestions: totalQuestions ?? 0, // fall back to 0 if the server returned null
+    durationMinutes: classExam.duration_minutes, // this class's own duration
+    passMark: classExam.pass_mark ?? 0, // null means no minimum, treated as 0 for now
   };
 }
 
@@ -127,7 +127,7 @@ function unwrapOne<T>(value: T | T[] | null | undefined): T | undefined {
 
 // Real data needed to run the countdown timer for a session.
 export interface SessionTimerInfo {
-  durationMinutes: number; // exams.duration_minutes, the total time allowed
+  durationMinutes: number; // class_exams.duration_minutes, the total time allowed
   joinedAt: string; // exam_sessions.joined_at, when the student actually started
 }
 
@@ -138,16 +138,18 @@ export async function getSessionTimerInfo(
 ): Promise<SessionTimerInfo> {
   const { data, error } = await supabase
     .from("exam_sessions")
-    .select("joined_at, exams ( duration_minutes )") // pull the parent exam's duration in the same call
+    .select("joined_at, class_exams ( duration_minutes )") // CHANGED: duration comes through the session's class exam
     .eq("id", sessionId)
     .single(); // exactly one session row expected
 
   if (error) throw new Error(error.message); // bubble up, let the hook decide the message
 
-  const examRow = unwrapOne(data.exams as any); // handles Supabase's array-or-object quirk, same as before
+  const classExam = unwrapOne(data.class_exams as any); // handles Supabase's array-or-object quirk, same as before
+
+  if (!classExam) throw new Error("Exam settings not found."); // CHANGED: fail loudly instead of silently timing 0 minutes
 
   return {
-    durationMinutes: examRow?.duration_minutes ?? 0, // fallback to 0 if somehow missing
+    durationMinutes: classExam.duration_minutes, // the real allowed minutes
     joinedAt: data.joined_at, // real timestamp the session actually started
   };
 }
@@ -185,9 +187,9 @@ export interface FetchedQuestion {
   options?: FetchedMCQOption[]; // present only when type is "mcq"
   starterCode?: string | null; // present only when type is "coding"
   language?: string; // coding_question.program_type, passed to Monaco as its language mode
-  programType?: "cFunction" | "cProgram"; // NEW — raw program_type, needed by the compiler IPC call
-  mainCode?: string | null; // NEW — coding_question.main_code, hidden main for "function" type
-  checkPenaltyPerAttempt?: number; // NEW — coding_question.check_penalty_per_attempt, used by Run Code scoring
+  programType?: "cFunction" | "cProgram"; // raw program_type, needed by the compiler IPC call
+  mainCode?: string | null; // coding_question.main_code, hidden main for "function" type
+  checkPenaltyPerAttempt?: number; // coding_question.check_penalty_per_attempt, used by Run Code scoring
 }
 
 // Converts the teacher-facing program_type label into a real Monaco
@@ -200,15 +202,6 @@ function mapToMonacoLanguage(programType: string | undefined): string {
     default:
       return "c"; // safe fallback if the value is missing or unrecognized
   }
-}
-
-// NEW — converts the stored program_type into the shape the compiler IPC
-// call expects: "function" means student code + hidden main are combined,
-// "program" means the student wrote their own main() already.
-function mapToProgramType(
-  programType: string | undefined,
-): "function" | "program" {
-  return programType === "cFunction" ? "function" : "program";
 }
 
 // Fetches every question for one exam, in the order the teacher set,
@@ -261,11 +254,11 @@ export async function getExamQuestions(
       language: isCoding
         ? mapToMonacoLanguage(codingRow?.program_type)
         : undefined, // Monaco language mode
-      programType: isCoding ? codingRow?.program_type : undefined, // CHANGED — pass through directly, no translation needed
-      mainCode: isCoding ? codingRow?.main_code : undefined, // NEW — hidden main for "function" type
+      programType: isCoding ? codingRow?.program_type : undefined, // pass through directly, no translation needed
+      mainCode: isCoding ? codingRow?.main_code : undefined, // hidden main for "function" type
       checkPenaltyPerAttempt: isCoding
         ? (codingRow?.check_penalty_per_attempt ?? 0)
-        : undefined, // NEW — Run Code scoring penalty
+        : undefined, // Run Code scoring penalty
     };
   });
 }
@@ -307,14 +300,14 @@ export async function submitExamSession(
 export interface ExamResultDetails {
   examTitle: string; // exams.title
   examCode: string; // exams.exam_code
-  durationMinutes: number; // exams.duration_minutes, the full allotted time
-  passMark: number; // exams.pass_mark
+  durationMinutes: number; // class_exams.duration_minutes, the full allotted time
+  passMark: number; // class_exams.pass_mark (0 when the teacher set none)
   joinedAt: string; // exam_sessions.joined_at
   submittedAt: string | null; // exam_sessions.submitted_at, null if somehow still open
-  totalScore: number; // exam_sessions.total_score — still a placeholder until real grading exists
-  maxScore: number; // sum of questions.max_points for this exam
+  totalScore: number; // exam_sessions.total_score
+  maxScore: number; // sum of questions.max_points for this exam (pool questions not included yet)
   totalQuestions: number; // count of every question in this exam, for the "X/Y Correct" metric
-  correctCount: number; //
+  correctCount: number; // how many saved answers scored above zero
 }
 
 // Fetches full result data for one specific session, used by the
@@ -329,21 +322,24 @@ export async function getExamResultDetails(
       joined_at,
       submitted_at,
       total_score,
+      class_exams (
+        duration_minutes,
+        pass_mark
+      ),
       exams (
         title,
         exam_code,
-        duration_minutes,
-        pass_mark,
         questions ( max_points )
       )
     `,
-    )
+    ) // CHANGED: duration and pass mark now come from class_exams
     .eq("id", sessionId)
     .single(); // exactly one session row expected
 
   if (error) throw new Error(error.message); // bubble up, let the screen decide the fallback
 
   const examRow = unwrapOne(data.exams as any); // handles the same array-or-object quirk as before
+  const classExam = unwrapOne(data.class_exams as any); // same unwrap for the class exam
 
   const questionList = examRow?.questions ?? []; // every question in this exam
 
@@ -353,7 +349,7 @@ export async function getExamResultDetails(
   ); // total possible points across every question in this exam
 
   // separate, real query: how many of this session's saved answers scored
-  // above zero — coding always scores 0, so only correctly-answered MCQs count
+  // above zero. Coding scores come from Run Code, so this is a rough count.
   const { count: correctCount, error: correctError } = await supabase
     .from("student_answers")
     .select("id", { count: "exact", head: true }) // only need the count, not the rows
@@ -364,9 +360,9 @@ export async function getExamResultDetails(
 
   return {
     examTitle: examRow?.title ?? "Exam",
-    examCode: examRow?.exam_code ?? "—",
-    durationMinutes: examRow?.duration_minutes ?? 0,
-    passMark: examRow?.pass_mark ?? 0,
+    examCode: examRow?.exam_code ?? "\u2014", // dash shown when the code is missing
+    durationMinutes: classExam?.duration_minutes ?? 0, // CHANGED: read from class_exams
+    passMark: classExam?.pass_mark ?? 0, // CHANGED: read from class_exams
     joinedAt: data.joined_at,
     submittedAt: data.submitted_at,
     totalScore: data.total_score ?? 0,
