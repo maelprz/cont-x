@@ -9,6 +9,7 @@ type SessionRow = {
   status: "in_progress" | "submitted" | "timed_out" | "removed";
   joined_at: string;
   submitted_at: string | null;
+  removed_at: string | null;
   attempt_number: number;
   violation_logs: { count: number }[];
 };
@@ -23,7 +24,7 @@ type StudentNameRow = {
   last_name: string;
 };
 
-function formatTimestamp(iso: string): string {
+export function formatTimestamp(iso: string): string {
   return new Date(iso).toLocaleString("en-US", {
     month: "short",
     day: "2-digit",
@@ -47,6 +48,7 @@ function mapSessionRowToTableRow(
     status: row.status,
     joinedAt: formatTimestamp(row.joined_at),
     submittedAt: row.submitted_at ? formatTimestamp(row.submitted_at) : null, // null stays null
+    removedAt: row.removed_at,
     violationCount: row.violation_logs[0]?.count ?? 0, // pull count out of embedded array
   };
 }
@@ -103,6 +105,7 @@ export async function getSessionsForClassExam(
       status,
       joined_at,
       submitted_at,
+      removed_at,
       attempt_number,
       violation_logs(count)
     `,
@@ -171,4 +174,41 @@ export async function removeStudentFromExam(
   if (error) throw new Error(error.message); // wrap it so the hook can show the real message (e.g. not authorized)
 
   return data as RemoveStudentResult; // the function returns plain text, one of the two values above
+}
+
+// one violation, flattened for the class-wide log
+export type ClassViolationRow = {
+  id: string; // violation row id
+  sessionId: string; // which attempt it belongs to
+  violationType: "alt_tab" | "windows" | "screenshot" | "copy_paste"; // what the student did
+  details: string | null; // extra text logged with it
+  loggedAt: string; // raw ISO time, used for sorting
+  questionTitle: string | null; // question open at the time, if known
+};
+
+export const CLASS_LOG_LIMIT = 500; // most violations we load per class exam
+
+// fetches the newest violations across every attempt of ONE class exam
+export async function getViolationsForClassExam(
+  classExamId: string, // the class exam being reviewed
+): Promise<ClassViolationRow[]> {
+  const { data, error } = await supabase
+    .from("violation_logs") // the table teachers can already read for their classes
+    .select(
+      "id, session_id, violation_type, details, logged_at, questions(title), exam_sessions!inner(class_exam_id)", // inner join so the filter below removes other classes' rows
+    )
+    .eq("exam_sessions.class_exam_id", classExamId) // only this class exam, never the whole exam
+    .order("logged_at", { ascending: false }) // newest first
+    .limit(CLASS_LOG_LIMIT); // stay under the server row cap
+
+  if (error) throw error; // let the hook show the message
+
+  return (data as any[]).map((row) => ({
+    id: row.id, // keep the row id
+    sessionId: row.session_id, // used to look up the student
+    violationType: row.violation_type, // what happened
+    details: row.details, // optional extra text
+    loggedAt: row.logged_at, // raw time for sorting
+    questionTitle: unwrapOne(row.questions)?.title ?? null, // supabase may return an object or a one-item array
+  }));
 }
