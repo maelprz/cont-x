@@ -2,8 +2,8 @@ import { create } from "zustand";
 
 // Shape of the exam data carried from Dashboard to Confirmation.
 interface ExamSessionState {
-  examId: string | null; // exams.id — used by the RPC call on Confirmation
-  classExamId: string | null;
+  examId: string | null; // exams.id, used to load the exam's questions
+  classExamId: string | null; // class_exams.id, used for the verify RPC, duration and pass mark
   examTitle: string | null;
   examStatus: string | null;
   attemptsRemaining: number | null;
@@ -12,28 +12,28 @@ interface ExamSessionState {
     id: string;
     classExamId: string;
     title: string;
-    status: string;
+    status?: string; // optional: the exam lookup result does not carry a status
     attemptsRemaining: number;
   }) => void; // called by Dashboard
   setSessionId: (sessionId: string) => void; // called by Confirmation after success
   removed: boolean;
   markRemoved: () => void;
-  reset: () => void; // clears everything — call this on logout
+  reset: () => void; // clears everything, call this on logout
 }
 
 export const useExamSessionStore = create<ExamSessionState>((set) => ({
   examId: null, // nothing loaded yet
-  classExamId: null,
+  classExamId: null, // nothing loaded yet
   examTitle: null,
   examStatus: null,
   attemptsRemaining: null,
   sessionId: null,
   setExam: (exam) =>
     set({
-      examId: exam.id, // save the id for the RPC call later
-      examTitle: exam.title, // save the title to display
+      examId: exam.id, // save the exam id for loading questions
       classExamId: exam.classExamId, // keep the class exam id so Confirmation can send it to the RPC
-      examStatus: exam.status ?? null,
+      examTitle: exam.title, // save the title to display
+      examStatus: exam.status ?? null, // status may be missing, so default to null
       attemptsRemaining: exam.attemptsRemaining, // save for the Attempts Left card
     }),
   setSessionId: (sessionId) => set({ sessionId }), // save the new session's id

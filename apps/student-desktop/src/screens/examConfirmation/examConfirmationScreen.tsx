@@ -31,7 +31,7 @@ function DetailCard({ label, value, subtext }: ExamDetail) {
 }
 
 // ---------------------------------------------------------------------------
-// Main screen — named export (not default)
+// Main screen, named export (not default)
 // ---------------------------------------------------------------------------
 
 export function ExamConfirmationScreen({
@@ -47,29 +47,29 @@ export function ExamConfirmationScreen({
 
   const user = useAuthStore((state) => state.user); // real student name + id number
   const storeExamId = useExamSessionStore((state) => state.examId); // real exam id from Dashboard
-  const storeClassExamId = useExamSessionStore((state) => state.classExamId);
+  const storeClassExamId = useExamSessionStore((state) => state.classExamId); // real class exam id from Dashboard
   const storeExamTitle = useExamSessionStore((state) => state.examTitle); // real exam title from Dashboard
   const setSessionId = useExamSessionStore((state) => state.setSessionId); // saves session id after verifying
   const storeAttemptsRemaining = useExamSessionStore(
     (state) => state.attemptsRemaining,
   ); // real attempts left
-  const { details } = useExamConfirmationDetails(storeExamId);
+  const { details, error: detailsError } = useExamConfirmationDetails(storeClassExamId); // duration and pass mark are keyed by class exam; error is shown so failures are visible
 
   // Builds the real detail cards from fetched data, falling back to placeholder text.
   const displayExamDetails: ExamDetail[] = examDetails ?? [
     {
       label: "Duration",
-      value: details ? `${details.durationMinutes} Minutes` : "—",
-      subtext: "Non-stop session",
+      value: details ? `${details.durationMinutes} Minutes` : "\u2014",
+      subtext: detailsError ?? "Non-stop session", // show the real error if the details failed to load
     },
     {
       label: "Total Questions",
-      value: details ? `${details.totalQuestions} Questions` : "—",
+      value: details ? `${details.totalQuestions} Questions` : "\u2014",
       subtext: "Live evaluation",
     },
     {
       label: "Pass Mark",
-      value: details ? `${details.passMark}% Threshold` : "—",
+      value: details ? `${details.passMark}% Threshold` : "\u2014",
       subtext: "Academy standard",
     },
     {
@@ -77,7 +77,7 @@ export function ExamConfirmationScreen({
       value:
         storeAttemptsRemaining != null
           ? `${storeAttemptsRemaining} Remaining`
-          : "—",
+          : "\u2014",
       subtext:
         storeAttemptsRemaining === 1 ? "Final attempt" : "Attempts remaining",
     },
@@ -86,10 +86,10 @@ export function ExamConfirmationScreen({
   // If this screen is reached with no exam loaded (e.g. back button, refresh),
   // send the student back to Dashboard instead of showing broken mock data.
   useEffect(() => {
-    if (!storeExamId) {
-      navigateTo("dashboard");
+    if (!storeExamId || !storeClassExamId) {
+      navigateTo("dashboard"); // CHANGED: both ids are needed on this screen
     }
-  }, [storeExamId, navigateTo]);
+  }, [storeExamId, storeClassExamId, navigateTo]);
 
   // Prop overrides win, otherwise use the real store value, otherwise fall back to mock.
   const displayTitle = examTitle ?? storeExamTitle;
@@ -127,20 +127,20 @@ export function ExamConfirmationScreen({
       />
       <SessionVerificationModal
         isOpen={isVerificationOpen}
-        examId={storeClassExamId ?? ""}
+        examId={storeClassExamId ?? ""} // the modal's examId prop carries the class exam id the server expects
         onConfirm={handleVerificationConfirm}
         onCancel={handleVerificationCancel}
       />
 
-      {/* ── Main canvas ───────────────────────────────────────────── */}
+      {/* Main canvas */}
       <main className="flex-grow flex items-center justify-center px-6 py-4 relative overflow-hidden bg-[var(--bg-app)]">
         {/* Atmospheric glow */}
         <div className="absolute top-1/2 left-1/2 w-[600px] h-[600px] rounded-full pointer-events-none" />
 
         <div className="relative z-10 w-full max-w-[860px]">
-          {/* ── Card ──────────────────────────────────────────────── */}
+          {/* Card */}
           <div className="bg-[var(--bg-sidebar)] rounded-xl p-10 overflow-hidden ">
-            {/* ── Card header ───────────────────────────────────── */}
+            {/* Card header */}
             <div className="mb-6">
               <h1 className="text-[28px] font-bold text-[var(--text-inverted)] leading-tight mb-1">
                 {displayTitle}
@@ -153,14 +153,14 @@ export function ExamConfirmationScreen({
               </p>
             </div>
 
-            {/* ── Detail grid ───────────────────────────────────── */}
+            {/* Detail grid */}
             <div className="grid grid-cols-4 gap-3 mb-5">
               {displayExamDetails.map((detail) => (
                 <DetailCard key={detail.label} {...detail} />
               ))}
             </div>
 
-            {/* ── Lockdown warning ──────────────────────────────── */}
+            {/* Lockdown warning */}
             <div className="flex gap-4 items-start p-4 mb-5 rounded-lg bg-[var(--warning-primary)] border border-[var(--warning-secondary)]">
               <div className="flex-shrink-0 w-9 h-9 rounded-lg flex items-center justify-center bg-[var(--warning-accent)]">
                 <svg
@@ -190,7 +190,7 @@ export function ExamConfirmationScreen({
               </div>
             </div>
 
-            {/* ── Action row ────────────────────────────────────── */}
+            {/* Action row */}
             <div className="flex flex-wrap items-center justify-between gap-3 pt-5 border-t border-[var(--border-primary)]">
               {/* Cancel */}
               <button
@@ -224,13 +224,13 @@ export function ExamConfirmationScreen({
             {/* Fine print */}
             <p className="text-center mt-4 font-mono text-[10px] font-semibold tracking-[0.14em] uppercase text-[var(--text-fine-print)]">
               By starting, you agree to the Academic Integrity Policy of
-              CodeLit.
+              Cont/x.
             </p>
           </div>
         </div>
       </main>
 
-      {/* ── Footer ────────────────────────────────────────────────── */}
+      {/* Footer */}
       <footer className="h-11 flex-shrink-0 flex items-center px-12 border-t border-[var(--border-primary)] backdrop-blur-sm bg-[var(--bg-footer)]">
         <div className="flex justify-between items-center w-full max-w-[1280px] mx-auto">
           <div className="flex items-center gap-1.5">
