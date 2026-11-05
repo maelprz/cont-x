@@ -1,5 +1,6 @@
 import { useState } from "react";
 import { updateClassExamSettings } from "../services/classExamService";
+import type { UpdateClassExamSettings } from "../services/classExamService";
 
 // saves changes to an existing class_exam's settings
 export function useUpdateExamSettingsForm() {
@@ -8,15 +9,7 @@ export function useUpdateExamSettingsForm() {
 
   async function saveSettings(
     classExamId: string,
-    settings: {
-      durationMinutes: number;
-      maxAttempts: number;
-      passMark: number | null;
-      randomizeOrder: boolean;
-      verificationCode?: string;
-      startsAt: string | null;
-      endsAt: string | null;
-    },
+    settings: UpdateClassExamSettings,
   ): Promise<boolean> {
     setIsSaving(true);
     setError(null);

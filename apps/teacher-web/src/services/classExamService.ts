@@ -44,6 +44,9 @@ export async function getAttachableClasses(
   return data ?? [];
 }
 
+// what happens to answers saved after the time limit: kept as normal, or scored zero
+export type OvertimePolicy = "accept" | "zero";
+
 // full settings snapshot for one class_exams row — the per-class equivalent
 // of the old "Edit Settings" modal data, now scoped to a single attachment
 export interface ClassExamSettingsData {
@@ -58,6 +61,10 @@ export interface ClassExamSettingsData {
   verificationCode: string | null;
   startsAt: string | null;
   endsAt: string | null;
+  overtimePolicy: OvertimePolicy; // students may go past the limit; this decides what late answers are worth
+  sequential: boolean; // true: questions must be answered in order, no skipping ahead
+  allowReview: boolean; // true: students can view their answers after the exam
+  answerChangeDeduction: number; // points lost each time a student changes an answer they already gave; 0 means off
 }
 
 export async function getClassExamSettings(
@@ -77,6 +84,10 @@ export async function getClassExamSettings(
       verification_code,
       starts_at,
       ends_at,
+      overtime_policy,
+      sequential,
+      allow_review,
+      answer_change_deduction,
       classes(name)
     `,
     )
@@ -99,6 +110,10 @@ export async function getClassExamSettings(
     verificationCode: data.verification_code,
     startsAt: data.starts_at,
     endsAt: data.ends_at,
+    overtimePolicy: data.overtime_policy === "zero" ? "zero" : "accept",
+    sequential: data.sequential,
+    allowReview: data.allow_review,
+    answerChangeDeduction: Number(data.answer_change_deduction),
   };
 }
 
@@ -189,17 +204,23 @@ export async function endClassExam(classExamId: string): Promise<void> {
 
 // edits settings on an existing attachment — verification code can only change
 // before it goes live, mirroring the old exams-level rule 1:1
+export type UpdateClassExamSettings = {
+  durationMinutes: number;
+  maxAttempts: number;
+  passMark: number | null;
+  randomizeOrder: boolean;
+  verificationCode?: string;
+  startsAt: string | null;
+  endsAt: string | null;
+  overtimePolicy: OvertimePolicy;
+  sequential: boolean;
+  allowReview: boolean;
+  answerChangeDeduction: number;
+};
+
 export async function updateClassExamSettings(
   classExamId: string,
-  settings: {
-    durationMinutes: number;
-    maxAttempts: number;
-    passMark: number | null;
-    randomizeOrder: boolean;
-    verificationCode?: string;
-    startsAt: string | null;
-    endsAt: string | null;
-  },
+  settings: UpdateClassExamSettings,
 ): Promise<void> {
   const updatePayload: Record<string, unknown> = {
     duration_minutes: settings.durationMinutes,
@@ -208,6 +229,10 @@ export async function updateClassExamSettings(
     randomize_order: settings.randomizeOrder,
     starts_at: settings.startsAt,
     ends_at: settings.endsAt,
+    overtime_policy: settings.overtimePolicy,
+    sequential: settings.sequential,
+    allow_review: settings.allowReview,
+    answer_change_deduction: settings.answerChangeDeduction,
   };
 
   if (settings.verificationCode !== undefined) {

@@ -10,6 +10,7 @@ import { useExamResults } from "../../hooks/useExamResults";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
 import { AdjustScoreModal } from "../../components/examResult/adjustScoreModal";
 import { computeQuestionPerformance } from "../../lib/resultsAnalytics.ts";
+import { formatOvertime } from "../../lib/overtime.ts";
 import { collectPoolColumns } from "../../lib/resultsPools.ts";
 import {
   buildResultsCsv,
@@ -364,7 +365,17 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                         className="border-b border-[var(--color-base-300)] last:border-0"
                       >
                         <td className="px-4 py-3">{row.studentName}</td>
-                        <td className="px-4 py-3">#{row.attemptNumber}</td>
+                        <td className="px-4 py-3">
+                          #{row.attemptNumber}
+                          {row.overtimeSeconds > 0 && (
+                            <span
+                              className="ml-2 text-[11px] font-medium"
+                              style={{ color: "var(--color-warning)" }}
+                            >
+                              {formatOvertime(row.overtimeSeconds)}
+                            </span>
+                          )}
+                        </td>
                         <td className="px-4 py-3 font-bold">
                           {row.totalScore}/{row.maxScore}
                           {row.scoreAdjustment !== 0 && (
