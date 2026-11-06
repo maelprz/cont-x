@@ -10,6 +10,7 @@ import type { SubmittedAnswer } from "../../services/examService";
 import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — logs violations to the database
 import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; // checks once a minute if the teacher removed this student
 import { checkIfRemoved } from "../../services/removalService"; // one-time check used when a submit fails
+import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; // asks the student to confirm before submitting
 
 import type {
   ExamQuestionScreenProps,
@@ -42,6 +43,10 @@ function statusStyle(
     return "bg-transparent text-[#c2c6d6] border-[#424754]";
   return "bg-transparent text-[#8c909f] border-[#424754]";
 }
+
+// One shared look for the Previous, Next and Submit buttons, so all three always match.
+const footerButtonClass =
+  "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer shadow-[0_0_20px_rgba(173,198,255,0.25)] transition-all duration-150 hover:bg-[#c5d7ff] hover:border-[#c5d7ff] hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(173,198,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:scale-100 disabled:hover:bg-[#adc6ff] disabled:hover:border-[#adc6ff]";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -160,7 +165,7 @@ function FillInBlankAnswer({
     <div className="flex flex-col gap-2 mt-6 w-full min-w-0">
       <label
         htmlFor="fitb-answer"
-        className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)]"
+        className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-black"
       >
         Your Answer
       </label>
@@ -177,7 +182,7 @@ function FillInBlankAnswer({
         maxLength={200} // a short answer, not an essay
         placeholder="Type your answer here"
         style={{ outline: "none", boxShadow: "none" }}
-        className="w-full px-5 py-4 rounded-lg border-[2px] border-[#00285d] bg-white text-[#00285d] placeholder:text-[#00285d]/60 text-[14px] font-medium box-border focus:border-[#001a3d]"
+        className="w-full px-5 py-4 rounded-lg border-[2px] border-[#00285d] bg-white text-[#00285d] placeholder:text-black text-[14px] font-medium box-border focus:border-[#001a3d]"
       />
       {/* Clears the typed answer, only shown once something is typed. */}
       {value !== "" && (
@@ -262,6 +267,10 @@ export function ExamQuestionScreen({
   );
   // Tracks each fill-in-the-blank question's typed answer, kept in memory only for now.
   const [fitbAnswers, setFitbAnswers] = useState<Record<string, string>>({});
+  // Controls the "Submit your answers?" confirmation modal.
+  const [isSubmitOpen, setIsSubmitOpen] = useState(false);
+  // True while the submit call is running, so a double click cannot send it twice.
+  const [isSubmitting, setIsSubmitting] = useState(false);
 
   // Builds the question map (sidebar grid) from the real fetched list.
   const questionMap: QuestionMapItem[] = useMemo(
@@ -458,12 +467,18 @@ export function ExamQuestionScreen({
   }
 
   const handleOnSubmit = async () => {
+    if (isSubmitting) return; // already sending, ignore extra clicks
+    setIsSubmitting(true); // lock the modal buttons while we send
     if (sessionId) {
       const answers = buildAnswers(); // every question's current answer, answered or not
       const result = await submitSession(sessionId, "submitted", answers); // real grading call
       if (!result) {
         console.error("Failed to submit exam session:"); // don't block navigation on this failing
-        if (await checkIfRemoved(sessionId)) return;
+        if (await checkIfRemoved(sessionId)) {
+          setIsSubmitting(false); // unlock, the removal flow takes over
+          setIsSubmitOpen(false); // close the modal
+          return;
+        }
       }
     }
     onSubmit?.();
@@ -493,6 +508,11 @@ export function ExamQuestionScreen({
     Object.keys(codeByQuestion).length +
     Object.values(fitbAnswers).filter((v) => v.trim() !== "").length; // rough answered count
   const progressTotal = fetchedQuestions.length; // real total question count
+  const answeredCount = fetchedQuestions.filter(
+    (q) =>
+      selectedOptions[q.id] || codeByQuestion[q.id] || fitbAnswers[q.id]?.trim(),
+  ).length; // questions that have some answer, for the submit summary
+  const flaggedCount = flaggedIds.size; // questions the student flagged
 
   const progressPct = Math.round((progressCurrent / progressTotal) * 100);
   const isCoding = question.type === "coding";
@@ -504,6 +524,17 @@ export function ExamQuestionScreen({
 
   return (
     <div className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden bg-[var(--bg-sidebar)]">
+      {/* Confirmation before the answers are sent for grading */}
+      <SubmitConfirmationModal
+        isOpen={isSubmitOpen}
+        totalCount={progressTotal}
+        answeredCount={answeredCount}
+        flaggedCount={flaggedCount}
+        isSubmitting={isSubmitting}
+        onConfirm={handleOnSubmit}
+        onCancel={() => setIsSubmitOpen(false)}
+      />
+
       {/* Top navigation bar */}
       <header className="h-14 flex-shrink-0 flex items-center px-6 border-b border-[var(--border-primary)] backdrop-blur-md z-10 bg-[var(--bg-sidebar)]">
         <div className="flex items-center justify-between w-full gap-4">
@@ -610,7 +641,7 @@ export function ExamQuestionScreen({
           </div>
           {/* Question body */}
           <div className="px-6 pb-4 min-w-0">
-            <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed mb-5">
+            <p className="text-[15px] text-black leading-relaxed mb-5">
               {question.body}
             </p>
 
@@ -735,7 +766,7 @@ export function ExamQuestionScreen({
           <button
             onClick={handlePrevious}
             disabled={question.number <= 1}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[#adc6ff]/60 bg-transparent text-[#adc6ff] text-[13px] font-semibold cursor-pointer hover:bg-[#adc6ff]/10 hover:border-[#adc6ff] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-[#adc6ff]/60"
+            className={footerButtonClass}
           >
             <svg
               width="14"
@@ -774,12 +805,8 @@ export function ExamQuestionScreen({
         </div>
         {/* Merged Next/Submit button, Submit only appears on the last question */}
         <button
-          onClick={isLastQuestion ? handleOnSubmit : handleNext}
-          className={
-            isLastQuestion
-              ? "flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]"
-              : "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer hover:bg-[#c5d7ff] hover:border-[#c5d7ff] transition-colors duration-150"
-          }
+          onClick={isLastQuestion ? () => setIsSubmitOpen(true) : handleNext}
+          className={footerButtonClass}
         >
           {isLastQuestion ? (
             "Submit"
