@@ -3,6 +3,7 @@ import { requireFitbAnswer } from "../lib/fitbAnswers";
 import type {
   BuilderQuestion,
   BuilderPool,
+  BuilderSection,
   MCQBuilderQuestion,
   CodingBuilderQuestion,
   FITBBuilderQuestion,
@@ -45,6 +46,7 @@ type QuestionRow = {
   prompt: string;
   order_index: number;
   max_points: number;
+  section_id: string | null;
   mcq_question: { mc_options: MCOptionRow[] } | null;
   fitb_question: {
     case_sensitive: boolean;
@@ -68,6 +70,7 @@ type PoolRow = {
   pick_count: number;
   order_index: number;
   points_per_question: number | null;
+  section_id: string | null;
   exam_question_pool_items: {
     id: string;
     question_bank_id: string;
@@ -86,6 +89,7 @@ type ExamBuilderRow = {
   description: string | null;
   questions: QuestionRow[];
   exam_question_pools: PoolRow[];
+  exam_sections: { id: string; title: string; order_index: number }[];
 };
 
 // shape of the initial settings collected when creating a new exam.
@@ -128,6 +132,7 @@ export interface ExamBuilderData {
   description: string; // empty string when not set, never null in the UI
   questions: BuilderQuestion[];
   pools: BuilderPool[]; // random "pick N of M" groups, in display order
+  sections: BuilderSection[]; // titled parts of the exam, in order; empty when the exam doesn't use sections
   attachedClassCount: number; // how many classes this exam is attached to; an attached exam can't be a draft
 }
 
@@ -197,10 +202,16 @@ function mapCodingRow(row: QuestionRow): CodingBuilderQuestion | null {
 
 // converts one raw question row into the union type the builder screen uses
 function mapQuestionRow(row: QuestionRow): BuilderQuestion | null {
-  if (row.type === "mcq") return mapMcqRow(row);
-  if (row.type === "coding") return mapCodingRow(row);
-  if (row.type === "fitb") return mapFitbRow(row);
-  return null; // "fitb" has no builder UI yet, skip until that's built
+  const mapped =
+    row.type === "mcq"
+      ? mapMcqRow(row)
+      : row.type === "coding"
+        ? mapCodingRow(row)
+        : row.type === "fitb"
+          ? mapFitbRow(row)
+          : null;
+  if (!mapped) return null; // unsupported or broken row
+  return { ...mapped, sectionId: row.section_id ?? null }; // which section it sits in, if any
 }
 
 // fetches one exam and all of its questions, ready for the builder screen
@@ -222,6 +233,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
         prompt,
         order_index,
         max_points,
+        section_id,
         fitb_question (
           case_sensitive,
           ignore_extra_spaces,
@@ -239,12 +251,14 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
           test_cases ( id, input, expected_output, is_hidden )
         )
       ),
+      exam_sections ( id, title, order_index ),
       exam_question_pools (
         id,
         title,
         pick_count,
         order_index,
         points_per_question,
+        section_id,
         exam_question_pool_items (
           id,
           question_bank_id,
@@ -256,6 +270,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
     .eq("id", examId)
     .order("order_index", { referencedTable: "questions" }) // keep questions in builder order
     .order("order_index", { referencedTable: "exam_question_pools" })
+    .order("order_index", { referencedTable: "exam_sections" })
     .single();
 
   if (error) throw error; // let the hook decide how to show this error
@@ -279,6 +294,7 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
       .map(mapQuestionRow)
       .filter((q): q is BuilderQuestion => q !== null), // drop unsupported/bad rows
     pools: row.exam_question_pools.map(mapPoolRow),
+    sections: (row.exam_sections ?? []).map((s) => ({ id: s.id, title: s.title })),
     attachedClassCount: attachedClassCount ?? 0,
   };
 }
@@ -289,6 +305,7 @@ function mapPoolRow(row: PoolRow): BuilderPool {
     title: row.title ?? "",
     pickCount: row.pick_count,
     pointsPerQuestion: row.points_per_question,
+    sectionId: row.section_id ?? null,
     items: row.exam_question_pool_items.map((item) => ({
       bankQuestionId: item.question_bank_id,
       // keep the item even if its bank row can't be read — dropping it here
@@ -303,6 +320,39 @@ function mapPoolRow(row: PoolRow): BuilderPool {
       points: item.question_bank?.max_points ?? 0,
     })),
   };
+}
+
+// Saves the exam's sections (new and renamed ones, in order). Run this BEFORE saving questions
+// and pools, because they point at their section.
+export async function saveSections(examId: string, sections: BuilderSection[]): Promise<void> {
+  if (sections.length === 0) return;
+  sections.forEach((section, index) => {
+    if (!section.title.trim()) throw new Error(`Section ${index + 1} needs a title.`);
+  });
+
+  const { error } = await supabase.from("exam_sections").upsert(
+    sections.map((section, index) => ({
+      id: section.id,
+      exam_id: examId,
+      title: section.title.trim(),
+      order_index: index,
+    })),
+  );
+  if (error) throw error;
+}
+
+// Removes sections the teacher deleted. Run this AFTER questions and pools are saved: the
+// database refuses to delete a section that anything still points at.
+export async function deleteRemovedSections(examId: string, sections: BuilderSection[]): Promise<void> {
+  const { data, error } = await supabase.from("exam_sections").select("id").eq("exam_id", examId);
+  if (error) throw error;
+
+  const keepIds = new Set(sections.map((s) => s.id));
+  const removedIds = (data ?? []).map((row) => row.id).filter((id) => !keepIds.has(id));
+  if (removedIds.length === 0) return;
+
+  const { error: deleteError } = await supabase.from("exam_sections").delete().in("id", removedIds);
+  if (deleteError) throw deleteError;
 }
 
 // Saves the exam's random pools: removes pools (and items) the teacher deleted,
@@ -357,6 +407,8 @@ export async function savePools(
       pick_count: pool.pickCount,
       order_index: questionCount + index,
       points_per_question: pool.pointsPerQuestion,
+      // only written when the builder knows the section, so other callers can't wipe it
+      ...(pool.sectionId !== undefined ? { section_id: pool.sectionId } : {}),
     })),
   );
   if (upsertError) throw upsertError;
@@ -543,6 +595,8 @@ export async function saveQuestion(
     prompt: question.description,
     order_index: question.number - 1, // ui numbering is 1-based, db is 0-based
     max_points: question.points,
+    // only written when the builder knows the section, so other callers can't wipe it
+    ...(question.sectionId !== undefined ? { section_id: question.sectionId } : {}),
   });
   if (questionError) throw questionError;
 

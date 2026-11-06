@@ -21,6 +21,7 @@ interface BaseBuilderQuestion {
   type: QuestionType;
   points: number;
   description: string; // markdown
+  sectionId?: string | null; // the exam section this question sits in; null/absent = no sections used
 }
 
 export interface MCQBuilderQuestion extends BaseBuilderQuestion {
@@ -74,6 +75,13 @@ export interface BuilderPool {
   // null = every question keeps its own points; a number forces them all to that value
   pointsPerQuestion: number | null;
   items: PoolItem[];
+  sectionId?: string | null; // the exam section this pool sits in; null/absent = no sections used
+}
+
+// A titled part of an exam, e.g. "Part 1 - Multiple choice". The array order is the section order.
+export interface BuilderSection {
+  id: string;
+  title: string;
 }
 
 export interface ExamBuilderScreenProps {

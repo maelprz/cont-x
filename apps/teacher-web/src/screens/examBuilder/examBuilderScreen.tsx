@@ -3,6 +3,7 @@ import type {
   ExamBuilderScreenProps,
   BuilderQuestion,
   BuilderPool,
+  BuilderSection,
   PoolItem,
   QuestionType,
 } from "./examBuilderScreen.types";
@@ -14,7 +15,14 @@ import { useAuthStore } from "../../store/useAuthStore";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { useRouterLogic } from "../../router/routerLogic";
 import { saveBankQuestion } from "../../services/questionBankService";
-import { saveQuestion as persistExamQuestion, savePools, countExamAttempts } from "../../services/examBuilderService";
+import {
+  saveQuestion as persistExamQuestion,
+  savePools,
+  saveSections,
+  deleteRemovedSections,
+  countExamAttempts,
+} from "../../services/examBuilderService";
+import { applySectionLayout } from "../../lib/sectionLayout";
 import { findPointChanges } from "../../lib/pointChanges";
 import type { PointChange } from "../../lib/pointChanges";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
@@ -70,6 +78,10 @@ export function ExamBuilderScreen({
   const [activePoolId, setActivePoolId] = useState<string | null>(null); // set while a pool (not a question) is open
   const [poolModalTargetId, setPoolModalTargetId] = useState<string | null>(null); // pool the bank picker should add to
   const [poolToDelete, setPoolToDelete] = useState<string | null>(null); // asks before a pool is removed
+  // exam sections (titled parts), tracked like pools: current + last saved
+  const [sections, setSections] = useState<BuilderSection[]>([]);
+  const [savedSections, setSavedSections] = useState<BuilderSection[]>([]);
+  const [activeSectionId, setActiveSectionId] = useState<string | null>(null); // where new questions and pools go
   // after saving, the library should open inside this exam's subject
   const setLibrarySubject = useExamLibraryStore((state) => state.setSelectedSubjectId);
 
@@ -109,7 +121,8 @@ export function ExamBuilderScreen({
   // true whenever the in-memory question list differs from what's actually persisted
   const hasUnsavedChanges =
     JSON.stringify(questions) !== JSON.stringify(savedQuestions) ||
-    JSON.stringify(pools) !== JSON.stringify(savedPools);
+    JSON.stringify(pools) !== JSON.stringify(savedPools) ||
+    JSON.stringify(sections) !== JSON.stringify(savedSections);
   
   const { showToast } = useToast();
 
@@ -118,14 +131,29 @@ export function ExamBuilderScreen({
     if (externalQuestions) return; // parent controls questions directly, skip
     if (!examData) return; // still loading, or no exam selected
 
-    const firstQuestion = examData.questions[0];
-    setQuestions(examData.questions);
-    setSavedQuestions(examData.questions); // snapshot of what's actually persisted
-    setPools(examData.pools);
-    setSavedPools(examData.pools);
+    // with sections, questions are laid out in section order (and numbered to match) before
+    // the saved snapshot is taken, so opening an exam never looks like it has unsaved changes
+    const layout = applySectionLayout(examData.questions, examData.pools, examData.sections);
+    const firstQuestion = layout.questions[0];
+    setQuestions(layout.questions);
+    setSavedQuestions(layout.questions); // snapshot of what's actually persisted
+    setPools(layout.pools);
+    setSavedPools(layout.pools);
+    setSections(examData.sections);
+    setSavedSections(examData.sections);
+    setActiveSectionId(firstQuestion?.sectionId ?? examData.sections[0]?.id ?? null);
     setActiveId(firstQuestion?.id ?? "");
     setEditorTab(firstQuestion?.type ?? "multiple-choice");
   }, [examData, externalQuestions]);
+
+  // keeps questions and pools in section order whenever sections or their contents change
+  useEffect(() => {
+    if (sections.length === 0) return;
+    const next = applySectionLayout(questions, pools, sections);
+    const numbersOf = (list: BuilderQuestion[]) => list.map((q) => `${q.id}:${q.number}`).join("|");
+    if (numbersOf(next.questions) !== numbersOf(questions)) setQuestions(next.questions);
+    if (next.pools.map((p) => p.id).join("|") !== pools.map((p) => p.id).join("|")) setPools(next.pools);
+  }, [questions, pools, sections]);
 
   // guard against leaving the screen with unsaved changes, both via in-app navigation and browser refresh/close
   useEffect(() => {
@@ -225,6 +253,60 @@ export function ExamBuilderScreen({
   // teacher chose to stay on this screen
   const handleCancelLeave = () => setPendingLeaveScreen(null);
 
+  // the section a new question or pool lands in: the one the teacher last opened (or the last one)
+  const sectionForNewItem = (): string | null => {
+    if (sections.length === 0) return null;
+    if (activeSectionId && sections.some((s) => s.id === activeSectionId)) return activeSectionId;
+    return sections[sections.length - 1].id;
+  };
+
+  // first click wraps everything already in the exam into "Section 1"; later clicks add an empty one
+  const handleAddSection = () => {
+    const created: BuilderSection = {
+      id: crypto.randomUUID(),
+      title: `Section ${sections.length + 1}`,
+    };
+    if (sections.length === 0) {
+      setQuestions((prev) => prev.map((q) => ({ ...q, sectionId: created.id })));
+      setPools((prev) => prev.map((p) => ({ ...p, sectionId: created.id })));
+    }
+    setSections((prev) => [...prev, created]);
+    setActiveSectionId(created.id);
+  };
+
+  const handleRenameSection = (id: string, title: string) =>
+    setSections((prev) => prev.map((s) => (s.id === id ? { ...s, title } : s)));
+
+  const handleMoveSection = (id: string, direction: -1 | 1) =>
+    setSections((prev) => {
+      const index = prev.findIndex((s) => s.id === id);
+      const target = index + direction;
+      if (index < 0 || target < 0 || target >= prev.length) return prev;
+      const next = [...prev];
+      [next[index], next[target]] = [next[target], next[index]];
+      return next;
+    });
+
+  // a section can only be deleted once it is empty, so no question is ever left without a home
+  const handleDeleteSection = (id: string) => {
+    const inUse = questions.some((q) => q.sectionId === id) || pools.some((p) => p.sectionId === id);
+    if (inUse) {
+      showToast("Move this section's questions to another section first.", "error");
+      return;
+    }
+    setSections((prev) => prev.filter((s) => s.id !== id));
+    setActiveSectionId((current) => (current === id ? null : current));
+  };
+
+  const handleMoveItemToSection = (kind: "question" | "pool", id: string, sectionId: string) => {
+    if (kind === "question") {
+      setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, sectionId } : q)));
+    } else {
+      setPools((prev) => prev.map((p) => (p.id === id ? { ...p, sectionId } : p)));
+    }
+    setActiveSectionId(sectionId);
+  };
+
   // opens the Question Bank modal instead of creating a blank question directly
   const handleAddQuestion = () => {
     setPoolModalTargetId(null);
@@ -241,6 +323,7 @@ export function ExamBuilderScreen({
           ? createBlankFitbQuestion(crypto.randomUUID(), questions.length + 1)
           : createBlankCodingQuestion(crypto.randomUUID(), questions.length + 1);
 
+    newQuestion.sectionId = sectionForNewItem(); // lands in the section the teacher is working in
     setQuestions((prev) => [...prev, newQuestion]);
     setPendingBankSaveIds((prev) => new Set(prev).add(newQuestion.id)); // needs a bank copy on first save
     setActivePoolId(null);
@@ -249,7 +332,9 @@ export function ExamBuilderScreen({
   };
 
   // runs once the modal finishes staging bank-selected questions — nothing is saved yet
-  const handleQuestionsAddedFromBank = (newQuestions: BuilderQuestion[]) => {
+  const handleQuestionsAddedFromBank = (pickedQuestions: BuilderQuestion[]) => {
+    const targetSection = sectionForNewItem();
+    const newQuestions = pickedQuestions.map((q) => ({ ...q, sectionId: targetSection }));
     setQuestions((prev) => [...prev, ...newQuestions]);
     setBankOriginSnapshots((prev) => {
       const next = new Map(prev);
@@ -271,6 +356,7 @@ export function ExamBuilderScreen({
         title: `Pool ${pools.length + 1}`,
         pickCount: target.pickCount,
         pointsPerQuestion: null,
+        sectionId: sectionForNewItem(),
         items,
       };
       setPools((prev) => [...prev, newPool]);
@@ -309,8 +395,10 @@ export function ExamBuilderScreen({
           ? createBlankFitbQuestion(activeQuestion.id, activeQuestion.number)
           : createBlankCodingQuestion(activeQuestion.id, activeQuestion.number));
 
+    // a discard undoes edits to the question, not where the teacher put it in the exam
+    const keptInSection: BuilderQuestion = { ...revertedQuestion, sectionId: activeQuestion.sectionId };
     setQuestions((prev) =>
-      prev.map((q) => (q.id === revertedQuestion.id ? revertedQuestion : q)),
+      prev.map((q) => (q.id === keptInSection.id ? keptInSection : q)),
     );
     setEditorTab(revertedQuestion.type); // matches the reverted question's actual type
     onDiscardQuestion?.();
@@ -359,6 +447,7 @@ export function ExamBuilderScreen({
     setActiveId(id);
     const q = questions.find((q) => q.id === id);
     if (q) setEditorTab(q.type);
+    if (q?.sectionId) setActiveSectionId(q.sectionId);
     onSelectQuestion?.(id);
   };
 
@@ -377,6 +466,7 @@ export function ExamBuilderScreen({
       title: activeQuestion.title,
       points: activeQuestion.points,
       description: activeQuestion.description,
+      sectionId: activeQuestion.sectionId,
     };
 
     // default coding format used when switching from MCQ into coding
@@ -435,6 +525,8 @@ export function ExamBuilderScreen({
         });
       }
 
+      await saveSections(examData.id, sections); // the question points at its section, so that row must exist first
+
       // Write it into the exam too. This used to only mark the question as "saved" in memory,
       // which switched off the unsaved-changes warning while nothing had reached the database.
       await persistExamQuestion(examData.id, activeQuestion);
@@ -461,6 +553,7 @@ export function ExamBuilderScreen({
 
     setSaveAllError(null);
     try {
+      await saveSections(examData.id, sections); // before questions and pools, which point at them
       for (const q of questions) {
         if (pendingBankSaveIds.has(q.id) && teacherId && examData.subjectId) {
           // reusable copy in this exam's subject bank, first time only
@@ -475,8 +568,10 @@ export function ExamBuilderScreen({
         await persistExamQuestion(examData.id, q); // upserts this question into the exam
       }
       await savePools(examData.id, pools, questions.length); // random pools sit after the questions
+      await deleteRemovedSections(examData.id, sections); // after everything has moved out of them
       setSavedQuestions(questions);
       setSavedPools(pools);
+      setSavedSections(sections);
       return null;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save all questions.";
@@ -555,7 +650,20 @@ export function ExamBuilderScreen({
             activeId={activePoolId ? "" : activeId}
             pools={pools}
             activePoolId={activePoolId}
-            onSelectPool={setActivePoolId}
+            onSelectPool={(id) => {
+              setActivePoolId(id);
+              const pool = pools.find((p) => p.id === id);
+              if (pool?.sectionId) setActiveSectionId(pool.sectionId);
+            }}
+            sections={sections}
+            activeSectionId={activeSectionId}
+            sectionsReadOnly={openedFromEditExam}
+            onSelectSection={setActiveSectionId}
+            onAddSection={handleAddSection}
+            onRenameSection={handleRenameSection}
+            onMoveSection={handleMoveSection}
+            onDeleteSection={handleDeleteSection}
+            onMoveItemToSection={handleMoveItemToSection}
             onSelectQuestion={handleSelectQuestion}
             onAddQuestion={handleAddQuestion}
             onReorderQuestions={onReorderQuestions}
