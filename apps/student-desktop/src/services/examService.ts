@@ -267,6 +267,7 @@ export async function getExamQuestions(
 export interface SubmittedAnswer {
   question_id: string;
   answer_text: string;
+  time_spent_seconds?: number;
 }
 
 export interface SubmitExamSessionResult {

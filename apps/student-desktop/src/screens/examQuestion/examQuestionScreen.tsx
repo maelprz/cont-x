@@ -11,6 +11,7 @@ import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — 
 import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; // checks once a minute if the teacher removed this student
 import { checkIfRemoved } from "../../services/removalService"; // one-time check used when a submit fails
 import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; // asks the student to confirm before submitting
+import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker"; // seconds spent per question
 
 import type {
   ExamQuestionScreenProps,
@@ -182,7 +183,7 @@ function FillInBlankAnswer({
         maxLength={200} // a short answer, not an essay
         placeholder="Type your answer here"
         style={{ outline: "none", boxShadow: "none" }}
-        className="w-full px-5 py-4 rounded-lg border-[2px] border-[#00285d] bg-white text-[#00285d] placeholder:text-black text-[14px] font-medium box-border focus:border-[#001a3d]"
+        className="w-full px-5 py-4 rounded-lg border-[3px] border-[#00285d] bg-white text-[#00285d] placeholder:text-black text-[14px] font-medium box-border focus:border-[#001a3d]"
       />
       {/* Clears the typed answer, only shown once something is typed. */}
       {value !== "" && (
@@ -255,6 +256,10 @@ export function ExamQuestionScreen({
   useEffect(() => {
     questionIdRef.current = fetchedQuestions[currentIndex]?.id ?? null; // null while loading
   }, [fetchedQuestions, currentIndex]);
+  // Times how long each question is on screen while the window is focused (WBS 6.7).
+  const { getTimes } = useQuestionTimeTracker(
+    fetchedQuestions[currentIndex]?.id ?? null,
+  );
   // Tracks flagged state per question id, kept in memory only for now.
   const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
   // Tracks each question's chosen MCQ option id, kept in memory only for now.
@@ -455,8 +460,10 @@ export function ExamQuestionScreen({
   const { submitSession } = useSubmitExamSession(); // real grading call + its own error state
 
   function buildAnswers(): SubmittedAnswer[] {
+    const times = getTimes(); // seconds spent on each question so far
     return fetchedQuestions.map((q) => ({
       question_id: q.id, // real question id
+      time_spent_seconds: times[q.id] ?? 0, // seconds on this question, 0 if never opened
       answer_text:
         q.type === "coding"
           ? (codeByQuestion[q.id] ?? "") // whatever code was typed, or empty if untouched

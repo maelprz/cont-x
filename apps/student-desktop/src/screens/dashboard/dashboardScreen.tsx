@@ -198,10 +198,6 @@ export function DashboardScreen(_props: DashboardScreenProps) {
           </div>
         </section>
       </main>
-
-      <footer className="mt-auto px-12 py-4 bg-[var(--bg-footer)] border-t border-[var(--border-primary)] text-[var(--text-fine-print)] text-xs items-center text-center">
-        <span>Cont/x — Development Build</span>
-      </footer>
     </div>
   );
 }
