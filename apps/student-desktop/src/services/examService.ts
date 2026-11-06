@@ -182,7 +182,7 @@ export interface FetchedQuestion {
   orderIndex: number; // questions.order_index, used to sort and number questions
   title: string; // questions.title, shown as the question heading
   prompt: string; // questions.prompt, shown as the question body text
-  type: "mcq" | "coding"; // questions.type, tells the UI which shape to expect
+  type: "mcq" | "coding" | "fitb"; // questions.type, tells the UI which shape to expect
   maxPoints: number; // questions.max_points, kept for future scoring use
   options?: FetchedMCQOption[]; // present only when type is "mcq"
   starterCode?: string | null; // present only when type is "coding"
@@ -231,6 +231,7 @@ export async function getExamQuestions(
   // Reshape each raw row into the flat FetchedQuestion shape the UI expects.
   return (data ?? []).map((row: any) => {
     const isCoding = row.type === "coding"; // check which question type this row is
+    const isMcq = row.type === "mcq"; // only MCQ rows carry options
 
     // Unwrap in case Supabase returned these as one-item arrays.
     const mcqRow = unwrapOne(row.mcq_question); // real mcq_question row, if any
@@ -243,13 +244,13 @@ export async function getExamQuestions(
       prompt: row.prompt, // question body text
       type: row.type, // "mcq" or "coding"
       maxPoints: row.max_points, // kept for later scoring
-      options: !isCoding
+      options: isMcq
         ? (mcqRow?.mc_options ?? []).map((opt: any) => ({
             id: opt.id, // real option id
             text: opt.option_text, // option label text
             isCorrect: opt.is_correct, // used only for local scoring later
           }))
-        : undefined, // coding questions have no options
+        : undefined, // coding and fill-in-the-blank questions have no options
       starterCode: isCoding ? codingRow?.starter_code : undefined, // pre-filled editor code
       language: isCoding
         ? mapToMonacoLanguage(codingRow?.program_type)

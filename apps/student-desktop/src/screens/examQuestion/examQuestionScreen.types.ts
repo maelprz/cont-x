@@ -2,7 +2,7 @@
 // Question types
 // ---------------------------------------------------------------------------
 
-export type QuestionType = 'coding' | 'multiple-choice';
+export type QuestionType = 'coding' | 'multiple-choice' | 'fill-in-the-blank';
 
 export type QuestionStatus = 'unanswered' | 'answered' | 'flagged';
 
@@ -48,7 +48,13 @@ export interface MCQQuestion extends BaseQuestion {
   selectedOptionId?: string;     // currently selected answer
 }
 
-export type Question = CodingQuestion | MCQQuestion;
+// Fill-in-the-blank: the prompt is the body text, the student types one short answer.
+// The accepted answers never reach the client, grading happens on the server.
+export interface FITBQuestion extends BaseQuestion {
+  type: 'fill-in-the-blank';
+}
+
+export type Question = CodingQuestion | MCQQuestion | FITBQuestion;
 
 // ---------------------------------------------------------------------------
 // Screen props

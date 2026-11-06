@@ -1,4 +1,11 @@
-import { CheckCircle2, Clock, Award, LayoutDashboard } from "lucide-react"; // pre-made icon components
+import {
+  CheckCircle2,
+  XCircle,
+  Clock,
+  Award,
+  Lock,
+  LayoutDashboard,
+} from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real sessionId, set either right after finishing or from clicking a history row
 import type {
@@ -29,7 +36,9 @@ function MetricCard({
       <p className="text-[var(--text-primary)] text-2xl font-semibold mb-1">
         {value}
       </p>
-      <p className="text-xs text-[var(--text-secondary)]">{subtext}</p>
+      <p className="text-xs text-[var(--text-secondary)] whitespace-pre-line">
+        {subtext}
+      </p>
     </div>
   );
 }
@@ -94,12 +103,21 @@ export function ExamResultScreen({
   const displayExamTitle = examTitle ?? details.examTitle;
   const displayCourseCode = courseCode ?? details.examCode;
   const displaySessionId = idToUse ?? "—";
-  // Real submitted_at, formatted; falls back to today's date only if somehow missing.
+  // Real submitted_at as a readable date and time, e.g. "Friday 6 November 2026, 2:50 PM".
+  const completedAt = details.submittedAt
+    ? new Date(details.submittedAt)
+    : new Date(); // falls back to now only if submitted_at is somehow missing
   const displayCompletedDate =
     completedDate ??
-    (details.submittedAt
-      ? new Date(details.submittedAt).toLocaleDateString("en-CA")
-      : new Date().toLocaleDateString("en-CA"));
+    `${completedAt.toLocaleDateString("en-GB", {
+      weekday: "long",
+      day: "numeric",
+      month: "long",
+      year: "numeric",
+    })}, ${completedAt.toLocaleTimeString("en-US", {
+      hour: "numeric",
+      minute: "2-digit",
+    })}`;
 
   // Real elapsed time: submitted_at minus joined_at, capped at the allotted duration.
   const allocationSeconds = details.durationMinutes * 60;
@@ -112,21 +130,36 @@ export function ExamResultScreen({
     : 0;
   const timeTakenSeconds = Math.max(Math.min(rawElapsed, allocationSeconds), 0);
 
+  // Answer review is off by default. There is no teacher setting for it yet,
+  // so when one exists, set this from that setting instead of a fixed false.
+  const reviewPermitted = false;
+
   const displayMetrics: ResultMetric[] = metrics ?? [
     {
       label: "Time Taken",
       value: formatDuration(timeTakenSeconds),
-      subtext: `Allocation: ${formatDuration(allocationSeconds)} max`,
+      subtext: `Completed on ${displayCompletedDate}\nAllocation: ${formatDuration(allocationSeconds)} max`, // completed on sits right under the time
     },
     {
       label: "Total Score",
       value: `${details.correctCount}/${details.totalQuestions} Correct`,
       subtext: `Total Points: ${details.maxScore}`,
     },
+    {
+      label: "Review",
+      value: reviewPermitted ? "Permitted" : "Not permitted",
+      subtext: reviewPermitted
+        ? "You can review your answers."
+        : "Your teacher has not allowed answer review for this exam.",
+    },
   ];
 
   const displayFinalScore = finalScore ?? details.totalScore;
   const displayMaxScore = maxScore ?? details.maxScore;
+  const displayPercent =
+    displayMaxScore > 0
+      ? Math.round((displayFinalScore / displayMaxScore) * 100)
+      : 0; // score as a percent, 0 if the exam has no points
 
   // Real pass/fail: percentage of points earned vs. the exam's pass_mark.
   const displayPassed =
@@ -145,8 +178,7 @@ export function ExamResultScreen({
             {displayExamTitle}
           </h1>
           <p className="font-[var(--font-label)] text-xs uppercase tracking-wide text-[var(--text-secondary)]">
-            {displayCourseCode} &middot; Completed on {displayCompletedDate}{" "}
-            &middot; Session ID: {displaySessionId}
+            {displayCourseCode} &middot; Session ID: {displaySessionId}
           </p>
         </div>
 
@@ -157,12 +189,12 @@ export function ExamResultScreen({
               : "bg-[rgba(239,68,68,0.15)] text-[#ef4444]"
           }`}
         >
-          <CheckCircle2 size={13} />
+          {displayPassed ? <CheckCircle2 size={13} /> : <XCircle size={13} />}
           {displayPassed ? "Pass" : "Fail"}
         </span>
       </div>
 
-      <main className="flex flex-col gap-8 px-8 pb-20 pt-20">
+      <main className="flex flex-col gap-8 px-8 pb-12 pt-8">
         {/* ── Score card ── */}
         <section className="bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-app)] border border-[var(--accent-blue)]/40 shadow-[0_8px_32px_rgba(0,0,0,0.35)] rounded-2xl p-7 flex flex-col gap-5">
           <div className="flex items-center gap-2">
@@ -180,6 +212,28 @@ export function ExamResultScreen({
               /{displayMaxScore}
             </span>
           </div>
+
+          {/* Score bar, the thin tick marks the pass mark */}
+          <div className="flex flex-col gap-2">
+            <div className="relative h-2 w-full rounded-full bg-[var(--border-subtle)]">
+              <div
+                className={`h-full rounded-full ${displayPassed ? "bg-[var(--accent-green)]" : "bg-[#ef4444]"}`}
+                style={{ width: `${Math.min(displayPercent, 100)}%` }}
+              />
+              {details.passMark > 0 && (
+                <span
+                  className="absolute top-[-3px] h-[14px] w-[2px] bg-[var(--text-primary)]"
+                  style={{ left: `${Math.min(details.passMark, 100)}%` }}
+                />
+              )}
+            </div>
+            <p className="font-[var(--font-label)] text-xs uppercase tracking-wide text-[var(--text-secondary)]">
+              {displayPercent}% &middot;{" "}
+              {details.passMark > 0
+                ? `Pass mark ${details.passMark}%`
+                : "No minimum pass mark"}
+            </p>
+          </div>
         </section>
 
         {/* ── Metric cards row ── */}
@@ -191,6 +245,8 @@ export function ExamResultScreen({
               icon={
                 metric.label === "Time Taken" ? (
                   <Clock size={14} className="text-[var(--text-secondary)]" />
+                ) : metric.label === "Review" ? (
+                  <Lock size={14} className="text-[var(--text-secondary)]" />
                 ) : (
                   <Award size={14} className="text-[var(--text-secondary)]" />
                 )
@@ -212,9 +268,6 @@ export function ExamResultScreen({
         </div>
       </main>
 
-      <footer className="mt-auto px-12 py-4 bg-[var(--bg-footer)] border-t border-[var(--border-primary)] text-[var(--text-fine-print)] text-xs items-center text-center">
-        <span>Cont/x — Development Build</span>
-      </footer>
     </div>
   );
 }
