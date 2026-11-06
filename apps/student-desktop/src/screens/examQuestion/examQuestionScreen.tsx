@@ -16,6 +16,7 @@ import type {
   QuestionMapItem,
   CodingQuestion,
   MCQQuestion,
+  FITBQuestion,
   Question,
 } from "./examQuestionScreen.types";
 
@@ -145,6 +146,52 @@ function MCQOptions({
   );
 }
 
+// Fill-in-the-blank answer box: one short typed answer, kept in the screen's state.
+function FillInBlankAnswer({
+  value,
+  onChange,
+  onClear,
+}: {
+  value: string;
+  onChange: (text: string) => void;
+  onClear: () => void;
+}) {
+  return (
+    <div className="flex flex-col gap-2 mt-6 w-full min-w-0">
+      <label
+        htmlFor="fitb-answer"
+        className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)]"
+      >
+        Your Answer
+      </label>
+      <input
+        id="fitb-answer"
+        type="text"
+        value={value}
+        onChange={(e) => onChange(e.target.value)} // every keystroke is saved to the screen state
+        onPaste={(e) => e.preventDefault()} // pasting is blocked, same spirit as the lockdown
+        onDrop={(e) => e.preventDefault()} // dragging text in is blocked too
+        autoComplete="off" // no browser suggestions
+        autoCorrect="off" // no autocorrect changing the answer
+        spellCheck={false} // no red squiggles giving hints
+        maxLength={200} // a short answer, not an essay
+        placeholder="Type your answer here"
+        style={{ outline: "none", boxShadow: "none" }}
+        className="w-full px-5 py-4 rounded-lg border-[2px] border-[#00285d] bg-white text-[#00285d] placeholder:text-[#00285d]/60 text-[14px] font-medium box-border focus:border-[#001a3d]"
+      />
+      {/* Clears the typed answer, only shown once something is typed. */}
+      {value !== "" && (
+        <span
+          onClick={onClear}
+          className="self-end mt-1 text-[13px] font-semibold cursor-pointer text-[#00285d] hover:underline"
+        >
+          Clear Answer
+        </span>
+      )}
+    </div>
+  );
+}
+
 // ---------------------------------------------------------------------------
 // Main screen, named export (not default)
 // ---------------------------------------------------------------------------
@@ -213,6 +260,8 @@ export function ExamQuestionScreen({
   const [codeByQuestion, setCodeByQuestion] = useState<Record<string, string>>(
     {},
   );
+  // Tracks each fill-in-the-blank question's typed answer, kept in memory only for now.
+  const [fitbAnswers, setFitbAnswers] = useState<Record<string, string>>({});
 
   // Builds the question map (sidebar grid) from the real fetched list.
   const questionMap: QuestionMapItem[] = useMemo(
@@ -221,11 +270,13 @@ export function ExamQuestionScreen({
         number: i + 1, // display position, not the database id
         status: flaggedIds.has(q.id)
           ? "flagged"
-          : selectedOptions[q.id] || codeByQuestion[q.id]
+          : selectedOptions[q.id] ||
+              codeByQuestion[q.id] ||
+              fitbAnswers[q.id]?.trim()
             ? "answered"
             : "unanswered",
       })),
-    [fetchedQuestions, flaggedIds, selectedOptions, codeByQuestion],
+    [fetchedQuestions, flaggedIds, selectedOptions, codeByQuestion, fitbAnswers],
   );
 
   // Converts the current fetched question into the shape the existing UI expects.
@@ -251,6 +302,10 @@ export function ExamQuestionScreen({
         mainCode: raw.mainCode ?? undefined, // NEW
         checkPenaltyPerAttempt: raw.checkPenaltyPerAttempt ?? 0, // NEW
       } as CodingQuestion;
+    }
+
+    if (raw.type === "fitb") {
+      return { ...shared, type: "fill-in-the-blank" } as FITBQuestion; // prompt only, the answer box is rendered separately
     }
 
     return {
@@ -319,6 +374,22 @@ export function ExamQuestionScreen({
     onCodeChange?.(question.number, code);
   };
 
+  const handleFitbChange = (text: string) => {
+    const current = fetchedQuestions[currentIndex];
+    if (!current) return; // guard against no question loaded
+    setFitbAnswers((prev) => ({ ...prev, [current.id]: text })); // remember what was typed for this question
+  };
+
+  const handleFitbClear = () => {
+    const current = fetchedQuestions[currentIndex];
+    if (!current) return; // guard against no question loaded
+    setFitbAnswers((prev) => {
+      const next = { ...prev }; // copy so we don't mutate state directly
+      delete next[current.id]; // remove this question's typed answer
+      return next;
+    });
+  };
+
   // NEW — runs only the visible test cases, pure feedback, no writes.
   const handleRunTests = () => {
     const raw = fetchedQuestions[currentIndex];
@@ -380,7 +451,9 @@ export function ExamQuestionScreen({
       answer_text:
         q.type === "coding"
           ? (codeByQuestion[q.id] ?? "") // whatever code was typed, or empty if untouched
-          : (selectedOptions[q.id] ?? ""), // whichever option id was picked, or empty if unanswered
+          : q.type === "fitb"
+            ? (fitbAnswers[q.id] ?? "") // whatever text was typed, or empty if untouched
+            : (selectedOptions[q.id] ?? ""), // whichever option id was picked, or empty if unanswered
     }));
   }
 
@@ -416,14 +489,18 @@ export function ExamQuestionScreen({
   }
 
   const progressCurrent =
-    Object.keys(selectedOptions).length + Object.keys(codeByQuestion).length; // rough answered count
+    Object.keys(selectedOptions).length +
+    Object.keys(codeByQuestion).length +
+    Object.values(fitbAnswers).filter((v) => v.trim() !== "").length; // rough answered count
   const progressTotal = fetchedQuestions.length; // real total question count
 
   const progressPct = Math.round((progressCurrent / progressTotal) * 100);
   const isCoding = question.type === "coding";
   const isLastQuestion = question.number >= question.totalQuestions;
   const codingQ = isCoding ? (question as CodingQuestion) : null;
-  const mcqQ = !isCoding ? (question as MCQQuestion) : null;
+  const isFitb = question.type === "fill-in-the-blank";
+  const mcqQ =
+    question.type === "multiple-choice" ? (question as MCQQuestion) : null; // fill-in-the-blank is no longer treated as MCQ
 
   return (
     <div className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden bg-[var(--bg-sidebar)]">
@@ -582,12 +659,21 @@ export function ExamQuestionScreen({
             )}
 
             {/* MCQ: options */}
-            {!isCoding && mcqQ && (
+            {mcqQ && (
               <MCQOptions
                 options={mcqQ.options}
                 selectedId={localSelectedOption}
                 onSelect={handleOptionSelect}
                 onClear={handleClearOption}
+              />
+            )}
+
+            {/* Fill-in-the-blank: answer box */}
+            {isFitb && (
+              <FillInBlankAnswer
+                value={fitbAnswers[fetchedQuestions[currentIndex].id] ?? ""}
+                onChange={handleFitbChange}
+                onClear={handleFitbClear}
               />
             )}
           </div>
@@ -649,7 +735,7 @@ export function ExamQuestionScreen({
           <button
             onClick={handlePrevious}
             disabled={question.number <= 1}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[#adc6ff]/60 bg-transparent text-[#adc6ff] text-[13px] font-semibold cursor-pointer hover:bg-[#adc6ff]/10 hover:border-[#adc6ff] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed disabled:hover:bg-transparent disabled:hover:border-[#adc6ff]/60"
           >
             <svg
               width="14"
@@ -692,7 +778,7 @@ export function ExamQuestionScreen({
           className={
             isLastQuestion
               ? "flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]"
-              : "flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150"
+              : "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer hover:bg-[#c5d7ff] hover:border-[#c5d7ff] transition-colors duration-150"
           }
         >
           {isLastQuestion ? (
