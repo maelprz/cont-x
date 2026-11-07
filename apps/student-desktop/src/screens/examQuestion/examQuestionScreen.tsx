@@ -37,12 +37,12 @@ function statusStyle(
   status: "unanswered" | "answered" | "flagged",
   isCurrent: boolean,
 ): string {
-  if (isCurrent) return "bg-[#adc6ff] text-[#00285d] border-[#adc6ff]";
+  if (isCurrent) return "bg-[#adc6ff] text-[#00285d] border-[#00285d]"; // current question: stronger blue fill
   if (status === "answered")
-    return "bg-[#1c2b3c] text-[#d4e4fa] border-[#424754]";
+    return "bg-[#e0e9ff] text-[#00285d] border-[#00285d]"; // answered: pale blue fill
   if (status === "flagged")
-    return "bg-transparent text-[#c2c6d6] border-[#424754]";
-  return "bg-transparent text-[#8c909f] border-[#424754]";
+    return "bg-white text-[#00285d] border-[#00285d]"; // flagged: white, dashed border and red dot added elsewhere
+  return "bg-white text-[#00285d] border-[#00285d]"; // unanswered: plain white
 }
 
 // One shared look for the Previous, Next and Submit buttons, so all three always match.
@@ -69,7 +69,7 @@ function QuestionMapGrid({
           key={number}
           onClick={() => onNavigate?.(number)}
           className={`
-            h-9 w-full rounded-lg border text-[12px] font-semibold font-mono
+            h-9 w-full rounded-lg border-1 text-[12px] font-semibold font-mono
             transition-colors duration-150 cursor-pointer relative
             ${statusStyle(status, number === currentNumber)}
             ${status === "flagged" && number !== currentNumber ? "border-dashed" : ""}
@@ -111,8 +111,8 @@ function MCQOptions({
               cursor-pointer transition-all duration-150 box-border overflow-hidden
               ${
                 isSelected
-                  ? "border-[#00285d] bg-[var(--bg-app)]"
-                  : "border-[var(--border-subtle)] bg-[var(--bg-sidebar)]"
+                  ? "border-[#00285d] bg-[var(--bg-sidebar)]"
+                  : "border-[#00285d] bg-white hover:bg-[#f3f4f6]"
               }
             `}
           >
@@ -123,15 +123,15 @@ function MCQOptions({
                 font-mono text-[13px] font-bold border transition-colors duration-150
                 ${
                   isSelected
-                    ? "bg-[var(--bg-sidebar)] text-[var(--text-inverted)] border-[var(--text-subtle)]"
-                    : "bg-[var(--bg-app)] text-[var(--text-primary)] border-[var(--border-primary)]"
+                    ? "bg-white text-[#00285d] border-white"
+                    : "bg-[#f3f4f6] text-black border-[#c7cdd8]"
                 }
               `}
             >
               {displayLetter ?? id}
             </span>
             <span
-              className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? "text-[var(--text-primary)]" : "text-[var(--text-inverted)]"}`}
+              className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? "text-white" : "text-black"}`}
             >
               {text}
             </span>
@@ -183,7 +183,7 @@ function FillInBlankAnswer({
         maxLength={200} // a short answer, not an essay
         placeholder="Type your answer here"
         style={{ outline: "none", boxShadow: "none" }}
-        className="w-full px-5 py-4 rounded-lg border-[3px] border-[#00285d] bg-white text-[#00285d] placeholder:text-black text-[14px] font-medium box-border focus:border-[#001a3d]"
+        className="w-full px-5 py-4 rounded-lg border-[2px] border-[#00285d] bg-white text-[#00285d] placeholder:text-black text-[14px] font-medium box-border focus:border-[#001a3d]"
       />
       {/* Clears the typed answer, only shown once something is typed. */}
       {value !== "" && (
@@ -276,6 +276,8 @@ export function ExamQuestionScreen({
   const [isSubmitOpen, setIsSubmitOpen] = useState(false);
   // True while the submit call is running, so a double click cannot send it twice.
   const [isSubmitting, setIsSubmitting] = useState(false);
+  // Height of the code output panel in px. Kept here so it stays the same on every coding question (WBS 3.4).
+  const [outputPanelHeight, setOutputPanelHeight] = useState(220);
 
   // Builds the question map (sidebar grid) from the real fetched list.
   const questionMap: QuestionMapItem[] = useMemo(
@@ -351,8 +353,13 @@ export function ExamQuestionScreen({
         ? question.selectedOptionId
         : undefined,
     );
+    const currentId = fetchedQuestions[currentIndex]?.id; // id of the question now on screen
     setLocalCode(
-      question.type === "coding" ? (question.starterCode ?? "") : "",
+      question.type === "coding"
+        ? ((currentId ? codeByQuestion[currentId] : undefined) ??
+            question.starterCode ??
+            "") // the student's saved code wins over the starter template
+        : "",
     );
     clearResults(); // NEW — don't show the previous question's Run Tests/Run Code output
   }, [question]);
@@ -730,13 +737,15 @@ export function ExamQuestionScreen({
               testsResult={testsResult}
               codeResult={codeResult}
               runError={runError}
+              panelHeight={outputPanelHeight}
+              onPanelHeightChange={setOutputPanelHeight}
             />
           </section>
         )}
         {/* Right sidebar: question map */}
         <aside className="w-[220px] flex-shrink-0 flex flex-col border-l border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
-          <div className="p-4 flex-grow">
-            <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--text-inverted-secondary)] mb-3">
+          <div className="p-4 flex-grow bg-[var(--bg-app)]">
+            <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[#00285d] mb-3">
               Question Map
             </p>
             <QuestionMapGrid
