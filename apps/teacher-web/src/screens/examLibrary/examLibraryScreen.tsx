@@ -23,6 +23,7 @@ import { useExamLibraryStore } from "../../store/useExamLibraryStore";
 import type { NewExamSettings } from "../../services/examBuilderService";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which class exam Violation Monitoring shows
+import { EndedExamExportDialog } from "../../components/examLibrary/endedExamExportDialog";
 
 type ConfirmAction =
   | { type: "endClassExam"; classExamId: string }
@@ -38,23 +39,40 @@ export function ExamLibraryScreen() {
   // The library now has two levels: subjects first, then the exams under the
   // chosen subject. Which subject is open lives in a store so returning from
   // the builder lands back in the same subject.
-  const selectedSubjectId = useExamLibraryStore((state) => state.selectedSubjectId);
-  const setSelectedSubjectId = useExamLibraryStore((state) => state.setSelectedSubjectId);
+  const selectedSubjectId = useExamLibraryStore(
+    (state) => state.selectedSubjectId,
+  );
+  const setSelectedSubjectId = useExamLibraryStore(
+    (state) => state.setSelectedSubjectId,
+  );
   const {
     subjects,
     isLoading: isLoadingSubjects,
     error: subjectsError,
   } = useLibrarySubjects(exams);
-  const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
+  const selectedSubject =
+    subjects.find((s) => s.id === selectedSubjectId) ?? null;
 
   const [isCreateModalOpen, setIsCreateModalOpen] = useState(false);
   const { createExam, isCreating, error: createError } = useCreateExam();
-  const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
-  const setOpenedFromEditExam = useExamBuilderStore((state) => state.setOpenedFromEditExam);
-  const setCurrentClassExamIdResult = useExamResultsStore((state) => state.setCurrentClassExamId);
-  const setCurrentClassExamIdViolation = useViolationMonitoringStore((state) => state.setCurrentClassExamId);
+  const setCurrentExamId = useExamBuilderStore(
+    (state) => state.setCurrentExamId,
+  );
+  const setOpenedFromEditExam = useExamBuilderStore(
+    (state) => state.setOpenedFromEditExam,
+  );
+  const setCurrentClassExamIdResult = useExamResultsStore(
+    (state) => state.setCurrentClassExamId,
+  );
+  const setCurrentClassExamIdViolation = useViolationMonitoringStore(
+    (state) => state.setCurrentClassExamId,
+  );
 
-  const { handleDelete, isProcessing: isDeleting, error: deleteError } = useExamCardActions();
+  const {
+    handleDelete,
+    isProcessing: isDeleting,
+    error: deleteError,
+  } = useExamCardActions();
   const {
     handlePublish,
     handleEnd,
@@ -66,16 +84,31 @@ export function ExamLibraryScreen() {
   const isProcessing = isDeleting || isClassExamProcessing;
   const actionError = deleteError ?? classExamError;
 
-  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
+  const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(
+    null,
+  );
   const [publishedCode, setPublishedCode] = useState<string | null>(null); // shown after a successful activation
-  const [settingsClassExamId, setSettingsClassExamId] = useState<string | null>(null);
-  const [manageClassesExamId, setManageClassesExamId] = useState<string | null>(null);
-  const [attachClassExamId, setAttachClassExamId] = useState<string | null>(null);
+  const [settingsClassExamId, setSettingsClassExamId] = useState<string | null>(
+    null,
+  );
+  const [manageClassesExamId, setManageClassesExamId] = useState<string | null>(
+    null,
+  );
+  const [attachClassExamId, setAttachClassExamId] = useState<string | null>(
+    null,
+  );
 
+  const [exportClassExamId, setExportClassExamId] = useState<string | null>(
+    null,
+  ); // class exam to offer export for after ending
   // exam awaiting a session code before its class attachment can go active
-  const [activateTarget, setActivateTarget] = useState<{ classExamId: string; examCode: string } | null>(null);
+  const [activateTarget, setActivateTarget] = useState<{
+    classExamId: string;
+    examCode: string;
+  } | null>(null);
 
-  const manageClassesExam = exams.find((e) => e.id === manageClassesExamId) ?? null;
+  const manageClassesExam =
+    exams.find((e) => e.id === manageClassesExamId) ?? null;
 
   const handleCreateExam = async (settings: NewExamSettings) => {
     const newExamId = await createExam(settings);
@@ -97,7 +130,11 @@ export function ExamLibraryScreen() {
     setSearch("");
   };
 
-  const handleCardCta = (examId: string, status: "draft" | "saved", hasAttachments: boolean) => {
+  const handleCardCta = (
+    examId: string,
+    status: "draft" | "saved",
+    hasAttachments: boolean,
+  ) => {
     if (status === "draft") {
       setCurrentExamId(examId);
       setOpenedFromEditExam(false); // still being authored, never attached to a class yet
@@ -135,11 +172,15 @@ export function ExamLibraryScreen() {
     // "error" case: actionError is shown inside the modal itself, modal stays open
   };
 
-  const requestEnd = (classExamId: string) => setConfirmAction({ type: "endClassExam", classExamId });
-  const requestDelete = (examId: string) => setConfirmAction({ type: "deleteExam", examId });
+  const requestEnd = (classExamId: string) =>
+    setConfirmAction({ type: "endClassExam", classExamId });
+  const requestDelete = (examId: string) =>
+    setConfirmAction({ type: "deleteExam", examId });
 
   const confirmPendingAction = async () => {
     if (!confirmAction) return;
+    const endedId =
+      confirmAction.type === "endClassExam" ? confirmAction.classExamId : null; // save id before confirmAction is cleared
     const didSucceed =
       confirmAction.type === "endClassExam"
         ? await handleEnd(confirmAction.classExamId)
@@ -147,6 +188,7 @@ export function ExamLibraryScreen() {
 
     if (didSucceed) {
       setConfirmAction(null);
+      if (endedId) setExportClassExamId(endedId); // only open after end really succeeded
       refetch();
     }
   };
@@ -172,13 +214,16 @@ export function ExamLibraryScreen() {
   const query = search.toLowerCase();
 
   // top level: subjects matching the search
-  const filteredSubjects = subjects.filter((s) => s.name.toLowerCase().includes(query));
+  const filteredSubjects = subjects.filter((s) =>
+    s.name.toLowerCase().includes(query),
+  );
 
   // inside a subject: only that subject's exams, matching the search
   const filtered = exams.filter(
     (e) =>
       e.subjectId === selectedSubject?.id &&
-      (e.title.toLowerCase().includes(query) || e.code.toLowerCase().includes(query)),
+      (e.title.toLowerCase().includes(query) ||
+        e.code.toLowerCase().includes(query)),
   );
 
   return (
@@ -215,7 +260,9 @@ export function ExamLibraryScreen() {
                 {selectedSubject ? selectedSubject.name : "Exam Library"}
               </h1>
               <p className="text-sm opacity-70 mt-1">
-                {selectedSubject ? "Exams in this subject." : "Choose a subject to see its exams."}
+                {selectedSubject
+                  ? "Exams in this subject."
+                  : "Choose a subject to see its exams."}
               </p>
             </div>
 
@@ -238,7 +285,11 @@ export function ExamLibraryScreen() {
                 </svg>
                 <input
                   type="text"
-                  placeholder={selectedSubject ? "Search exams by title or code" : "Search subjects"}
+                  placeholder={
+                    selectedSubject
+                      ? "Search exams by title or code"
+                      : "Search subjects"
+                  }
                   value={search}
                   onChange={(e) => setSearch(e.target.value)}
                   className="flex-grow text-[13px] outline-none bg-transparent border-none text-[var(--color-base-content)] font-[inherit]"
@@ -271,23 +322,32 @@ export function ExamLibraryScreen() {
             isLoadingSubjects || isLoadingExams ? (
               <p className="text-[13px] opacity-60">Loading subjects...</p>
             ) : subjectsError ? (
-              <p className="text-[13px]" style={{ color: "var(--color-error)" }}>
+              <p
+                className="text-[13px]"
+                style={{ color: "var(--color-error)" }}
+              >
                 {subjectsError}
               </p>
             ) : subjects.length === 0 ? (
               <p className="text-[13px] opacity-60">
-                You aren't assigned to any subjects yet. Ask an admin to assign you one, and it
-                will show up here.
+                You aren't assigned to any subjects yet. Ask an admin to assign
+                you one, and it will show up here.
               </p>
             ) : filteredSubjects.length === 0 ? (
-              <p className="text-[13px] opacity-60">No subjects match "{search}".</p>
+              <p className="text-[13px] opacity-60">
+                No subjects match "{search}".
+              </p>
             ) : (
               <div className="grid grid-cols-3 gap-5">
                 {filteredSubjects.map((subject) => (
                   <SubjectTile
                     key={subject.id}
                     name={subject.name}
-                    note={subject.isAssigned ? undefined : "You're no longer assigned to this subject."}
+                    note={
+                      subject.isAssigned
+                        ? undefined
+                        : "You're no longer assigned to this subject."
+                    }
                     badge={
                       subject.liveClassCount > 0
                         ? `Live in ${subject.liveClassCount} ${subject.liveClassCount === 1 ? "class" : "classes"}`
@@ -302,8 +362,7 @@ export function ExamLibraryScreen() {
                 ))}
               </div>
             )
-          ) : (
-          // ── Level 2: the exams under the chosen subject ────────────────
+          ) : // ── Level 2: the exams under the chosen subject ────────────────
           filtered.length === 0 ? (
             <p className="text-[13px] opacity-60">
               {exams.some((e) => e.subjectId === selectedSubject.id)
@@ -313,36 +372,40 @@ export function ExamLibraryScreen() {
                   : "No exams to show."}
             </p>
           ) : (
-          <div className="grid grid-cols-3 gap-5">
-            {filtered.map((exam) => {
-              const hasAttachments = exam.classAttachments.length > 0;
-              const hasActiveAttachment = exam.classAttachments.some((a) => a.status === "active");
+            <div className="grid grid-cols-3 gap-5">
+              {filtered.map((exam) => {
+                const hasAttachments = exam.classAttachments.length > 0;
+                const hasActiveAttachment = exam.classAttachments.some(
+                  (a) => a.status === "active",
+                );
 
-              return (
-                <ExamCardTile
-                  key={exam.id}
-                  exam={{
-                    ...exam,
-                    onCta: () => handleCardCta(exam.id, exam.status, hasAttachments),
-                  }}
-                  onClick={() => handleCardCta(exam.id, exam.status, hasAttachments)}
-                  menu={
-                    <ExamCardMenu
-                      hasClassAttachments={hasAttachments}
-                      isProcessing={isProcessing}
-                      onDelete={() => requestDelete(exam.id)}
-                      onEditExam={() => {
-                        setCurrentExamId(exam.id);
-                        setOpenedFromEditExam(hasActiveAttachment);
-                        navigateTo("examBuilder");
-                      }}
-                    />
-                  }
-                />
-              );
-            })}
-          </div>
-          )
+                return (
+                  <ExamCardTile
+                    key={exam.id}
+                    exam={{
+                      ...exam,
+                      onCta: () =>
+                        handleCardCta(exam.id, exam.status, hasAttachments),
+                    }}
+                    onClick={() =>
+                      handleCardCta(exam.id, exam.status, hasAttachments)
+                    }
+                    menu={
+                      <ExamCardMenu
+                        hasClassAttachments={hasAttachments}
+                        isProcessing={isProcessing}
+                        onDelete={() => requestDelete(exam.id)}
+                        onEditExam={() => {
+                          setCurrentExamId(exam.id);
+                          setOpenedFromEditExam(hasActiveAttachment);
+                          navigateTo("examBuilder");
+                        }}
+                      />
+                    }
+                  />
+                );
+              })}
+            </div>
           )}
         </main>
       </div>
@@ -353,22 +416,37 @@ export function ExamLibraryScreen() {
         onSubmit={handleCreateExam}
         isSubmitting={isCreating}
         error={createError}
-        fixedSubject={selectedSubject?.isAssigned ? { id: selectedSubject.id, name: selectedSubject.name } : null}
+        fixedSubject={
+          selectedSubject?.isAssigned
+            ? { id: selectedSubject.id, name: selectedSubject.name }
+            : null
+        }
       />
 
       <ConfirmActionDialog
         isOpen={confirmAction !== null}
-        title={confirmAction?.type === "endClassExam" ? "End this class's exam?" : "Delete this exam?"}
+        title={
+          confirmAction?.type === "endClassExam"
+            ? "End this class's exam?"
+            : "Delete this exam?"
+        }
         message={
           confirmAction?.type === "endClassExam"
             ? "Students in this class will no longer be able to join or submit answers."
             : "This permanently removes the exam and all of its questions."
         }
-        confirmLabel={confirmAction?.type === "endClassExam" ? "End Exam" : "Delete Exam"}
+        confirmLabel={
+          confirmAction?.type === "endClassExam" ? "End Exam" : "Delete Exam"
+        }
         isProcessing={isProcessing}
         error={actionError}
         onConfirm={confirmPendingAction}
         onCancel={() => setConfirmAction(null)}
+      />
+
+      <EndedExamExportDialog
+        classExamId={exportClassExamId}
+        onClose={() => setExportClassExamId(null)}
       />
 
       <ManageClassesModal
@@ -377,9 +455,12 @@ export function ExamLibraryScreen() {
         isProcessing={isProcessing}
         error={actionError}
         onClose={() => setManageClassesExamId(null)}
-        onAttachNew={() => manageClassesExamId && setAttachClassExamId(manageClassesExamId)}
+        onAttachNew={() =>
+          manageClassesExamId && setAttachClassExamId(manageClassesExamId)
+        }
         onActivate={(classExamId) =>
-          manageClassesExam && requestActivate(classExamId, manageClassesExam.code)
+          manageClassesExam &&
+          requestActivate(classExamId, manageClassesExam.code)
         }
         onEnd={requestEnd}
         onRemove={handleRemoveAttachment}

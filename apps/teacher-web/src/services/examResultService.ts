@@ -77,7 +77,8 @@ export async function getClassExamResults(
     .eq("id", classExamId)
     .single();
 
-  if (metaError || !metaData) throw metaError ?? new Error("Class exam not found.");
+  if (metaError || !metaData)
+    throw metaError ?? new Error("Class exam not found.");
   const meta = metaData as unknown as ClassExamMetaRow;
   const exam = unwrapOne(meta.exams);
   const classRow = unwrapOne(meta.classes);
@@ -119,7 +120,9 @@ export async function getClassExamResults(
   if (sessionIds.length > 0) {
     const { data: drawData, error: drawError } = await supabase
       .from("session_pool_questions")
-      .select("id, session_id, pool_id, pool_title, pool_order_index, question_bank_id, title, max_points")
+      .select(
+        "id, session_id, pool_id, pool_title, pool_order_index, question_bank_id, title, max_points",
+      )
       .in("session_id", sessionIds);
     if (drawError) throw drawError;
     draws = (drawData as PoolDrawRow[] | null) ?? [];
@@ -209,4 +212,17 @@ export async function overrideSessionScore(
     p_reason: reason,
   });
   if (error) throw error;
+}
+
+// counts students still in_progress for one class exam
+export async function countInProgressSessions(
+  classExamId: string,
+): Promise<number> {
+  const { count, error } = await supabase
+    .from("exam_sessions")
+    .select("id", { count: "exact", head: true }) // count only, no rows
+    .eq("class_exam_id", classExamId) // rls joins on exam_id only so filter here
+    .eq("status", "in_progress");
+  if (error) throw error;
+  return count ?? 0;
 }
