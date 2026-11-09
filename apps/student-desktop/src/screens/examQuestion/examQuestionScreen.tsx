@@ -292,20 +292,28 @@ export function ExamQuestionScreen({
   // Local code text, mirrors the current question's saved code.
   const [localCode, setLocalCode] = useState<string>("");
 
-  // Re-syncs local state every time the question changes, so switching
+  // Re-syncs local state when the student moves to a DIFFERENT question, so switching
   // questions shows the real saved answer instead of the last one typed.
+  // This runs on a change of question id only. It used to run whenever the question object
+  // changed, which also happens when the flag is toggled or another answer is typed, and that
+  // wiped the editor back to the starter code and cleared the Run Tests/Run Code output.
+  const currentQuestionId = fetchedQuestions[currentIndex]?.id ?? null;
+  const hasQuestion = question !== null;
   useEffect(() => {
-    if (!question) return; // nothing loaded yet
+    if (!question || !currentQuestionId) return; // nothing loaded yet
     setLocalSelectedOption(
       question.type === "multiple-choice"
         ? question.selectedOptionId
         : undefined,
     );
     setLocalCode(
-      question.type === "coding" ? (question.starterCode ?? "") : "",
+      question.type === "coding"
+        ? (codeByQuestion[currentQuestionId] ?? question.starterCode ?? "") // what the student already wrote, or the starter code the first time
+        : "",
     );
     clearResults(); // NEW — don't show the previous question's Run Tests/Run Code output
-  }, [question]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately keyed to the question id only (see above)
+  }, [currentQuestionId, hasQuestion]);
 
   const handleOptionSelect = (id: string) => {
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
