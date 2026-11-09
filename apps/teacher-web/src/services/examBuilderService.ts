@@ -216,64 +216,9 @@ function mapQuestionRow(row: QuestionRow): BuilderQuestion | null {
 
 // fetches one exam and all of its questions, ready for the builder screen
 export async function getExamById(examId: string): Promise<ExamBuilderData> {
-  const { data, error } = await supabase
-    .from("exams")
-    .select(
-      `
-      id,
-      subject_id,
-      title,
-      exam_code,
-      status,
-      description,
-      questions (
-        id,
-        title,
-        type,
-        prompt,
-        order_index,
-        max_points,
-        section_id,
-        fitb_question (
-          case_sensitive,
-          ignore_extra_spaces,
-          fitb_answer ( id, answer_text )
-        ),
-        mcq_question (
-          mc_options ( id, option_text, is_correct )
-        ),
-        coding_question (
-          starter_code,
-          program_type,
-          main_code,
-          check_penalty_per_attempt,
-          reference_solution,
-          test_cases ( id, input, expected_output, is_hidden )
-        )
-      ),
-      exam_sections ( id, title, order_index ),
-      exam_question_pools (
-        id,
-        title,
-        pick_count,
-        order_index,
-        points_per_question,
-        section_id,
-        exam_question_pool_items (
-          id,
-          question_bank_id,
-          question_bank ( id, title, type, max_points )
-        )
-      )
-    `,
-    )
-    .eq("id", examId)
-    .order("order_index", { referencedTable: "questions" }) // keep questions in builder order
-    .order("order_index", { referencedTable: "exam_question_pools" })
-    .order("order_index", { referencedTable: "exam_sections" })
-    .single();
 
-  if (error) throw error; // let the hook decide how to show this error
+  const { data, error } = await supabase.rpc("get_exam_builder_data", { p_exam_id: examId });
+  if (error) throw new Error(`exam: ${error.message}`);
 
   const row = data as unknown as ExamBuilderRow;
 
