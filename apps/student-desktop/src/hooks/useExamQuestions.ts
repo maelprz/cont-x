@@ -1,17 +1,17 @@
 import { useEffect, useState } from "react"; // tracks fetch state across renders
 import {
-  getExamQuestions,
+  getSessionQuestions,
   type FetchedQuestion,
 } from "../services/examService"; // the real Supabase call
 
-// Fetches every question for one exam, once, when examId is available.
-export function useExamQuestions(examId: string | null) {
+// Fetches this attempt's questions (in this student's own order), once, when the session id is available.
+export function useExamQuestions(sessionId: string | null) {
   const [questions, setQuestions] = useState<FetchedQuestion[]>([]); // holds the fetched question list
   const [isLoading, setIsLoading] = useState(true); // true while the fetch is in flight
   const [error, setError] = useState<string | null>(null); // holds a message to show, if any
 
   useEffect(() => {
-    if (!examId) {
+    if (!sessionId) {
       setIsLoading(false); // nothing to fetch yet, don't spin forever
       return;
     }
@@ -22,7 +22,7 @@ export function useExamQuestions(examId: string | null) {
       setIsLoading(true);
       setError(null);
       try {
-        const result = await getExamQuestions(examId!); // real fetch + reshape
+        const result = await getSessionQuestions(sessionId!); // real fetch + reshape
         if (isMounted) setQuestions(result);
       } catch (err) {
         if (isMounted) {
@@ -40,7 +40,7 @@ export function useExamQuestions(examId: string | null) {
     return () => {
       isMounted = false; // cleanup if the screen unmounts mid-fetch
     };
-  }, [examId]);
+  }, [sessionId]);
 
   return { questions, isLoading, error };
 }
