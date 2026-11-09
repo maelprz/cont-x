@@ -24,7 +24,11 @@ export function useExamBuilder() {
         const result = await getExamById(examId);
         if (isActive) setExamData(result);
       } catch (err) {
-        if (isActive) setError("Could not load exam. Try again.");
+        console.error("Could not load exam", err); // the full error, for the browser console
+        // the database's own message (Supabase errors are plain objects, not Error instances)
+        const detail =
+          err && typeof err === "object" && "message" in err ? String((err as { message: unknown }).message) : "";
+        if (isActive) setError(detail ? `Could not load exam. Try again. (${detail})` : "Could not load exam. Try again.");
       } finally {
         if (isActive) setIsLoading(false);
       }

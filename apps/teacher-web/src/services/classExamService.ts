@@ -67,6 +67,32 @@ export interface ClassExamSettingsData {
   answerChangeDeduction: number; // points lost each time a student changes an answer they already gave; 0 means off
 }
 
+// The session (verification) code is kept in class_exam_secrets, which only the class's teacher
+// can read. It used to be a column on class_exams, which students could read.
+async function readSessionCode(classExamId: string): Promise<string | null> {
+  const { data, error } = await supabase
+    .from("class_exam_secrets")
+    .select("verification_code")
+    .eq("class_exam_id", classExamId)
+    .maybeSingle();
+  if (error) throw error;
+  return data?.verification_code ?? null;
+}
+
+// saves the code, or clears it when it is blank
+async function writeSessionCode(classExamId: string, code: string): Promise<void> {
+  const trimmed = code.trim();
+  if (trimmed === "") {
+    const { error } = await supabase.from("class_exam_secrets").delete().eq("class_exam_id", classExamId);
+    if (error) throw error;
+    return;
+  }
+  const { error } = await supabase
+    .from("class_exam_secrets")
+    .upsert({ class_exam_id: classExamId, verification_code: trimmed, updated_at: new Date().toISOString() });
+  if (error) throw error;
+}
+
 export async function getClassExamSettings(
   classExamId: string,
 ): Promise<ClassExamSettingsData> {
@@ -81,7 +107,6 @@ export async function getClassExamSettings(
       max_attempts,
       pass_mark,
       randomize_order,
-      verification_code,
       starts_at,
       ends_at,
       overtime_policy,
@@ -96,6 +121,9 @@ export async function getClassExamSettings(
 
   if (error || !data) throw error ?? new Error("Class attachment not found.");
 
+  // the session code lives in its own teacher-only table, not on class_exams
+  const sessionCode = await readSessionCode(classExamId);
+
   const classes = data.classes as unknown as { name: string } | null;
 
   return {
@@ -107,7 +135,7 @@ export async function getClassExamSettings(
     maxAttempts: data.max_attempts,
     passMark: data.pass_mark,
     randomizeOrder: data.randomize_order,
-    verificationCode: data.verification_code,
+    verificationCode: sessionCode,
     startsAt: data.starts_at,
     endsAt: data.ends_at,
     overtimePolicy: data.overtime_policy === "zero" ? "zero" : "accept",
@@ -145,7 +173,6 @@ export async function attachExamToClass(
       max_attempts: settings.maxAttempts,
       pass_mark: settings.passMark,
       randomize_order: settings.randomizeOrder,
-      verification_code: settings.verificationCode,
       starts_at: settings.startsAt,
       ends_at: settings.endsAt,
     })
@@ -153,6 +180,7 @@ export async function attachExamToClass(
     .single();
 
   if (error || !data) throw error ?? new Error("Could not add this exam to the class.");
+  if (settings.verificationCode) await writeSessionCode(data.id, settings.verificationCode);
   return data.id;
 }
 
@@ -167,23 +195,16 @@ export async function activateClassExam(
   verificationCode?: string,
 ): Promise<void> {
   if (verificationCode) {
+    await writeSessionCode(classExamId, verificationCode); // the code first, so a live exam always has one
     const { error } = await supabase
       .from("class_exams")
-      .update({ status: "active", verification_code: verificationCode })
+      .update({ status: "active" })
       .eq("id", classExamId);
     if (error) throw error;
     return;
   }
 
-  const { data, error: fetchError } = await supabase
-    .from("class_exams")
-    .select("verification_code")
-    .eq("id", classExamId)
-    .single();
-
-  if (fetchError || !data) throw fetchError ?? new Error("Class attachment not found.");
-
-  if (!data.verification_code) {
+  if (!(await readSessionCode(classExamId))) {
     throw new Error(SESSION_CODE_REQUIRED_MESSAGE);
   }
 
@@ -248,7 +269,6 @@ export async function updateClassExamSettings(
       throw new Error("Session code can only be changed before this class goes live.");
     }
 
-    updatePayload.verification_code = settings.verificationCode;
   }
 
   const { error } = await supabase
@@ -256,6 +276,10 @@ export async function updateClassExamSettings(
     .update(updatePayload)
     .eq("id", classExamId);
   if (error) throw error;
+
+  if (settings.verificationCode !== undefined) {
+    await writeSessionCode(classExamId, settings.verificationCode);
+  }
 }
 
 // removes an attachment outright — only sensible while still 'scheduled';
