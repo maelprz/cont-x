@@ -170,20 +170,22 @@ export async function getExamCode(
 }
 
 // Shape of one answer option after being fetched and reshaped for the UI.
+// (The server does not send which option is correct. Grading happens on the server.)
 export interface FetchedMCQOption {
   id: string; // mc_options.id, used as the option's key
   text: string; // mc_options.option_text, shown to the student
-  isCorrect: boolean; // mc_options.is_correct, used only for local scoring later
 }
 
 // Shape of one question after being fetched and reshaped for the UI.
 export interface FetchedQuestion {
   id: string; // questions.id, the real database id
-  orderIndex: number; // questions.order_index, used to sort and number questions
+  orderIndex: number; // questions.order_index, the teacher's own order (the list itself is already in the student's order)
   title: string; // questions.title, shown as the question heading
   prompt: string; // questions.prompt, shown as the question body text
   type: "mcq" | "coding" | "fitb"; // questions.type, tells the UI which shape to expect
   maxPoints: number; // questions.max_points, kept for future scoring use
+  sectionId: string | null; // the exam section this question belongs to, if the exam has sections
+  sectionTitle: string | null; // that section's title, shown above the question
   options?: FetchedMCQOption[]; // present only when type is "mcq"
   starterCode?: string | null; // present only when type is "coding"
   language?: string; // coding_question.program_type, passed to Monaco as its language mode
@@ -204,70 +206,54 @@ function mapToMonacoLanguage(programType: string | undefined): string {
   }
 }
 
-// Fetches every question for one exam, in the order the teacher set,
-// including each question's MCQ options or coding starter code.
-export async function getExamQuestions(
-  examId: string, // which exam's questions to load
+// Fetches this attempt's questions, already in the order THIS student should see them:
+// sections in the teacher's order, and inside each section either the teacher's order or,
+// when the class exam randomizes, a shuffle that stays the same if the student resumes.
+// Done by the server function get_session_questions (see contx_session_questions.sql).
+export async function getSessionQuestions(
+  sessionId: string, // which attempt's questions to load
 ): Promise<FetchedQuestion[]> {
-  const { data, error } = await supabase
-    .from("questions") // start from the questions table
-    .select(
-      `
-      id,
-      order_index,
-      title,
-      prompt,
-      type,
-      max_points,
-      mcq_question ( mc_options ( id, option_text, is_correct ) ),
-      coding_question ( starter_code, program_type, main_code, check_penalty_per_attempt )
-    `,
-    ) // pull matching child rows in the same call
-    .eq("exam_id", examId) // only this exam's questions
-    .order("order_index", { ascending: true }); // teacher-defined question order
+  const { data, error } = await supabase.rpc("get_session_questions", {
+    p_session_id: sessionId, // matches the SQL function's only parameter
+  });
 
   if (error) throw new Error(error.message); // bubble up, let the hook decide the message
 
-  // Reshape each raw row into the flat FetchedQuestion shape the UI expects.
-  return (data ?? []).map((row: any) => {
+  // Reshape each raw item into the flat FetchedQuestion shape the UI expects.
+  return ((data ?? []) as any[]).map((row: any) => {
     const isCoding = row.type === "coding"; // check which question type this row is
-    const isMcq = row.type === "mcq"; // only MCQ rows carry options
-
-    // Unwrap in case Supabase returned these as one-item arrays.
-    const mcqRow = unwrapOne(row.mcq_question); // real mcq_question row, if any
-    const codingRow = unwrapOne(row.coding_question); // real coding_question row, if any
-
     return {
       id: row.id, // real question id
-      orderIndex: row.order_index, // used for numbering and sort order
+      orderIndex: row.order_index, // the teacher's own order number
       title: row.title, // question heading
       prompt: row.prompt, // question body text
-      type: row.type, // "mcq" or "coding"
+      type: row.type, // "mcq", "coding" or "fitb"
       maxPoints: row.max_points, // kept for later scoring
-      options: isMcq
-        ? (mcqRow?.mc_options ?? []).map((opt: any) => ({
-            id: opt.id, // real option id
-            text: opt.option_text, // option label text
-            isCorrect: opt.is_correct, // used only for local scoring later
-          }))
-        : undefined, // coding and fill-in-the-blank questions have no options
-      starterCode: isCoding ? codingRow?.starter_code : undefined, // pre-filled editor code
+      sectionId: row.section_id ?? null, // which section it sits in
+      sectionTitle: row.section_title ?? null, // shown above the question
+      options:
+        row.type === "mcq"
+          ? (row.options ?? []).map((opt: any) => ({
+              id: opt.id, // real option id
+              text: opt.option_text, // option label text
+            }))
+          : undefined, // only multiple choice has options
+      starterCode: isCoding ? row.coding?.starter_code : undefined, // pre-filled editor code
       language: isCoding
-        ? mapToMonacoLanguage(codingRow?.program_type)
+        ? mapToMonacoLanguage(row.coding?.program_type)
         : undefined, // Monaco language mode
-      programType: isCoding ? codingRow?.program_type : undefined, // pass through directly, no translation needed
-      mainCode: isCoding ? codingRow?.main_code : undefined, // hidden main for "function" type
+      programType: isCoding ? row.coding?.program_type : undefined, // pass through directly, no translation needed
+      mainCode: isCoding ? row.coding?.main_code : undefined, // hidden main for "function" type
       checkPenaltyPerAttempt: isCoding
-        ? (codingRow?.check_penalty_per_attempt ?? 0)
+        ? (row.coding?.check_penalty_per_attempt ?? 0)
         : undefined, // Run Code scoring penalty
-    };
+    } as FetchedQuestion;
   });
 }
 
 export interface SubmittedAnswer {
   question_id: string;
   answer_text: string;
-  time_spent_seconds?: number;
 }
 
 export interface SubmitExamSessionResult {

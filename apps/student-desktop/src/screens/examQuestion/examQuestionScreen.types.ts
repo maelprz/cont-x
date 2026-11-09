@@ -2,7 +2,7 @@
 // Question types
 // ---------------------------------------------------------------------------
 
-export type QuestionType = 'coding' | 'multiple-choice' | 'fill-in-the-blank';
+export type QuestionType = 'coding' | 'multiple-choice' | 'fill-in-blank';
 
 export type QuestionStatus = 'unanswered' | 'answered' | 'flagged';
 
@@ -10,6 +10,7 @@ export type QuestionStatus = 'unanswered' | 'answered' | 'flagged';
 export interface QuestionMapItem {
   number: number;
   status: QuestionStatus;
+  sectionTitle?: string; // the section this question is in, so the map can show headings
 }
 
 // Multiple-choice option
@@ -26,6 +27,7 @@ interface BaseQuestion {
   body: string;
   type: QuestionType;
   isFlagged?: boolean;
+  sectionTitle?: string; // shown above the question when the exam has sections
 }
 
 // Coding question extras
@@ -48,10 +50,10 @@ export interface MCQQuestion extends BaseQuestion {
   selectedOptionId?: string;     // currently selected answer
 }
 
-// Fill-in-the-blank: the prompt is the body text, the student types one short answer.
-// The accepted answers never reach the client, grading happens on the server.
+// Fill-in-the-blank extras: one text box
 export interface FITBQuestion extends BaseQuestion {
-  type: 'fill-in-the-blank';
+  type: 'fill-in-blank';
+  answerText?: string;           // what the student has typed so far
 }
 
 export type Question = CodingQuestion | MCQQuestion | FITBQuestion;

@@ -1,4 +1,4 @@
-import { useState, useMemo, useEffect, useRef } from "react"; // added useMemo for reshaping fetched data
+import { Fragment, useState, useMemo, useEffect, useRef } from "react"; // added useMemo for reshaping fetched data
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real examId/sessionId from Confirmation
 import { useExamQuestions } from "../../hooks/useExamQuestions"; // real question fetch
@@ -10,15 +10,13 @@ import type { SubmittedAnswer } from "../../services/examService";
 import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — logs violations to the database
 import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; // checks once a minute if the teacher removed this student
 import { checkIfRemoved } from "../../services/removalService"; // one-time check used when a submit fails
-import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; // asks the student to confirm before submitting
-import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker"; // seconds spent per question
 
 import type {
   ExamQuestionScreenProps,
   QuestionMapItem,
   CodingQuestion,
-  MCQQuestion,
   FITBQuestion,
+  MCQQuestion,
   Question,
 } from "./examQuestionScreen.types";
 
@@ -37,17 +35,13 @@ function statusStyle(
   status: "unanswered" | "answered" | "flagged",
   isCurrent: boolean,
 ): string {
-  if (isCurrent) return "bg-[#adc6ff] text-[#00285d] border-[#00285d]"; // current question: stronger blue fill
+  if (isCurrent) return "bg-[#adc6ff] text-[#00285d] border-[#adc6ff]";
   if (status === "answered")
-    return "bg-[#e0e9ff] text-[#00285d] border-[#00285d]"; // answered: pale blue fill
+    return "bg-[#1c2b3c] text-[#d4e4fa] border-[#424754]";
   if (status === "flagged")
-    return "bg-white text-[#00285d] border-[#00285d]"; // flagged: white, dashed border and red dot added elsewhere
-  return "bg-white text-[#00285d] border-[#00285d]"; // unanswered: plain white
+    return "bg-transparent text-[#c2c6d6] border-[#424754]";
+  return "bg-transparent text-[#8c909f] border-[#424754]";
 }
-
-// One shared look for the Previous, Next and Submit buttons, so all three always match.
-const footerButtonClass =
-  "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer shadow-[0_0_20px_rgba(173,198,255,0.25)] transition-all duration-150 hover:bg-[#c5d7ff] hover:border-[#c5d7ff] hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(173,198,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:scale-100 disabled:hover:bg-[#adc6ff] disabled:hover:border-[#adc6ff]";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -64,22 +58,29 @@ function QuestionMapGrid({
 }) {
   return (
     <div className="grid grid-cols-4 gap-2">
-      {items.map(({ number, status }) => (
-        <button
-          key={number}
-          onClick={() => onNavigate?.(number)}
-          className={`
-            h-9 w-full rounded-lg border-1 text-[12px] font-semibold font-mono
-            transition-colors duration-150 cursor-pointer relative
-            ${statusStyle(status, number === currentNumber)}
-            ${status === "flagged" && number !== currentNumber ? "border-dashed" : ""}
-          `}
-        >
-          {number}
-          {status === "flagged" && number !== currentNumber && (
-            <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[var(--warning-icon)]" />
+      {items.map(({ number, status, sectionTitle }, index) => (
+        <Fragment key={number}>
+          {/* a heading row whenever a new section starts (only exams with sections have these) */}
+          {sectionTitle && sectionTitle !== items[index - 1]?.sectionTitle && (
+            <p className="col-span-4 mt-2 first:mt-0 font-mono text-[10px] font-semibold tracking-[0.12em] uppercase text-[var(--text-inverted-secondary)] break-words">
+              {sectionTitle}
+            </p>
           )}
-        </button>
+          <button
+            onClick={() => onNavigate?.(number)}
+            className={`
+              h-9 w-full rounded-lg border text-[12px] font-semibold font-mono
+              transition-colors duration-150 cursor-pointer relative
+              ${statusStyle(status, number === currentNumber)}
+              ${status === "flagged" && number !== currentNumber ? "border-dashed" : ""}
+            `}
+          >
+            {number}
+            {status === "flagged" && number !== currentNumber && (
+              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[var(--warning-icon)]" />
+            )}
+          </button>
+        </Fragment>
       ))}
     </div>
   );
@@ -111,8 +112,8 @@ function MCQOptions({
               cursor-pointer transition-all duration-150 box-border overflow-hidden
               ${
                 isSelected
-                  ? "border-[#00285d] bg-[var(--bg-sidebar)]"
-                  : "border-[#00285d] bg-white hover:bg-[#f3f4f6]"
+                  ? "border-[#00285d] bg-[var(--bg-app)]"
+                  : "border-[var(--border-subtle)] bg-[var(--bg-sidebar)]"
               }
             `}
           >
@@ -123,15 +124,15 @@ function MCQOptions({
                 font-mono text-[13px] font-bold border transition-colors duration-150
                 ${
                   isSelected
-                    ? "bg-white text-[#00285d] border-white"
-                    : "bg-[#f3f4f6] text-black border-[#c7cdd8]"
+                    ? "bg-[var(--bg-sidebar)] text-[var(--text-inverted)] border-[var(--text-subtle)]"
+                    : "bg-[var(--bg-app)] text-[var(--text-primary)] border-[var(--border-primary)]"
                 }
               `}
             >
               {displayLetter ?? id}
             </span>
             <span
-              className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? "text-white" : "text-black"}`}
+              className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? "text-[var(--text-primary)]" : "text-[var(--text-inverted)]"}`}
             >
               {text}
             </span>
@@ -152,52 +153,6 @@ function MCQOptions({
   );
 }
 
-// Fill-in-the-blank answer box: one short typed answer, kept in the screen's state.
-function FillInBlankAnswer({
-  value,
-  onChange,
-  onClear,
-}: {
-  value: string;
-  onChange: (text: string) => void;
-  onClear: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-2 mt-6 w-full min-w-0">
-      <label
-        htmlFor="fitb-answer"
-        className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-black"
-      >
-        Your Answer
-      </label>
-      <input
-        id="fitb-answer"
-        type="text"
-        value={value}
-        onChange={(e) => onChange(e.target.value)} // every keystroke is saved to the screen state
-        onPaste={(e) => e.preventDefault()} // pasting is blocked, same spirit as the lockdown
-        onDrop={(e) => e.preventDefault()} // dragging text in is blocked too
-        autoComplete="off" // no browser suggestions
-        autoCorrect="off" // no autocorrect changing the answer
-        spellCheck={false} // no red squiggles giving hints
-        maxLength={200} // a short answer, not an essay
-        placeholder="Type your answer here"
-        style={{ outline: "none", boxShadow: "none" }}
-        className="w-full px-5 py-4 rounded-lg border-[2px] border-[#00285d] bg-white text-[#00285d] placeholder:text-black text-[14px] font-medium box-border focus:border-[#001a3d]"
-      />
-      {/* Clears the typed answer, only shown once something is typed. */}
-      {value !== "" && (
-        <span
-          onClick={onClear}
-          className="self-end mt-1 text-[13px] font-semibold cursor-pointer text-[#00285d] hover:underline"
-        >
-          Clear Answer
-        </span>
-      )}
-    </div>
-  );
-}
-
 // ---------------------------------------------------------------------------
 // Main screen, named export (not default)
 // ---------------------------------------------------------------------------
@@ -212,7 +167,6 @@ export function ExamQuestionScreen({
   onSubmit,
 }: ExamQuestionScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
-  const examId = useExamSessionStore((state) => state.examId); // real exam id from Confirmation
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
   const questionIdRef = useRef<string | null>(null);
@@ -222,7 +176,7 @@ export function ExamQuestionScreen({
     questions: fetchedQuestions,
     isLoading,
     error,
-  } = useExamQuestions(examId); // real question list
+  } = useExamQuestions(sessionId); // this attempt's questions, in this student's own order
 
   // When the real countdown hits zero, this fires exactly once and moves
   // the student to the Result screen, same as a manual submit would.
@@ -256,43 +210,32 @@ export function ExamQuestionScreen({
   useEffect(() => {
     questionIdRef.current = fetchedQuestions[currentIndex]?.id ?? null; // null while loading
   }, [fetchedQuestions, currentIndex]);
-  // Times how long each question is on screen while the window is focused (WBS 6.7).
-  const { getTimes } = useQuestionTimeTracker(
-    fetchedQuestions[currentIndex]?.id ?? null,
-  );
   // Tracks flagged state per question id, kept in memory only for now.
   const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
   // Tracks each question's chosen MCQ option id, kept in memory only for now.
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string>
   >({});
+  // Tracks each fill-in-the-blank question's typed answer, kept in memory only for now.
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
   // Tracks each coding question's current code text, kept in memory only for now.
   const [codeByQuestion, setCodeByQuestion] = useState<Record<string, string>>(
     {},
   );
-  // Tracks each fill-in-the-blank question's typed answer, kept in memory only for now.
-  const [fitbAnswers, setFitbAnswers] = useState<Record<string, string>>({});
-  // Controls the "Submit your answers?" confirmation modal.
-  const [isSubmitOpen, setIsSubmitOpen] = useState(false);
-  // True while the submit call is running, so a double click cannot send it twice.
-  const [isSubmitting, setIsSubmitting] = useState(false);
-  // Height of the code output panel in px. Kept here so it stays the same on every coding question (WBS 3.4).
-  const [outputPanelHeight, setOutputPanelHeight] = useState(220);
 
   // Builds the question map (sidebar grid) from the real fetched list.
   const questionMap: QuestionMapItem[] = useMemo(
     () =>
       fetchedQuestions.map((q, i) => ({
         number: i + 1, // display position, not the database id
+        sectionTitle: q.sectionTitle ?? undefined, // lets the map show section headings
         status: flaggedIds.has(q.id)
           ? "flagged"
-          : selectedOptions[q.id] ||
-              codeByQuestion[q.id] ||
-              fitbAnswers[q.id]?.trim()
+          : selectedOptions[q.id] || codeByQuestion[q.id] || textAnswers[q.id]?.trim()
             ? "answered"
             : "unanswered",
       })),
-    [fetchedQuestions, flaggedIds, selectedOptions, codeByQuestion, fitbAnswers],
+    [fetchedQuestions, flaggedIds, selectedOptions, codeByQuestion, textAnswers],
   );
 
   // Converts the current fetched question into the shape the existing UI expects.
@@ -306,7 +249,16 @@ export function ExamQuestionScreen({
       title: raw.title,
       body: raw.prompt,
       isFlagged: flaggedIds.has(raw.id),
+      sectionTitle: raw.sectionTitle ?? undefined, // shown above the title when the exam has sections
     };
+
+    if (raw.type === "fitb") {
+      return {
+        ...shared,
+        type: "fill-in-blank",
+        answerText: textAnswers[raw.id] ?? "", // what was typed so far
+      } as FITBQuestion;
+    }
 
     if (raw.type === "coding") {
       return {
@@ -320,10 +272,6 @@ export function ExamQuestionScreen({
       } as CodingQuestion;
     }
 
-    if (raw.type === "fitb") {
-      return { ...shared, type: "fill-in-the-blank" } as FITBQuestion; // prompt only, the answer box is rendered separately
-    }
-
     return {
       ...shared,
       type: "multiple-choice",
@@ -334,7 +282,7 @@ export function ExamQuestionScreen({
       })),
       selectedOptionId: selectedOptions[raw.id],
     } as MCQQuestion;
-  }, [fetchedQuestions, currentIndex, flaggedIds, selectedOptions]);
+  }, [fetchedQuestions, currentIndex, flaggedIds, selectedOptions, textAnswers]);
 
   // Local MCQ selection state, mirrors the current question's saved choice.
   const [localSelectedOption, setLocalSelectedOption] = useState<
@@ -353,13 +301,8 @@ export function ExamQuestionScreen({
         ? question.selectedOptionId
         : undefined,
     );
-    const currentId = fetchedQuestions[currentIndex]?.id; // id of the question now on screen
     setLocalCode(
-      question.type === "coding"
-        ? ((currentId ? codeByQuestion[currentId] : undefined) ??
-            question.starterCode ??
-            "") // the student's saved code wins over the starter template
-        : "",
+      question.type === "coding" ? (question.starterCode ?? "") : "",
     );
     clearResults(); // NEW — don't show the previous question's Run Tests/Run Code output
   }, [question]);
@@ -385,6 +328,13 @@ export function ExamQuestionScreen({
     });
   };
 
+  // fill-in-the-blank: remember what was typed for the current question
+  const handleTextChange = (text: string) => {
+    if (!fetchedQuestions[currentIndex]) return; // guard against no question loaded
+    const id = fetchedQuestions[currentIndex].id;
+    setTextAnswers((prev) => ({ ...prev, [id]: text }));
+  };
+
   const handleCodeChange = (code: string) => {
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
     setLocalCode(code);
@@ -393,22 +343,6 @@ export function ExamQuestionScreen({
       [fetchedQuestions[currentIndex].id]: code,
     })); // remember this code
     onCodeChange?.(question.number, code);
-  };
-
-  const handleFitbChange = (text: string) => {
-    const current = fetchedQuestions[currentIndex];
-    if (!current) return; // guard against no question loaded
-    setFitbAnswers((prev) => ({ ...prev, [current.id]: text })); // remember what was typed for this question
-  };
-
-  const handleFitbClear = () => {
-    const current = fetchedQuestions[currentIndex];
-    if (!current) return; // guard against no question loaded
-    setFitbAnswers((prev) => {
-      const next = { ...prev }; // copy so we don't mutate state directly
-      delete next[current.id]; // remove this question's typed answer
-      return next;
-    });
   };
 
   // NEW — runs only the visible test cases, pure feedback, no writes.
@@ -467,32 +401,24 @@ export function ExamQuestionScreen({
   const { submitSession } = useSubmitExamSession(); // real grading call + its own error state
 
   function buildAnswers(): SubmittedAnswer[] {
-    const times = getTimes(); // seconds spent on each question so far
     return fetchedQuestions.map((q) => ({
       question_id: q.id, // real question id
-      time_spent_seconds: times[q.id] ?? 0, // seconds on this question, 0 if never opened
       answer_text:
         q.type === "coding"
           ? (codeByQuestion[q.id] ?? "") // whatever code was typed, or empty if untouched
           : q.type === "fitb"
-            ? (fitbAnswers[q.id] ?? "") // whatever text was typed, or empty if untouched
+            ? (textAnswers[q.id] ?? "") // whatever was typed in the blank, or empty if untouched
             : (selectedOptions[q.id] ?? ""), // whichever option id was picked, or empty if unanswered
     }));
   }
 
   const handleOnSubmit = async () => {
-    if (isSubmitting) return; // already sending, ignore extra clicks
-    setIsSubmitting(true); // lock the modal buttons while we send
     if (sessionId) {
       const answers = buildAnswers(); // every question's current answer, answered or not
       const result = await submitSession(sessionId, "submitted", answers); // real grading call
       if (!result) {
         console.error("Failed to submit exam session:"); // don't block navigation on this failing
-        if (await checkIfRemoved(sessionId)) {
-          setIsSubmitting(false); // unlock, the removal flow takes over
-          setIsSubmitOpen(false); // close the modal
-          return;
-        }
+        if (await checkIfRemoved(sessionId)) return;
       }
     }
     onSubmit?.();
@@ -520,35 +446,18 @@ export function ExamQuestionScreen({
   const progressCurrent =
     Object.keys(selectedOptions).length +
     Object.keys(codeByQuestion).length +
-    Object.values(fitbAnswers).filter((v) => v.trim() !== "").length; // rough answered count
+    Object.values(textAnswers).filter((text) => text.trim() !== "").length; // rough answered count
   const progressTotal = fetchedQuestions.length; // real total question count
-  const answeredCount = fetchedQuestions.filter(
-    (q) =>
-      selectedOptions[q.id] || codeByQuestion[q.id] || fitbAnswers[q.id]?.trim(),
-  ).length; // questions that have some answer, for the submit summary
-  const flaggedCount = flaggedIds.size; // questions the student flagged
 
   const progressPct = Math.round((progressCurrent / progressTotal) * 100);
   const isCoding = question.type === "coding";
   const isLastQuestion = question.number >= question.totalQuestions;
   const codingQ = isCoding ? (question as CodingQuestion) : null;
-  const isFitb = question.type === "fill-in-the-blank";
-  const mcqQ =
-    question.type === "multiple-choice" ? (question as MCQQuestion) : null; // fill-in-the-blank is no longer treated as MCQ
+  const mcqQ = question.type === "multiple-choice" ? (question as MCQQuestion) : null;
+  const fitbQ = question.type === "fill-in-blank" ? (question as FITBQuestion) : null;
 
   return (
     <div className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden bg-[var(--bg-sidebar)]">
-      {/* Confirmation before the answers are sent for grading */}
-      <SubmitConfirmationModal
-        isOpen={isSubmitOpen}
-        totalCount={progressTotal}
-        answeredCount={answeredCount}
-        flaggedCount={flaggedCount}
-        isSubmitting={isSubmitting}
-        onConfirm={handleOnSubmit}
-        onCancel={() => setIsSubmitOpen(false)}
-      />
-
       {/* Top navigation bar */}
       <header className="h-14 flex-shrink-0 flex items-center px-6 border-b border-[var(--border-primary)] backdrop-blur-md z-10 bg-[var(--bg-sidebar)]">
         <div className="flex items-center justify-between w-full gap-4">
@@ -618,9 +527,16 @@ export function ExamQuestionScreen({
         >
           {/* Question header */}
           <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
-            <h2 className="text-[22px] font-semibold text-[var(--text-primary)] leading-tight">
-              {question.title}
-            </h2>
+            <div className="min-w-0">
+              {question.sectionTitle && (
+                <p className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-1 break-words">
+                  {question.sectionTitle}
+                </p>
+              )}
+              <h2 className="text-[22px] font-semibold text-[var(--text-primary)] leading-tight">
+                {question.title}
+              </h2>
+            </div>
             <button
               onClick={handleFlag}
               className={`
@@ -655,7 +571,7 @@ export function ExamQuestionScreen({
           </div>
           {/* Question body */}
           <div className="px-6 pb-4 min-w-0">
-            <p className="text-[15px] text-black leading-relaxed mb-5">
+            <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed mb-5">
               {question.body}
             </p>
 
@@ -703,6 +619,28 @@ export function ExamQuestionScreen({
               </>
             )}
 
+            {/* Fill in the blank: one text box */}
+            {fitbQ && (
+              <div className="mt-6 w-full min-w-0">
+                <label
+                  htmlFor="fitb-answer"
+                  className="block font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-2"
+                >
+                  Your answer
+                </label>
+                <input
+                  id="fitb-answer"
+                  type="text"
+                  value={fitbQ.answerText ?? ""}
+                  onChange={(e) => handleTextChange(e.target.value)}
+                  autoComplete="off"
+                  spellCheck={false}
+                  placeholder="Type your answer"
+                  className="w-full px-4 py-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-sidebar)] text-[var(--text-inverted)] text-[15px] outline-none focus:border-[var(--text-secondary)]"
+                />
+              </div>
+            )}
+
             {/* MCQ: options */}
             {mcqQ && (
               <MCQOptions
@@ -710,15 +648,6 @@ export function ExamQuestionScreen({
                 selectedId={localSelectedOption}
                 onSelect={handleOptionSelect}
                 onClear={handleClearOption}
-              />
-            )}
-
-            {/* Fill-in-the-blank: answer box */}
-            {isFitb && (
-              <FillInBlankAnswer
-                value={fitbAnswers[fetchedQuestions[currentIndex].id] ?? ""}
-                onChange={handleFitbChange}
-                onClear={handleFitbClear}
               />
             )}
           </div>
@@ -737,15 +666,13 @@ export function ExamQuestionScreen({
               testsResult={testsResult}
               codeResult={codeResult}
               runError={runError}
-              panelHeight={outputPanelHeight}
-              onPanelHeightChange={setOutputPanelHeight}
             />
           </section>
         )}
         {/* Right sidebar: question map */}
         <aside className="w-[220px] flex-shrink-0 flex flex-col border-l border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
-          <div className="p-4 flex-grow bg-[var(--bg-app)]">
-            <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[#00285d] mb-3">
+          <div className="p-4 flex-grow">
+            <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--text-inverted-secondary)] mb-3">
               Question Map
             </p>
             <QuestionMapGrid
@@ -782,7 +709,7 @@ export function ExamQuestionScreen({
           <button
             onClick={handlePrevious}
             disabled={question.number <= 1}
-            className={footerButtonClass}
+            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           >
             <svg
               width="14"
@@ -821,8 +748,12 @@ export function ExamQuestionScreen({
         </div>
         {/* Merged Next/Submit button, Submit only appears on the last question */}
         <button
-          onClick={isLastQuestion ? () => setIsSubmitOpen(true) : handleNext}
-          className={footerButtonClass}
+          onClick={isLastQuestion ? handleOnSubmit : handleNext}
+          className={
+            isLastQuestion
+              ? "flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]"
+              : "flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150"
+          }
         >
           {isLastQuestion ? (
             "Submit"
