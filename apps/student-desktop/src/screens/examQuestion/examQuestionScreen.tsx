@@ -3,6 +3,8 @@ import { useRouterLogic } from "../../router/routerLogic";
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real examId/sessionId from Confirmation
 import { useExamQuestions } from "../../hooks/useExamQuestions"; // real question fetch
 import { useExamTimer } from "../../hooks/useExamTimer"; // real countdown, based on real start time + duration
+import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker";
+import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; 
 import { useCodeExecution } from "../../hooks/useCodeExecution"; // NEW — real Run Tests / Run Code wiring
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
@@ -207,8 +209,15 @@ export function ExamQuestionScreen({
 
   // Tracks which question is currently shown, by position in the loaded list.
   const [currentIndex, setCurrentIndex] = useState(0);
+  // WBS 6.7: how long the student spends on each question (only while it is on screen and the window is in front)
+  const { getTimes } = useQuestionTimeTracker(fetchedQuestions[currentIndex]?.id ?? null);
+  const [showSubmitConfirm, setShowSubmitConfirm] = useState(false); // the "are you sure?" step before submitting
+  const [isSubmitting, setIsSubmitting] = useState(false); // true while the submit call is running
+  // The output panel height is kept here so it survives moving between questions (undefined = use the editor's default)
+  const [panelHeight, setPanelHeight] = useState<number | undefined>(undefined);
   useEffect(() => {
-    questionIdRef.current = fetchedQuestions[currentIndex]?.id ?? null; // null while loading
+    const current = fetchedQuestions[currentIndex];
+    questionIdRef.current = current && !current.poolDrawId ? current.id : null; // null while loading, and for pooled questions (their id is a draw, not a question)
   }, [fetchedQuestions, currentIndex]);
   // Tracks flagged state per question id, kept in memory only for now.
   const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
@@ -411,9 +420,11 @@ export function ExamQuestionScreen({
   const { submitSession } = useSubmitExamSession(); // real grading call + its own error state
 
   function buildAnswers(): SubmittedAnswer[] {
+    const times = getTimes(); // seconds per question id, including the stretch running right now
     return fetchedQuestions.map((q) => ({
       question_id: q.poolDrawId ? null : q.id, // real question id; none for a pooled question
       pool_draw_id: q.poolDrawId, // the draw id for a pooled question, otherwise null
+      time_spent_seconds: times[q.id] ?? 0, // WBS 6.7
       answer_text:
         q.type === "coding"
           ? (codeByQuestion[q.id] ?? "") // whatever code was typed, or empty if untouched
@@ -424,6 +435,16 @@ export function ExamQuestionScreen({
   }
 
   const handleOnSubmit = async () => {
+    setIsSubmitting(true);
+    try {
+      await submitAndLeave();
+    } finally {
+      setIsSubmitting(false);
+      setShowSubmitConfirm(false);
+    }
+  };
+
+  const submitAndLeave = async () => {
     if (sessionId) {
       const answers = buildAnswers(); // every question's current answer, answered or not
       const result = await submitSession(sessionId, "submitted", answers); // real grading call
@@ -677,6 +698,8 @@ export function ExamQuestionScreen({
               testsResult={testsResult}
               codeResult={codeResult}
               runError={runError}
+              panelHeight={panelHeight}
+              onPanelHeightChange={setPanelHeight}
             />
           </section>
         )}
@@ -759,7 +782,7 @@ export function ExamQuestionScreen({
         </div>
         {/* Merged Next/Submit button, Submit only appears on the last question */}
         <button
-          onClick={isLastQuestion ? handleOnSubmit : handleNext}
+          onClick={isLastQuestion ? () => setShowSubmitConfirm(true) : handleNext}
           className={
             isLastQuestion
               ? "flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]"
@@ -789,6 +812,20 @@ export function ExamQuestionScreen({
           )}
         </button>
       </footer>
+
+      <SubmitConfirmationModal
+        isOpen={showSubmitConfirm}
+        totalCount={fetchedQuestions.length}
+        answeredCount={
+          fetchedQuestions.filter((q) =>
+            Boolean(selectedOptions[q.id] || codeByQuestion[q.id] || textAnswers[q.id]?.trim()),
+          ).length
+        }
+        flaggedCount={flaggedIds.size}
+        isSubmitting={isSubmitting}
+        onConfirm={handleOnSubmit}
+        onCancel={() => setShowSubmitConfirm(false)}
+      />
     </div>
   );
 }

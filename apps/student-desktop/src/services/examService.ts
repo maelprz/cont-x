@@ -257,6 +257,7 @@ export interface SubmittedAnswer {
   question_id: string | null; // null for a pooled question
   pool_draw_id?: string | null; // set for a pooled question, instead of question_id
   answer_text: string;
+  time_spent_seconds?: number; // seconds spent on this question (WBS 6.7)
 }
 
 export interface SubmitExamSessionResult {
