@@ -14,13 +14,14 @@ export function useCodeExecution() {
     questionId: string,
     code: string,
     programType: 'cFunction' | 'cProgram',
-    mainCode: string | undefined
+    mainCode: string | undefined,
+    pooled = false // true for a question drawn from a random pool
   ) => {
     setIsRunning(true);
     setRunError(null);
     setCodeResult(null); // clear the other panel's result so only one shows at a time
     try {
-      const result = await runVisibleTests(questionId, code, programType, mainCode);
+      const result = await runVisibleTests(questionId, code, programType, mainCode, pooled);
       setTestsResult(result);
     } catch (err) {
       setRunError(err instanceof Error ? err.message : 'Could not run tests.');
@@ -38,7 +39,8 @@ export function useCodeExecution() {
     programType: 'cFunction' | 'cProgram',
     mainCode: string | undefined,
     maxPoints: number,
-    checkPenaltyPerAttempt: number
+    checkPenaltyPerAttempt: number,
+    pooled = false // true for a question drawn from a random pool
   ) => {
     setIsRunning(true);
     setRunError(null);
@@ -51,7 +53,8 @@ export function useCodeExecution() {
         programType,
         mainCode,
         maxPoints,
-        checkPenaltyPerAttempt
+        checkPenaltyPerAttempt,
+        pooled
       );
       setCodeResult(result);
     } catch (err) {
