@@ -362,6 +362,7 @@ export function ExamQuestionScreen({
       localCode,
       raw.programType ?? "cProgram",
       raw.mainCode ?? undefined,
+      Boolean(raw.poolDrawId), // a pooled question reads its tests through the pool function
     );
   };
 
@@ -377,6 +378,7 @@ export function ExamQuestionScreen({
       raw.mainCode ?? undefined,
       raw.maxPoints,
       raw.checkPenaltyPerAttempt ?? 0,
+      Boolean(raw.poolDrawId),
     );
   };
 
@@ -410,7 +412,8 @@ export function ExamQuestionScreen({
 
   function buildAnswers(): SubmittedAnswer[] {
     return fetchedQuestions.map((q) => ({
-      question_id: q.id, // real question id
+      question_id: q.poolDrawId ? null : q.id, // real question id; none for a pooled question
+      pool_draw_id: q.poolDrawId, // the draw id for a pooled question, otherwise null
       answer_text:
         q.type === "coding"
           ? (codeByQuestion[q.id] ?? "") // whatever code was typed, or empty if untouched

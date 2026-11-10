@@ -24,13 +24,17 @@ export interface RunOutcome {
 // even if this ever fires twice in a race (e.g. rapid double-click).
 async function ensureAnswerRow(
   sessionId: string, // exam_sessions.id — whose attempt this is
-  questionId: string, // questions.id — which question this answer belongs to
+  questionId: string, // questions.id — which question this answer belongs to (or the draw id when pooled)
+  pooled = false, // true when questionId is really a pooled question's draw id
 ): Promise<string> {
+  // a pooled question's answer row is keyed by its draw, a normal one by its question id
+  const keyColumn = pooled ? 'pool_draw_id' : 'question_id';
+
   const { data: existing, error: findError } = await supabase
     .from('student_answers')
     .select('id')
     .eq('session_id', sessionId)
-    .eq('question_id', questionId)
+    .eq(keyColumn, questionId)
     .maybeSingle();
 
   if (findError) throw new Error(findError.message);
@@ -40,7 +44,7 @@ async function ensureAnswerRow(
     .from('student_answers')
     .insert({
       session_id: sessionId,
-      question_id: questionId,
+      [keyColumn]: questionId,
       answer_text: null, // the submit RPC is what saves the real final code/answer text
       score: 0,
       check_attempts: 0,
@@ -57,7 +61,7 @@ async function ensureAnswerRow(
       .from('student_answers')
       .select('id')
       .eq('session_id', sessionId)
-      .eq('question_id', questionId)
+      .eq(keyColumn, questionId)
       .single();
 
     if (fallbackError) throw new Error(insertError.message); // original error is more useful here
@@ -67,23 +71,42 @@ async function ensureAnswerRow(
   return created.id;
 }
 
+// Loads a question's test cases. A normal question reads its own test_cases rows; a pooled
+// question reads them through get_pool_draw_test_cases, because students cannot read the bank.
+async function loadTestCases(
+  questionId: string,
+  pooled: boolean,
+  onlyVisible: boolean,
+): Promise<{ id: string; input: string; expected_output: string; time_limit_ms: number }[]> {
+  if (pooled) {
+    const { data, error } = await supabase.rpc('get_pool_draw_test_cases', {
+      p_draw_id: questionId,
+      p_only_visible: onlyVisible,
+    });
+    if (error || !data) throw new Error('Could not load test cases');
+    return data as { id: string; input: string; expected_output: string; time_limit_ms: number }[];
+  }
+
+  let query = supabase
+    .from('test_cases')
+    .select('id, input, expected_output, time_limit_ms')
+    .eq('coding_question_id', questionId);
+  if (onlyVisible) query = query.eq('is_hidden', false);
+  const { data, error } = await query;
+  if (error || !data) throw new Error('Could not load test cases');
+  return data;
+}
+
 // Run Tests: checks only the teacher's visible test cases
 // Pure feedback for the student, no Supabase writes, no penalty
 export async function runVisibleTests(
   questionId: string,
   code: string,
   programType: 'cFunction' | 'cProgram',
-  mainCode: string | undefined
+  mainCode: string | undefined,
+  pooled = false // true when questionId is a pooled question's draw id
 ): Promise<RunOutcome> {
-  const { data: testCases, error } = await supabase
-    .from('test_cases')
-    .select('id, input, expected_output, time_limit_ms')
-    .eq('coding_question_id', questionId)
-    .eq('is_hidden', false);
-
-  if (error || !testCases) {
-    throw new Error('Could not load visible test cases');
-  }
+  const testCases = await loadTestCases(questionId, pooled, true);
 
   return window.ipcRenderer.invoke('run-test-cases', {
     code,
@@ -109,18 +132,12 @@ export async function runAllTestsAndScore(
   programType: 'cFunction' | 'cProgram',
   mainCode: string | undefined,
   maxPoints: number,
-  checkPenaltyPerAttempt: number
+  checkPenaltyPerAttempt: number,
+  pooled = false // true when questionId is a pooled question's draw id
 ): Promise<RunOutcome> {
-  const answerId = await ensureAnswerRow(sessionId, questionId); // real row, created on first click if needed
+  const answerId = await ensureAnswerRow(sessionId, questionId, pooled); // real row, created on first click if needed
 
-  const { data: testCases, error } = await supabase
-    .from('test_cases')
-    .select('id, input, expected_output, time_limit_ms')
-    .eq('coding_question_id', questionId);
-
-  if (error || !testCases) {
-    throw new Error('Could not load test cases');
-  }
+  const testCases = await loadTestCases(questionId, pooled, false);
 
   const outcome: RunOutcome = await window.ipcRenderer.invoke('run-test-cases', {
     code,
