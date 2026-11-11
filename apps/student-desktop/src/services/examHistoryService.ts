@@ -47,13 +47,33 @@ const SESSION_SELECT = `
   )
 `; // pass_mark is read from class_exams because that is where the column lives
 
+// Points available from the random-pool questions each attempt drew, by session id.
+// (The exam's own question list does not include them: every student draws different ones.)
+async function loadPooledPoints(sessionIds: string[]): Promise<Map<string, number>> {
+  const pooled = new Map<string, number>();
+  if (sessionIds.length === 0) return pooled;
+  const { data, error } = await supabase
+    .from("session_pool_questions")
+    .select("session_id, max_points")
+    .in("session_id", sessionIds);
+  if (error) {
+    reportError("loadPooledPoints", error); // the lists still load, just without the pooled points
+    return pooled;
+  }
+  for (const row of data ?? []) {
+    pooled.set(row.session_id, (pooled.get(row.session_id) ?? 0) + (row.max_points ?? 0));
+  }
+  return pooled;
+}
+
 // Turns one database row into one table row, or null if the exam is not readable.
-function mapSession(session: SessionRow): ExamHistoryEntry | null {
+function mapSession(session: SessionRow, pooledPoints = 0): ExamHistoryEntry | null {
   const exam = unwrapOne(session.exams as ExamRel | ExamRel[] | null); // the exam this attempt belongs to
   if (!exam) return null; // skip rows where the exam could not be read
 
   const classExam = unwrapOne(session.class_exams as ClassExamRel | ClassExamRel[] | null); // the class attempt, which holds the pass mark
-  const maxScore = (exam.questions ?? []).reduce((sum, q) => sum + (q.max_points ?? 0), 0); // total points available
+  const maxScore =
+    (exam.questions ?? []).reduce((sum, q) => sum + (q.max_points ?? 0), 0) + pooledPoints; // total points available, including this attempt's pooled questions
   const totalScore = session.total_score ?? 0; // treat a missing score as zero
   const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 1000) / 10 : 0; // percent with one decimal, never divides by zero
   const passmark = classExam?.pass_mark ?? null; // null means the teacher left the pass mark blank
@@ -91,8 +111,10 @@ export async function fetchExamHistory(): Promise<ExamHistoryEntry[]> {
   }
   if (!data) return []; // nothing came back
 
-  return (data as unknown as SessionRow[])
-    .map(mapSession) // convert each row
+  const rows = data as unknown as SessionRow[];
+  const pooledPoints = await loadPooledPoints(rows.map((row) => row.id)); // pooled questions count toward the maximum too
+  return rows
+    .map((row) => mapSession(row, pooledPoints.get(row.id) ?? 0)) // convert each row
     .filter((entry): entry is ExamHistoryEntry => entry !== null); // drop rows we could not read
 }
 
@@ -111,7 +133,9 @@ export async function fetchAllExamHistory(): Promise<ExamHistoryEntry[]> {
   }
   if (!data) return []; // nothing came back
 
-  return (data as unknown as SessionRow[])
-    .map(mapSession) // convert each row
+  const rows = data as unknown as SessionRow[];
+  const pooledPoints = await loadPooledPoints(rows.map((row) => row.id)); // pooled questions count toward the maximum too
+  return rows
+    .map((row) => mapSession(row, pooledPoints.get(row.id) ?? 0)) // convert each row
     .filter((entry): entry is ExamHistoryEntry => entry !== null); // drop rows we could not read
 }

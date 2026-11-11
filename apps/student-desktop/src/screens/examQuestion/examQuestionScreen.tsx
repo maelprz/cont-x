@@ -3,8 +3,9 @@ import { useRouterLogic } from "../../router/routerLogic";
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real examId/sessionId from Confirmation
 import { useExamQuestions } from "../../hooks/useExamQuestions"; // real question fetch
 import { useExamTimer } from "../../hooks/useExamTimer"; // real countdown, based on real start time + duration
-import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker";
-import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; 
+import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker"; // seconds spent on each question (WBS 6.7)
+import { useSessionRules } from "../../hooks/useSessionRules"; // the teacher's rules for this attempt (sequential order, ...)
+import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; // "are you sure?" step before submitting
 import { useCodeExecution } from "../../hooks/useCodeExecution"; // NEW — real Run Tests / Run Code wiring
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
@@ -60,7 +61,7 @@ function QuestionMapGrid({
 }) {
   return (
     <div className="grid grid-cols-4 gap-2">
-      {items.map(({ number, status, sectionTitle }, index) => (
+      {items.map(({ number, status, sectionTitle, locked }, index) => (
         <Fragment key={number}>
           {/* a heading row whenever a new section starts (only exams with sections have these) */}
           {sectionTitle && sectionTitle !== items[index - 1]?.sectionTitle && (
@@ -69,10 +70,13 @@ function QuestionMapGrid({
             </p>
           )}
           <button
-            onClick={() => onNavigate?.(number)}
+            onClick={() => !locked && onNavigate?.(number)}
+            disabled={locked}
+            title={locked ? "Answer the earlier questions first" : undefined}
             className={`
               h-9 w-full rounded-lg border text-[12px] font-semibold font-mono
-              transition-colors duration-150 cursor-pointer relative
+              transition-colors duration-150 relative
+              ${locked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
               ${statusStyle(status, number === currentNumber)}
               ${status === "flagged" && number !== currentNumber ? "border-dashed" : ""}
             `}
@@ -211,6 +215,7 @@ export function ExamQuestionScreen({
   const [currentIndex, setCurrentIndex] = useState(0);
   // WBS 6.7: how long the student spends on each question (only while it is on screen and the window is in front)
   const { getTimes } = useQuestionTimeTracker(fetchedQuestions[currentIndex]?.id ?? null);
+  const { rules } = useSessionRules(sessionId); // the teacher's rules for this attempt
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false); // the "are you sure?" step before submitting
   const [isSubmitting, setIsSubmitting] = useState(false); // true while the submit call is running
   // The output panel height is kept here so it survives moving between questions (undefined = use the editor's default)
@@ -233,18 +238,32 @@ export function ExamQuestionScreen({
   );
 
   // Builds the question map (sidebar grid) from the real fetched list.
+  // Same idea as the "answered" status in the map: something was selected, typed or written.
+  const isAnswered = (id: string) =>
+    Boolean(selectedOptions[id] || codeByQuestion[id] || textAnswers[id]?.trim());
+
+  // In-order exams: the first question with no answer yet. Nothing past it can be opened.
+  const firstUnansweredIndex = (() => {
+    const index = fetchedQuestions.findIndex((q) => !isAnswered(q.id));
+    return index === -1 ? Math.max(fetchedQuestions.length - 1, 0) : index;
+  })();
+
+  // In-order exams: "Next" stays off until the question on screen has an answer.
+  const nextBlocked = rules.sequential && !isAnswered(fetchedQuestions[currentIndex]?.id ?? "");
+
   const questionMap: QuestionMapItem[] = useMemo(
     () =>
       fetchedQuestions.map((q, i) => ({
         number: i + 1, // display position, not the database id
         sectionTitle: q.sectionTitle ?? undefined, // lets the map show section headings
+        locked: rules.sequential && i > firstUnansweredIndex, // in-order exams: nothing past the first unanswered question
         status: flaggedIds.has(q.id)
           ? "flagged"
           : selectedOptions[q.id] || codeByQuestion[q.id] || textAnswers[q.id]?.trim()
             ? "answered"
             : "unanswered",
       })),
-    [fetchedQuestions, flaggedIds, selectedOptions, codeByQuestion, textAnswers],
+    [fetchedQuestions, flaggedIds, selectedOptions, codeByQuestion, textAnswers, rules.sequential, firstUnansweredIndex],
   );
 
   // Converts the current fetched question into the shape the existing UI expects.
@@ -403,6 +422,7 @@ export function ExamQuestionScreen({
   };
 
   const handleNavigate = (n: number) => {
+    if (rules.sequential && n - 1 > firstUnansweredIndex) return; // in-order exams: cannot jump past an unanswered question
     setCurrentIndex(n - 1); // convert 1-based display number to array index
     onNavigate?.(n);
   };
@@ -413,6 +433,7 @@ export function ExamQuestionScreen({
   };
 
   const handleNext = () => {
+    if (nextBlocked) return; // in-order exams: this question has to be answered first
     setCurrentIndex((i) => Math.min(i + 1, fetchedQuestions.length - 1)); // never go past the last question
     onNext?.();
   };
@@ -771,6 +792,11 @@ export function ExamQuestionScreen({
               Auto-Save Active
             </span>
           </div>
+          {!isLastQuestion && nextBlocked && (
+            <span className="font-mono text-[10px] text-[var(--warning-icon)]">
+              Answer this question to continue. This exam is taken in order.
+            </span>
+          )}
           <span className="font-mono text-[10px] text-[var(--border-primary)]">
             T-STAMP:{" "}
             {new Date().toLocaleTimeString("en-GB", {
@@ -783,10 +809,11 @@ export function ExamQuestionScreen({
         {/* Merged Next/Submit button, Submit only appears on the last question */}
         <button
           onClick={isLastQuestion ? () => setShowSubmitConfirm(true) : handleNext}
+          disabled={!isLastQuestion && nextBlocked}
           className={
             isLastQuestion
               ? "flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]"
-              : "flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150"
+              : "flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
           }
         >
           {isLastQuestion ? (

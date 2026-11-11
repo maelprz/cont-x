@@ -288,6 +288,33 @@ export async function submitExamSession(
   }; // bubble up so the screen can decide what to do
 }
 
+// The teacher's exam rules for one attempt, set per class in Manage Classes > Edit Settings.
+export interface SessionRules {
+  sequential: boolean; // class_exams.sequential: answer in order, no skipping ahead past an unanswered question
+  allowReview: boolean; // class_exams.allow_review
+  overtimePolicy: "accept" | "zero"; // class_exams.overtime_policy
+  answerChangeDeduction: number; // class_exams.answer_change_deduction, points lost per changed answer (0 = none)
+}
+
+// Fetches the rules for one attempt. The student can read their own session and their own class exam.
+export async function getSessionRules(sessionId: string): Promise<SessionRules> {
+  const { data, error } = await supabase
+    .from("exam_sessions")
+    .select("class_exams ( sequential, allow_review, overtime_policy, answer_change_deduction )")
+    .eq("id", sessionId)
+    .single();
+
+  if (error) throw new Error(error.message); // let the hook decide what to do
+
+  const rules = unwrapOne(data.class_exams as any) as any; // same array-or-object quirk as elsewhere
+  return {
+    sequential: rules?.sequential ?? false,
+    allowReview: rules?.allow_review ?? false,
+    overtimePolicy: rules?.overtime_policy === "zero" ? "zero" : "accept",
+    answerChangeDeduction: Number(rules?.answer_change_deduction ?? 0),
+  };
+}
+
 // Everything one Result screen needs for a single session, fetched by id.
 export interface ExamResultDetails {
   examTitle: string; // exams.title
@@ -297,9 +324,10 @@ export interface ExamResultDetails {
   joinedAt: string; // exam_sessions.joined_at
   submittedAt: string | null; // exam_sessions.submitted_at, null if somehow still open
   totalScore: number; // exam_sessions.total_score
-  maxScore: number; // sum of questions.max_points for this exam (pool questions not included yet)
-  totalQuestions: number; // count of every question in this exam, for the "X/Y Correct" metric
+  maxScore: number; // sum of max_points for this exam's questions plus the pooled questions this attempt drew
+  totalQuestions: number; // count of the exam's questions plus the pooled ones this attempt drew, for the "X/Y Correct" metric
   correctCount: number; // how many saved answers scored above zero
+  allowReview: boolean; // class_exams.allow_review: may the student look at their answers? (read fresh each time the result opens, the teacher can change it after the exam)
 }
 
 // Fetches full result data for one specific session, used by the
@@ -316,7 +344,8 @@ export async function getExamResultDetails(
       total_score,
       class_exams (
         duration_minutes,
-        pass_mark
+        pass_mark,
+        allow_review
       ),
       exams (
         title,
@@ -324,7 +353,7 @@ export async function getExamResultDetails(
         questions ( max_points )
       )
     `,
-    ) // CHANGED: duration and pass mark now come from class_exams
+    ) // CHANGED: duration, pass mark and the review switch come from class_exams
     .eq("id", sessionId)
     .single(); // exactly one session row expected
 
@@ -333,12 +362,22 @@ export async function getExamResultDetails(
   const examRow = unwrapOne(data.exams as any); // handles the same array-or-object quirk as before
   const classExam = unwrapOne(data.class_exams as any); // same unwrap for the class exam
 
-  const questionList = examRow?.questions ?? []; // every question in this exam
+  const questionList = examRow?.questions ?? []; // every question placed directly in this exam
 
-  const maxScore = questionList.reduce(
-    (sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0),
-    0,
-  ); // total possible points across every question in this exam
+  // the random-pool questions THIS attempt drew (every student draws different ones)
+  const { data: drawn, error: drawnError } = await supabase
+    .from("session_pool_questions")
+    .select("max_points")
+    .eq("session_id", sessionId);
+  if (drawnError) throw new Error(drawnError.message); // bubble up, let the screen decide the fallback
+  const pooledList = drawn ?? [];
+
+  const maxScore =
+    questionList.reduce(
+      (sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0),
+      0,
+    ) +
+    pooledList.reduce((sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0), 0); // total possible points, pooled questions included
 
   // separate, real query: how many of this session's saved answers scored
   // above zero. Coding scores come from Run Code, so this is a rough count.
@@ -359,7 +398,8 @@ export async function getExamResultDetails(
     submittedAt: data.submitted_at,
     totalScore: data.total_score ?? 0,
     maxScore,
-    totalQuestions: questionList.length, // real count of questions in this exam
+    totalQuestions: questionList.length + pooledList.length, // placed questions plus the pooled ones this attempt drew
     correctCount: correctCount ?? 0, // default to zero if the count came back null
+    allowReview: classExam?.allow_review ?? false, // off unless the teacher turned it on
   };
 }
