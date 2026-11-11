@@ -130,9 +130,8 @@ export function ExamResultScreen({
     : 0;
   const timeTakenSeconds = Math.max(Math.min(rawElapsed, allocationSeconds), 0);
 
-  // Answer review is off by default. There is no teacher setting for it yet,
-  // so when one exists, set this from that setting instead of a fixed false.
-  const reviewPermitted = false;
+  // Answer review follows the teacher's "Allow review" setting for this class exam (off by default).
+  const reviewPermitted = details.allowReview;
 
   const displayMetrics: ResultMetric[] = metrics ?? [
     {

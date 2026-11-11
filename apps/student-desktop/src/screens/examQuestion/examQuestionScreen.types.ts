@@ -11,6 +11,7 @@ export interface QuestionMapItem {
   number: number;
   status: QuestionStatus;
   sectionTitle?: string; // the section this question is in, so the map can show headings
+  locked?: boolean; // true while the exam must be answered in order and this question is not reachable yet
 }
 
 // Multiple-choice option
