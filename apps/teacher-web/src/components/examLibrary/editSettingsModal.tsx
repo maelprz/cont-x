@@ -28,6 +28,7 @@ export function EditSettingsModal({
   const [passMarkInput, setPassMarkInput] = useState(""); // blank = no minimum
   const [verificationCode, setVerificationCode] = useState("");
   const [randomizeOrder, setRandomizeOrder] = useState(false);
+  const [allowOvertime, setAllowOvertime] = useState(false); // off = hard stop: answers are submitted automatically at time-up
   const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicy>("accept");
   const [sequential, setSequential] = useState(false);
   const [allowReview, setAllowReview] = useState(false);
@@ -42,6 +43,7 @@ export function EditSettingsModal({
     setPassMarkInput(settings.passMark !== null ? String(settings.passMark) : "");
     setVerificationCode(settings.verificationCode ?? "");
     setRandomizeOrder(settings.randomizeOrder);
+    setAllowOvertime(settings.allowOvertime);
     setOvertimePolicy(settings.overtimePolicy);
     setSequential(settings.sequential);
     setAllowReview(settings.allowReview);
@@ -76,6 +78,7 @@ export function EditSettingsModal({
       durationMinutes: totalMinutes,
       passMark: passMarkNumber,
       randomizeOrder,
+      allowOvertime,
       overtimePolicy,
       sequential,
       allowReview,
@@ -278,20 +281,40 @@ export function EditSettingsModal({
               You can change this after the exam has ended.
             </p>
 
-            <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
-              When time runs out
+            <label className="flex items-center gap-2 mb-1 cursor-pointer">
+              <input
+                type="checkbox"
+                checked={allowOvertime}
+                onChange={(e) => setAllowOvertime(e.target.checked)}
+              />
+              <span className="text-[13px] text-[var(--color-base-content)]">
+                Let students keep going after time runs out (overtime)
+              </span>
             </label>
-            <select
-              value={overtimePolicy}
-              onChange={(e) => setOvertimePolicy(e.target.value === "zero" ? "zero" : "accept")}
-              className="w-full px-3 py-2 rounded-lg border text-[13px] mb-1 bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
-            >
-              <option value="accept">Students can keep going, and it is logged as overtime</option>
-              <option value="zero">Students can keep going, but answers saved after time score zero</option>
-            </select>
-            <p className="text-[11px] mb-4 opacity-50 text-[var(--color-base-content)]">
-              Overtime shows next to the attempt on the results screen.
+            <p className="text-[11px] mb-3 ml-6 opacity-50 text-[var(--color-base-content)]">
+              Off: when time runs out, the student&apos;s answers are submitted automatically.
             </p>
+
+            {allowOvertime && (
+              <>
+                <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
+                  Answers changed after time runs out
+                </label>
+                <select
+                  value={overtimePolicy}
+                  onChange={(e) => setOvertimePolicy(e.target.value === "zero" ? "zero" : "accept")}
+                  className="w-full px-3 py-2 rounded-lg border text-[13px] mb-1 bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
+                >
+                  <option value="accept">Still count, and the overtime is logged</option>
+                  <option value="zero">Score zero</option>
+                </select>
+                <p className="text-[11px] mb-4 opacity-50 text-[var(--color-base-content)]">
+                  Overtime shows next to the attempt on the results screen. A scheduled end time still
+                  ends the exam.
+                </p>
+              </>
+            )}
+            {!allowOvertime && <div className="mb-3" />}
 
             <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
               Deduction for changing an answer{" "}

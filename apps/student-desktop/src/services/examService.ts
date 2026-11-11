@@ -258,6 +258,8 @@ export interface SubmittedAnswer {
   pool_draw_id?: string | null; // set for a pooled question, instead of question_id
   answer_text: string;
   time_spent_seconds?: number; // seconds spent on this question (WBS 6.7)
+  change_count?: number; // how many times the answer was changed after it was first given (WBS 8.16)
+  answered_at?: string | null; // when the answer was last changed, ISO time (WBS 8.13 overtime rule)
 }
 
 export interface SubmitExamSessionResult {
@@ -292,6 +294,7 @@ export async function submitExamSession(
 export interface SessionRules {
   sequential: boolean; // class_exams.sequential: answer in order, no skipping ahead past an unanswered question
   allowReview: boolean; // class_exams.allow_review
+  allowOvertime: boolean; // class_exams.allow_overtime: false = time-up auto-submits; true = the student may keep going
   overtimePolicy: "accept" | "zero"; // class_exams.overtime_policy
   answerChangeDeduction: number; // class_exams.answer_change_deduction, points lost per changed answer (0 = none)
 }
@@ -300,7 +303,7 @@ export interface SessionRules {
 export async function getSessionRules(sessionId: string): Promise<SessionRules> {
   const { data, error } = await supabase
     .from("exam_sessions")
-    .select("class_exams ( sequential, allow_review, overtime_policy, answer_change_deduction )")
+    .select("class_exams ( sequential, allow_review, allow_overtime, overtime_policy, answer_change_deduction )")
     .eq("id", sessionId)
     .single();
 
@@ -310,6 +313,7 @@ export async function getSessionRules(sessionId: string): Promise<SessionRules> 
   return {
     sequential: rules?.sequential ?? false,
     allowReview: rules?.allow_review ?? false,
+    allowOvertime: rules?.allow_overtime ?? false,
     overtimePolicy: rules?.overtime_policy === "zero" ? "zero" : "accept",
     answerChangeDeduction: Number(rules?.answer_change_deduction ?? 0),
   };

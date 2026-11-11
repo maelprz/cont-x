@@ -6,6 +6,7 @@ import { getSessionRules, type SessionRules } from "../services/examService";
 const STRICT_WHILE_LOADING: SessionRules = {
   sequential: true,
   allowReview: false,
+  allowOvertime: false,
   overtimePolicy: "accept",
   answerChangeDeduction: 0,
 };
