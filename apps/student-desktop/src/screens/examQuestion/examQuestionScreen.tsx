@@ -198,7 +198,12 @@ export function ExamQuestionScreen({
     navigateTo("examResult");
   };
 
-  const timeLeftSeconds = useExamTimer(sessionId, handleTimeExpired); // real countdown, ticks every second
+  const { rules, isLoaded: rulesLoaded } = useSessionRules(sessionId); // the teacher's rules for this attempt
+  // Hard stop by default: at zero the answers are submitted automatically. With overtime allowed the clock keeps running past zero.
+  const timeLeftSeconds = useExamTimer(sessionId, handleTimeExpired, {
+    allowOvertime: rules.allowOvertime,
+    rulesReady: rulesLoaded,
+  }); // real countdown, ticks every second
 
   // NEW — real Run Tests / Run Code state and actions
   const {
@@ -215,11 +220,15 @@ export function ExamQuestionScreen({
   const [currentIndex, setCurrentIndex] = useState(0);
   // WBS 6.7: how long the student spends on each question (only while it is on screen and the window is in front)
   const { getTimes } = useQuestionTimeTracker(fetchedQuestions[currentIndex]?.id ?? null);
-  const { rules } = useSessionRules(sessionId); // the teacher's rules for this attempt
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false); // the "are you sure?" step before submitting
   const [isSubmitting, setIsSubmitting] = useState(false); // true while the submit call is running
   // The output panel height is kept here so it survives moving between questions (undefined = use the editor's default)
   const [panelHeight, setPanelHeight] = useState<number | undefined>(undefined);
+  // WBS 8.13 / 8.16: when each answer was last changed, how many times it was changed after first being given,
+  // and the last answer the student settled on (used to tell a real change from the first answer)
+  const answeredAtRef = useRef<Record<string, string>>({});
+  const changeCountRef = useRef<Record<string, number>>({});
+  const committedRef = useRef<Record<string, string>>({});
   useEffect(() => {
     const current = fetchedQuestions[currentIndex];
     questionIdRef.current = current && !current.poolDrawId ? current.id : null; // null while loading, and for pooled questions (their id is a draw, not a question)
@@ -345,6 +354,11 @@ export function ExamQuestionScreen({
 
   const handleOptionSelect = (id: string) => {
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
+    const questionId = fetchedQuestions[currentIndex].id;
+    const earlier = committedRef.current[questionId]; // the option chosen before, if any
+    if (earlier && earlier !== id) changeCountRef.current[questionId] = (changeCountRef.current[questionId] ?? 0) + 1;
+    committedRef.current[questionId] = id;
+    answeredAtRef.current[questionId] = new Date().toISOString();
     setLocalSelectedOption(id);
     setSelectedOptions((prev) => ({
       ...prev,
@@ -368,11 +382,13 @@ export function ExamQuestionScreen({
   const handleTextChange = (text: string) => {
     if (!fetchedQuestions[currentIndex]) return; // guard against no question loaded
     const id = fetchedQuestions[currentIndex].id;
+    answeredAtRef.current[id] = new Date().toISOString();
     setTextAnswers((prev) => ({ ...prev, [id]: text }));
   };
 
   const handleCodeChange = (code: string) => {
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
+    answeredAtRef.current[fetchedQuestions[currentIndex].id] = new Date().toISOString();
     setLocalCode(code);
     setCodeByQuestion((prev) => ({
       ...prev,
@@ -421,24 +437,50 @@ export function ExamQuestionScreen({
     onFlag?.(question.number);
   };
 
+  // Fill-in-the-blank: the answer counts as "given" when the student leaves the question. Leaving with a
+  // different non-empty answer than the one they left with last time is one change.
+  const settleTextAnswer = () => {
+    const current = fetchedQuestions[currentIndex];
+    if (current?.type !== "fitb") return;
+    const text = (textAnswers[current.id] ?? "").trim();
+    if (!text) return;
+    const earlier = committedRef.current[current.id];
+    if (earlier && earlier !== text) changeCountRef.current[current.id] = (changeCountRef.current[current.id] ?? 0) + 1;
+    committedRef.current[current.id] = text;
+  };
+
   const handleNavigate = (n: number) => {
     if (rules.sequential && n - 1 > firstUnansweredIndex) return; // in-order exams: cannot jump past an unanswered question
+    settleTextAnswer();
     setCurrentIndex(n - 1); // convert 1-based display number to array index
     onNavigate?.(n);
   };
 
   const handlePrevious = () => {
+    settleTextAnswer();
     setCurrentIndex((i) => Math.max(i - 1, 0)); // never go below the first question
     onPrevious?.();
   };
 
   const handleNext = () => {
     if (nextBlocked) return; // in-order exams: this question has to be answered first
+    settleTextAnswer();
     setCurrentIndex((i) => Math.min(i + 1, fetchedQuestions.length - 1)); // never go past the last question
     onNext?.();
   };
 
   const { submitSession } = useSubmitExamSession(); // real grading call + its own error state
+
+  // WBS 8.16: how many times this answer was changed. Multiple choice and fill-in-the-blank only; for a fill-in-the-blank
+  // that is still on screen, a different answer than the one last settled counts as one more.
+  const changeCountOf = (q: (typeof fetchedQuestions)[number]): number => {
+    const settled = changeCountRef.current[q.id] ?? 0;
+    if (q.type === "mcq") return settled;
+    if (q.type !== "fitb") return 0;
+    const text = (textAnswers[q.id] ?? "").trim();
+    const earlier = committedRef.current[q.id];
+    return settled + (text && earlier && earlier !== text ? 1 : 0);
+  };
 
   function buildAnswers(): SubmittedAnswer[] {
     const times = getTimes(); // seconds per question id, including the stretch running right now
@@ -446,6 +488,8 @@ export function ExamQuestionScreen({
       question_id: q.poolDrawId ? null : q.id, // real question id; none for a pooled question
       pool_draw_id: q.poolDrawId, // the draw id for a pooled question, otherwise null
       time_spent_seconds: times[q.id] ?? 0, // WBS 6.7
+      change_count: changeCountOf(q), // WBS 8.16
+      answered_at: answeredAtRef.current[q.id] ?? null, // WBS 8.13: when it was last changed
       answer_text:
         q.type === "coding"
           ? (codeByQuestion[q.id] ?? "") // whatever code was typed, or empty if untouched
@@ -505,6 +549,7 @@ export function ExamQuestionScreen({
   const progressPct = Math.round((progressCurrent / progressTotal) * 100);
   const isCoding = question.type === "coding";
   const isLastQuestion = question.number >= question.totalQuestions;
+  const isOvertime = timeLeftSeconds !== null && timeLeftSeconds < 0; // the limit has passed and the teacher allows overtime
   const codingQ = isCoding ? (question as CodingQuestion) : null;
   const mcqQ = question.type === "multiple-choice" ? (question as MCQQuestion) : null;
   const fitbQ = question.type === "fill-in-blank" ? (question as FITBQuestion) : null;
@@ -546,11 +591,15 @@ export function ExamQuestionScreen({
           <div className="flex items-center gap-2 px-3 rounded-lg border border-[var(--border-subtle)] flex-shrink-0 h-9">
             <div className="flex flex-col items-end justify-center leading-none">
               <span className="font-mono text-[8px] font-semibold tracking-[0.15em] uppercase text-[var(--text-inverted-secondary)]">
-                Time Left
+                {isOvertime ? "Overtime" : "Time Left"}
               </span>
-              <span className="font-mono text-[15px] font-bold text-[var(--text-inverted)] leading-tight tracking-tight">
+              <span
+                className={`font-mono text-[15px] font-bold leading-tight tracking-tight ${
+                  isOvertime ? "text-[var(--warning-icon)]" : "text-[var(--text-inverted)]"
+                }`}
+              >
                 {timeLeftSeconds !== null
-                  ? formatTime(timeLeftSeconds)
+                  ? `${isOvertime ? "+" : ""}${formatTime(Math.abs(timeLeftSeconds))}`
                   : "--:--:--"}
               </span>
             </div>
@@ -792,6 +841,13 @@ export function ExamQuestionScreen({
               Auto-Save Active
             </span>
           </div>
+          {isOvertime && (
+            <span className="font-mono text-[10px] text-[var(--warning-icon)]">
+              {rules.overtimePolicy === "zero"
+                ? "Time is up. Answers you change now score zero. Submit when you are done."
+                : "Time is up. Your overtime is recorded. Submit when you are done."}
+            </span>
+          )}
           {!isLastQuestion && nextBlocked && (
             <span className="font-mono text-[10px] text-[var(--warning-icon)]">
               Answer this question to continue. This exam is taken in order.

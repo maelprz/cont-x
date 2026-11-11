@@ -61,7 +61,8 @@ export interface ClassExamSettingsData {
   verificationCode: string | null;
   startsAt: string | null;
   endsAt: string | null;
-  overtimePolicy: OvertimePolicy; // students may go past the limit; this decides what late answers are worth
+  allowOvertime: boolean; // false (default): time-up submits the attempt automatically. true: students may keep going
+  overtimePolicy: OvertimePolicy; // only used when overtime is allowed: what answers changed after the limit are worth
   sequential: boolean; // true: questions must be answered in order, no skipping ahead
   allowReview: boolean; // true: students can view their answers after the exam
   answerChangeDeduction: number; // points lost each time a student changes an answer they already gave; 0 means off
@@ -109,6 +110,7 @@ export async function getClassExamSettings(
       randomize_order,
       starts_at,
       ends_at,
+      allow_overtime,
       overtime_policy,
       sequential,
       allow_review,
@@ -138,6 +140,7 @@ export async function getClassExamSettings(
     verificationCode: sessionCode,
     startsAt: data.starts_at,
     endsAt: data.ends_at,
+    allowOvertime: data.allow_overtime ?? false,
     overtimePolicy: data.overtime_policy === "zero" ? "zero" : "accept",
     sequential: data.sequential,
     allowReview: data.allow_review,
@@ -233,6 +236,7 @@ export type UpdateClassExamSettings = {
   verificationCode?: string;
   startsAt: string | null;
   endsAt: string | null;
+  allowOvertime: boolean;
   overtimePolicy: OvertimePolicy;
   sequential: boolean;
   allowReview: boolean;
@@ -250,6 +254,7 @@ export async function updateClassExamSettings(
     randomize_order: settings.randomizeOrder,
     starts_at: settings.startsAt,
     ends_at: settings.endsAt,
+    allow_overtime: settings.allowOvertime,
     overtime_policy: settings.overtimePolicy,
     sequential: settings.sequential,
     allow_review: settings.allowReview,
