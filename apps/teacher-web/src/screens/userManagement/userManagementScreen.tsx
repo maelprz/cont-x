@@ -11,6 +11,9 @@ import type {
 } from "../../services/userManagementService";
 import { BulkAccountsPanel } from "../../components/userManagement/bulkAccountsPanel";
 
+// new: the default password the server gives new accounts, read from the environment so it is never written in the code
+const DEFAULT_PASSWORD: string = import.meta.env.VITE_DEFAULT_ACCOUNT_PASSWORD ?? ""; // an empty string means the setting is missing, so the field stays blank
+
 // badge color per role
 const roleBadgeStyle: Record<UserRecord["role"], string> = {
   teacher: "bg-[var(--color-accent)] text-[var(--color-accent-content)]",
@@ -52,7 +55,7 @@ export function UserManagementScreen() {
     first_name: "",
     last_name: "",
     email: "",
-    password: "",
+    password: DEFAULT_PASSWORD, // new: the field starts filled with the default
     role: "student",
     id_number: "",
   });
@@ -110,7 +113,7 @@ export function UserManagementScreen() {
         first_name: "",
         last_name: "",
         email: "",
-        password: "",
+        password: DEFAULT_PASSWORD, // new: the field starts filled with the default
         role: "student",
         id_number: "",
       });
@@ -315,6 +318,11 @@ export function UserManagementScreen() {
                         }
                         className="border border-[var(--color-base-300)] rounded-lg px-3 py-2 text-sm outline-none bg-[var(--color-base-200)]"
                       />
+                      {DEFAULT_PASSWORD && ( // only shown when the default is configured
+                        <p className="text-[11px] opacity-60">
+                          Default password (temp123). The user must change it at their first login.
+                        </p>
+                      )}
                     </div>
                     <div className="flex flex-col gap-1">
                       <label className="text-xs opacity-60 uppercase tracking-wide">
