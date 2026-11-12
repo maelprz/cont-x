@@ -45,7 +45,6 @@ export async function getAttachableClasses(
 }
 
 // what happens to answers saved after the time limit: kept as normal, or scored zero
-export type OvertimePolicy = "accept" | "zero";
 
 // full settings snapshot for one class_exams row — the per-class equivalent
 // of the old "Edit Settings" modal data, now scoped to a single attachment
@@ -60,9 +59,11 @@ export interface ClassExamSettingsData {
   randomizeOrder: boolean;
   verificationCode: string | null;
   startsAt: string | null;
+  displayAt: string | null;
   endsAt: string | null;
   allowOvertime: boolean; // false (default): time-up submits the attempt automatically. true: students may keep going
-  overtimePolicy: OvertimePolicy; // only used when overtime is allowed: what answers changed after the limit are worth
+  overtimeMinutes: number;
+  overtimeDeduction: number;
   sequential: boolean; // true: questions must be answered in order, no skipping ahead
   allowReview: boolean; // true: students can view their answers after the exam
   answerChangeDeduction: number; // points lost each time a student changes an answer they already gave; 0 means off
@@ -109,9 +110,11 @@ export async function getClassExamSettings(
       pass_mark,
       randomize_order,
       starts_at,
+      display_at,
       ends_at,
       allow_overtime,
-      overtime_policy,
+      overtime_minutes,
+      overtime_deduction,
       sequential,
       allow_review,
       answer_change_deduction,
@@ -139,9 +142,11 @@ export async function getClassExamSettings(
     randomizeOrder: data.randomize_order,
     verificationCode: sessionCode,
     startsAt: data.starts_at,
+    displayAt: data.display_at,
     endsAt: data.ends_at,
     allowOvertime: data.allow_overtime ?? false,
-    overtimePolicy: data.overtime_policy === "zero" ? "zero" : "accept",
+    overtimeMinutes: data.overtime_minutes,
+    overtimeDeduction: Number(data.overtime_deduction),
     sequential: data.sequential,
     allowReview: data.allow_review,
     answerChangeDeduction: Number(data.answer_change_deduction),
@@ -221,7 +226,7 @@ export async function activateClassExam(
 export async function endClassExam(classExamId: string): Promise<void> {
   const { error } = await supabase
     .from("class_exams")
-    .update({ status: "ended" })
+    .update({ status: "ended", end_reason: "manual" })
     .eq("id", classExamId);
   if (error) throw error;
 }
@@ -235,9 +240,11 @@ export type UpdateClassExamSettings = {
   randomizeOrder: boolean;
   verificationCode?: string;
   startsAt: string | null;
+  displayAt: string | null;
   endsAt: string | null;
   allowOvertime: boolean;
-  overtimePolicy: OvertimePolicy;
+  overtimeMinutes: number;
+  overtimeDeduction: number;
   sequential: boolean;
   allowReview: boolean;
   answerChangeDeduction: number;
@@ -247,15 +254,21 @@ export async function updateClassExamSettings(
   classExamId: string,
   settings: UpdateClassExamSettings,
 ): Promise<void> {
+  if (!Number.isInteger(settings.durationMinutes) || settings.durationMinutes <= 0) throw new Error("Duration must be a positive whole number of minutes.");
+  if (settings.allowOvertime && (!Number.isInteger(settings.overtimeMinutes) || settings.overtimeMinutes <= 0 || !Number.isFinite(settings.overtimeDeduction) || settings.overtimeDeduction < 0)) throw new Error("Enter positive whole overtime minutes and a deduction of 0 or more.");
+  if (settings.startsAt && settings.endsAt && settings.startsAt >= settings.endsAt) throw new Error("End time must be after start time.");
+  if (settings.displayAt && settings.startsAt && settings.displayAt > settings.startsAt) throw new Error("Display time must be at or before start time.");
   const updatePayload: Record<string, unknown> = {
     duration_minutes: settings.durationMinutes,
     max_attempts: settings.maxAttempts,
     pass_mark: settings.passMark,
     randomize_order: settings.randomizeOrder,
     starts_at: settings.startsAt,
+    display_at: settings.displayAt,
     ends_at: settings.endsAt,
     allow_overtime: settings.allowOvertime,
-    overtime_policy: settings.overtimePolicy,
+    overtime_minutes: settings.allowOvertime ? settings.overtimeMinutes : 0,
+    overtime_deduction: settings.allowOvertime ? settings.overtimeDeduction : 0,
     sequential: settings.sequential,
     allow_review: settings.allowReview,
     answer_change_deduction: settings.answerChangeDeduction,

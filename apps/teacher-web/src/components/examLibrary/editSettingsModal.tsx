@@ -2,7 +2,7 @@ import { useState, useEffect } from "react";
 import { useExamSettings } from "../../hooks/useExamSettings";
 import { useUpdateExamSettingsForm } from "../../hooks/useUpdateExamSettingsForm";
 import { isoToLocalInputValue, localInputValueToIso } from "../../lib/scheduleDateTime";
-import type { OvertimePolicy } from "../../services/classExamService";
+
 
 // editing setting for a single class attachment
 export function EditSettingsModal({
@@ -22,6 +22,7 @@ export function EditSettingsModal({
   const [durationHours, setDurationHours] = useState(0);
   const [durationMinutesInput, setDurationMinutesInput] = useState(0);
   const [isScheduled, setIsScheduled] = useState(false);
+  const [displayAtInput, setDisplayAtInput] = useState("");
   const [startsAtInput, setStartsAtInput] = useState("");
   const [endsAtInput, setEndsAtInput] = useState("");
   const [maxAttempts, setMaxAttempts] = useState(1);
@@ -29,7 +30,8 @@ export function EditSettingsModal({
   const [verificationCode, setVerificationCode] = useState("");
   const [randomizeOrder, setRandomizeOrder] = useState(false);
   const [allowOvertime, setAllowOvertime] = useState(false); // off = hard stop: answers are submitted automatically at time-up
-  const [overtimePolicy, setOvertimePolicy] = useState<OvertimePolicy>("accept");
+  const [overtimeMinutes, setOvertimeMinutes] = useState("");
+  const [overtimeDeduction, setOvertimeDeduction] = useState("");
   const [sequential, setSequential] = useState(false);
   const [allowReview, setAllowReview] = useState(false);
   const [deductionInput, setDeductionInput] = useState("0"); // points lost per answer change; 0 = off
@@ -44,11 +46,13 @@ export function EditSettingsModal({
     setVerificationCode(settings.verificationCode ?? "");
     setRandomizeOrder(settings.randomizeOrder);
     setAllowOvertime(settings.allowOvertime);
-    setOvertimePolicy(settings.overtimePolicy);
+    setOvertimeMinutes(String(settings.overtimeMinutes));
+    setOvertimeDeduction(String(settings.overtimeDeduction));
     setSequential(settings.sequential);
     setAllowReview(settings.allowReview);
     setDeductionInput(String(settings.answerChangeDeduction));
-    setIsScheduled(settings.startsAt !== null || settings.endsAt !== null);
+    setIsScheduled(settings.displayAt !== null || settings.startsAt !== null || settings.endsAt !== null);
+    setDisplayAtInput(isoToLocalInputValue(settings.displayAt));
     setStartsAtInput(isoToLocalInputValue(settings.startsAt));
     setEndsAtInput(isoToLocalInputValue(settings.endsAt));
   }, [settings]);
@@ -68,8 +72,10 @@ export function EditSettingsModal({
   const deductionNumber = deductionInput.trim() === "" ? 0 : Number(deductionInput);
   const deductionInvalid = !Number.isFinite(deductionNumber) || deductionNumber < 0;
 
+  const overtimeInvalid = allowOvertime && (!overtimeMinutes.trim() || !Number.isInteger(Number(overtimeMinutes)) || Number(overtimeMinutes) <= 0 || !overtimeDeduction.trim() || !Number.isFinite(Number(overtimeDeduction)) || Number(overtimeDeduction) < 0);
+
   const handleSave = async () => {
-    if (!classExamId || passMarkInvalid || deductionInvalid) return;
+    if (!classExamId || passMarkInvalid || deductionInvalid || overtimeInvalid) return;
 
     const totalMinutes = durationHours * 60 + durationMinutesInput;
 
@@ -79,11 +85,13 @@ export function EditSettingsModal({
       passMark: passMarkNumber,
       randomizeOrder,
       allowOvertime,
-      overtimePolicy,
+      overtimeMinutes: Number(overtimeMinutes),
+      overtimeDeduction: Number(overtimeDeduction),
       sequential,
       allowReview,
       answerChangeDeduction: deductionNumber,
       ...(canEditVerificationCode ? { verificationCode: verificationCode.trim() } : {}),
+      displayAt: isScheduled ? localInputValueToIso(displayAtInput) : null,
       startsAt: isScheduled ? localInputValueToIso(startsAtInput) : null,
       endsAt: isScheduled ? localInputValueToIso(endsAtInput) : null,
     });
@@ -158,9 +166,12 @@ export function EditSettingsModal({
 
             {isScheduled && (
               <div className="flex flex-col gap-3 mb-4 pl-1">
+                <label className="text-[13px]">Display to students at
+                  <input aria-label="Display to students at" type="datetime-local" value={displayAtInput} onChange={(e) => setDisplayAtInput(e.target.value)} className="w-full p-2 border rounded-lg" />
+                </label>
                 <div>
                   <label className="block text-[11px] mb-1 text-[var(--color-base-content)] opacity-60">
-                    Auto-publish at
+                    Start at
                   </label>
                   <input
                     type="datetime-local"
@@ -171,7 +182,7 @@ export function EditSettingsModal({
                 </div>
                 <div>
                   <label className="block text-[11px] mb-1 text-[var(--color-base-content)] opacity-60">
-                    Auto-end at
+                    Scheduled end at
                   </label>
                   <input
                     type="datetime-local"
@@ -297,21 +308,14 @@ export function EditSettingsModal({
 
             {allowOvertime && (
               <>
-                <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
-                  Answers changed after time runs out
+                <label className="block text-[13px] mb-3">Allowed overtime (minutes)
+                  <input aria-label="Allowed overtime (minutes)" type="number" min={1} step={1} value={overtimeMinutes} onChange={(e) => setOvertimeMinutes(e.target.value)} className="w-full p-2 border rounded-lg" />
                 </label>
-                <select
-                  value={overtimePolicy}
-                  onChange={(e) => setOvertimePolicy(e.target.value === "zero" ? "zero" : "accept")}
-                  className="w-full px-3 py-2 rounded-lg border text-[13px] mb-1 bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]"
-                >
-                  <option value="accept">Still count, and the overtime is logged</option>
-                  <option value="zero">Score zero</option>
-                </select>
-                <p className="text-[11px] mb-4 opacity-50 text-[var(--color-base-content)]">
-                  Overtime shows next to the attempt on the results screen. A scheduled end time still
-                  ends the exam.
-                </p>
+                <label className="block text-[13px] mb-3">One fixed overtime deduction (points)
+                  <input aria-label="One fixed overtime deduction (points)" type="number" min={0} step="any" value={overtimeDeduction} onChange={(e) => setOvertimeDeduction(e.target.value)} className="w-full p-2 border rounded-lg" />
+                </label>
+                <p className="text-[11px] mb-4 opacity-60">Deducted once when overtime is used, with the score capped at zero. Overtime extends the scheduled end. Manually ending the exam stops everyone immediately.</p>
+                {overtimeInvalid && <p role="alert" className="text-[12px] mb-3">Enter positive whole overtime minutes and a fixed deduction of 0 or more.</p>}
               </>
             )}
             {!allowOvertime && <div className="mb-3" />}
@@ -334,7 +338,7 @@ export function EditSettingsModal({
             >
               {deductionInvalid
                 ? "Enter 0 or more."
-                : "Taken each time a student changes an answer they already gave. A question never goes below 0. Leave at 0 for no deduction."}
+                : "Taken when a student revisits and changes a previously settled answer. A question never goes below 0. Leave at 0 for no deduction."}
             </p>
 
             {saveError && (
@@ -354,7 +358,7 @@ export function EditSettingsModal({
           </button>
           <button
             onClick={handleSave}
-            disabled={isSaving || !settings || passMarkInvalid || deductionInvalid}
+            disabled={isSaving || !settings || passMarkInvalid || deductionInvalid || overtimeInvalid}
             className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)] disabled:opacity-50 disabled:cursor-not-allowed"
           >
             {isSaving ? "Saving..." : "Save Settings"}

@@ -33,6 +33,8 @@ export function buildResultsCsv(
     "Result",
     "Manual Adjustment",
     "Adjustment Reason",
+    "Overtime Seconds",
+    "Overtime Deduction",
     ...questionColumns.map((q) => `${q.label} (${q.maxPoints})`),
     ...poolColumns.map((pool) => `${pool.label} ${pool.title}`),
   ];
@@ -50,6 +52,8 @@ export function buildResultsCsv(
       result,
       row.scoreAdjustment,
       row.adjustmentReason,
+      row.overtimeSeconds,
+      row.overtimeDeduction ?? 0,
       ...row.questionScores.map((q) => q.score),
       // blank when this student drew nothing from that pool
       ...poolColumns.map(

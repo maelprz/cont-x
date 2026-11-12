@@ -25,13 +25,13 @@ export function useSubmitExamSession() {
     try {
       const result = await submitExamSession(sessionId, status, answers); // real grading call
       return result; // caller decides what happens next
-    } catch (err) {
-      setError("Something went wrong. Please try again."); // network/DB failure
+    } catch {
+      setError("Your exam could not be submitted. Please try again.");
       return null;
     } finally {
       setIsSubmitting(false); // loading is done either way
     }
   }
 
-  return { submitSession, isSubmitting, error }; // expose state + the action to the component
+  return { submitSession, isSubmitting, error, clearError: () => setError(null) };
 }

@@ -245,6 +245,7 @@ export function ExamResultScreen({
           </div>
         </section>
 
+        {details.overtimeSeconds > 0 && <p className="text-sm">Overtime used: {formatDuration(details.overtimeSeconds)}. One fixed deduction: {details.overtimeDeduction} points.</p>}
         {/* ── Metric cards row ── */}
         <section className="flex gap-5 flex-wrap">
           {displayMetrics.map((metric) => (
