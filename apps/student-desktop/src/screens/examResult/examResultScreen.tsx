@@ -14,8 +14,8 @@ import type {
 } from "./examResultScreen.types"; // this screen's props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 import { useExamResultDetails } from "../../hooks/useExamResultDetails"; // loads the score, duration and pass mark
-import { AnswerReviewList } from "../../components/examResult/answerReviewList"; // NEW: the per-question answer review
-import { useSessionReview } from "../../hooks/useSessionReview"; // NEW: fetches the review, only when allowed
+import { AnswerReviewList } from "../../components/examResult/answerReviewList"; // the per-question answer review
+import { useSessionReview } from "../../hooks/useSessionReview"; // fetches the review, only when allowed
 
 // ---------------------------------------------------------------------------
 // Sub-component — small metric card, same role as DetailCard in examConfirmation
@@ -78,7 +78,7 @@ export function ExamResultScreen({
   // just finished the exam or clicked an old row in Archive
   const { details, isLoading, error } = useExamResultDetails(idToUse);
 
-  // NEW: loads the answer review, but only once we know the teacher allows it.
+  // Loads the answer review, but only once we know the teacher allows it.
   // Must stay above the early returns below, because hooks have to run on every render.
   const {
     review, // loaded review, or null
@@ -163,18 +163,19 @@ export function ExamResultScreen({
     },
   ];
 
-  const displayFinalScore = finalScore ?? details.totalScore;
+  const displayFinalScore = finalScore ?? details.finalScore; // includes any teacher adjustment
   const displayMaxScore = maxScore ?? details.maxScore;
   const displayPercent =
     displayMaxScore > 0
       ? Math.round((displayFinalScore / displayMaxScore) * 100)
       : 0; // score as a percent, 0 if the exam has no points
 
-  // Real pass/fail: percentage of points earned vs. the exam's pass_mark.
+  // Real pass/fail: percentage of adjusted points earned vs. the exam's pass_mark.
   const displayPassed =
     passed ??
     (details.maxScore > 0 &&
-      (details.totalScore / details.maxScore) * 100 >= details.passMark);
+      (details.finalScore / details.maxScore) * 100 >= details.passMark);
+
   return (
     // flex flex-col: stacks header, summary heading, and cards vertically
     <div className="flex flex-col h-screen overflow-y-auto bg-[var(--bg-app)] text-[var(--text-primary)]">
@@ -242,6 +243,17 @@ export function ExamResultScreen({
                 ? `Pass mark ${details.passMark}%`
                 : "No minimum pass mark"}
             </p>
+
+            {/* NEW: explains a manual change so the total matches the teacher's decision */}
+            {details.scoreAdjustment !== 0 && (
+              <p className="text-xs text-[var(--text-secondary)]">
+                {details.scoreAdjustment > 0 ? "+" : ""}
+                {details.scoreAdjustment} pts adjusted by your teacher
+                {details.adjustmentReason
+                  ? `: ${details.adjustmentReason}`
+                  : "."}
+              </p>
+            )}
           </div>
         </section>
 
@@ -265,7 +277,7 @@ export function ExamResultScreen({
           ))}
         </section>
 
-        {/* ── NEW: Answer review, only rendered when the teacher allows it ── */}
+        {/* ── Answer review, only rendered when the teacher allows it ── */}
         {reviewPermitted && (
           <AnswerReviewList
             items={review?.items ?? []} // empty until the review loads
