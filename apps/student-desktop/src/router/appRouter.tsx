@@ -13,6 +13,7 @@ import { ArchiveScreen } from "../screens/archive/archiveScreen";
 import { AppSidebar } from "../components/layout/appSidebar";
 import { useExamSessionStore } from "../stores/useExamSessionStore"; // holds the removed flag
 import { RemovedFromExamModal } from "../components/modals/removedFromExamModal"; // the modal from step 4
+import { ForcePasswordChangeModal } from "../components/modals/forcePasswordChangeModal"; // new: the first-login screen
 import "./appRouter.css";
 
 // useAuth is no longer imported here — AppRouter owns the session check directly,
@@ -88,6 +89,10 @@ export function AppRouter() {
       </div>
     );
   }
+
+  if (user?.mustChangePassword) { // this account still has the default or reset password
+    return <ForcePasswordChangeModal />; // show only the modal, so no other screen loads or can be used
+  } // end of the gate
 
   if (removed) {
     return <RemovedFromExamModal />;
