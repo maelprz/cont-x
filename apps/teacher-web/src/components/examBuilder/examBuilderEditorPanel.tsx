@@ -10,8 +10,10 @@ import { MCQEditorPanel } from "./mcqEditorPanel";
 import { FITBEditorPanel } from "./fitbEditorPanel";
 import { CodingEditorPanel } from "./codingEditorPanel";
 import { starterCodeFor, mainCodeFor } from "./createBlankQuestion";
+import { QuestionTopics } from "../questionBank/questionTopics";
 
 interface ExamBuilderEditorPaneProps {
+  subjectId: string | null;
   isLoading: boolean;
   error: string | null;
   activeQuestion?: BuilderQuestion;
@@ -38,6 +40,7 @@ interface ExamBuilderEditorPaneProps {
 }
 
 export function ExamBuilderEditorPanel({
+  subjectId,
   isLoading,
   error,
   activeQuestion,
@@ -165,6 +168,8 @@ export function ExamBuilderEditorPanel({
                 </button>
               ))}
             </div>
+
+            {activeQuestion && <QuestionTopics subjectId={subjectId} selectedIds={activeQuestion.topicIds??[]} onChange={topicIds=>onQuestionChange({...activeQuestion,topicIds})} />}
 
             {activeQuestion &&
               (editorTab === "multiple-choice" ? (

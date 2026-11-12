@@ -39,6 +39,7 @@ import type {
 } from "../examBuilder/examBuilderScreen.types";
 
 import { NewQuestionModal } from "../../components/questionBank/newQuestionModal";
+import { QuestionTopics } from "../../components/questionBank/questionTopics";
 
 export function QuestionBankScreen() {
   const teacherId = useAuthStore((state) => state.user?.id);
@@ -71,6 +72,7 @@ export function QuestionBankScreen() {
   const { showToast } = useToast();
 
   const [search, setSearch] = useState("");
+  const [activeTopicId, setActiveTopicId] = useState("");
   const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
   const [originalTagIds, setOriginalTagIds] = useState<string[]>([]);
   const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding" | "fill-in-the-blank">("all");
@@ -128,15 +130,16 @@ export function QuestionBankScreen() {
       const matchesTags =
         activeTagIds.length === 0 || activeTagIds.every((tagId) => q.tags.some((t) => t.id === tagId));
       const matchesType = activeTypeFilter === "all" || q.type === activeTypeFilter;
-      return matchesSearch && matchesTags && matchesType;
+      return matchesSearch && matchesTags && matchesType && (!activeTopicId || q.topics.some(topic => topic.id === activeTopicId));
     });
-  }, [questions, search, activeTagIds, activeTypeFilter]);
+  }, [questions, search, activeTagIds, activeTypeFilter, activeTopicId]);
 
   const openSubject = (subjectId: string) => {
     setSelectedSubjectId(subjectId);
     setIncludeShared(false);
     setSearch("");
     setActiveTagIds([]);
+    setActiveTopicId("");
     setActiveTypeFilter("all");
   };
 
@@ -360,6 +363,8 @@ export function QuestionBankScreen() {
                 </div>
               </div>
 
+              <QuestionTopics subjectId={selectedSubject?.id??null} selectedIds={editingQuestion.topicIds??[]} onChange={topicIds=>setEditingQuestion({...editingQuestion,topicIds})} />
+              <p className="text-xs opacity-70 mb-2">Additional tags (optional)</p>
               <div className="flex flex-wrap items-center gap-2 mb-5">
                 <TagIcon size={14} style={{ opacity: 0.5 }} />
                 {tags.map((tag) => (
@@ -528,6 +533,12 @@ export function QuestionBankScreen() {
                 />
               </div>
 
+              <label className="block text-sm mb-3">Topic:
+                <select aria-label="Filter by subject topic" value={activeTopicId} onChange={event => setActiveTopicId(event.target.value)} className="ml-2 border rounded p-2">
+                  <option value="">All topics</option>
+                  {[...new Map(questions.flatMap(q => q.topics).map(topic => [topic.id, topic])).values()].sort((a,b) => a.name.localeCompare(b.name)).map(topic => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+                </select>
+              </label>
               <div className="flex items-center gap-2 mb-3">
                 <span className="text-[12px] opacity-60 font-medium">Type:</span>
                 {(["all", "multiple-choice", "coding", "fill-in-the-blank"] as const).map((type) => (

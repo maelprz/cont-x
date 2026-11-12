@@ -467,6 +467,7 @@ export function ExamBuilderScreen({
       points: activeQuestion.points,
       description: activeQuestion.description,
       sectionId: activeQuestion.sectionId,
+      topicIds: activeQuestion.topicIds,
     };
 
     // default coding format used when switching from MCQ into coding
@@ -671,6 +672,7 @@ export function ExamBuilderScreen({
           />
 
           <ExamBuilderEditorPanel
+            subjectId={examData?.subjectId??null}
             isLoading={isLoading}
             error={error}
             activeQuestion={activeQuestion}

@@ -84,6 +84,7 @@ export function ExamResultScreen({
     review, // loaded review, or null
     isLoading: reviewLoading, // review fetch state, renamed so it doesn't clash with the one above
     error: reviewError, // review error, renamed for the same reason
+    retry: retryReview,
   } = useSessionReview(idToUse, details?.allowReview === true); // stays disabled until details say review is allowed
 
   // returns to dashboard — calls optional prop callback first, then switches screen
@@ -267,9 +268,10 @@ export function ExamResultScreen({
         {reviewPermitted && (
           <AnswerReviewList
             items={review?.items ?? []} // empty until the review loads
-            keysRevealed={review?.keysRevealed ?? false} // hide answer keys until the server says it is safe
+            keysRevealed={review?.keysRevealed ?? false} // current server permission controls answer keys
             isLoading={reviewLoading} // shows the loading line while fetching
             error={reviewError} // shows the server's reason if it refused
+            onRetry={retryReview}
           />
         )}
 
