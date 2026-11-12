@@ -9,6 +9,7 @@ export type StudentResultRow = {
   maxScore: number; 
   attemptNumber: number; 
   overtimeSeconds: number;
+  overtimeDeduction?: number;
   questionScores: QuestionScoreCell[]; 
   poolScores: PoolScoreCell[]; 
 };

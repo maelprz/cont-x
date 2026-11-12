@@ -1,93 +1,62 @@
-import { useEffect, useRef, useState } from "react"; // tracks countdown state and the interval handle
-import { getSessionTimerInfo } from "../services/examService"; // real duration + start time fetch
+import { useEffect, useRef, useState } from "react";
+import { getSessionTiming, subscribeSessionTiming, type SessionTiming } from "../services/examService";
 
-// What the clock does at zero. By default it is a hard stop: onExpire runs once and the answers
-// are submitted. With overtime allowed the clock keeps running past zero (the number goes negative)
-// and onExpire never runs: the student decides when to submit.
 export interface ExamTimerOptions {
-  allowOvertime: boolean; // the teacher's "allow overtime" setting
-  rulesReady: boolean; // false until the rules have been fetched; the clock never expires before then
+  rulesReady: boolean;
+  allowOvertime?: boolean;
+  onTimeRestored?: () => boolean | void;
 }
 
-// Runs a real countdown for one exam session. Computes remaining time
-// from the actual start timestamp, so refreshing the page doesn't reset it.
-export function useExamTimer(
-  sessionId: string | null, // which session to time
-  onExpire: () => void, // called once, exactly when time hits zero (hard-stop exams only)
-  options: ExamTimerOptions = { allowOvertime: false, rulesReady: true },
-): number | null {
-  const [secondsLeft, setSecondsLeft] = useState<number | null>(null); // null while still loading; negative = overtime
-  const hasExpiredRef = useRef(false); // guards against calling onExpire more than once
-
-  // FIX — always holds the *latest* onExpire, so the interval below never
-  // calls a stale version closed over from the first render (which would
-  // otherwise submit whatever answers existed when the timer first started,
-  // i.e. none, instead of the student's real current answers).
-  const onExpireRef = useRef(onExpire);
-  useEffect(() => {
-    onExpireRef.current = onExpire;
-  }, [onExpire]);
-
-  // the same idea for the rules: the interval always sees the latest values, never the first render's
-  const optionsRef = useRef(options);
-  useEffect(() => {
-    optionsRef.current = options;
-  }, [options.allowOvertime, options.rulesReady]); // eslint-disable-line react-hooks/exhaustive-deps
+export function useExamTimer(sessionId: string | null, onExpire: () => void,
+  options: ExamTimerOptions = { rulesReady: true }) {
+  const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
+  const [timing, setTiming] = useState<SessionTiming | null>(null);
+  const [error, setError] = useState<string | null>(null);
+  const [reload, setReload] = useState(0);
+  const callbacks = useRef({ onExpire, options });
+  useEffect(() => { callbacks.current = { onExpire, options }; }, [onExpire, options]);
 
   useEffect(() => {
-    if (!sessionId) return; // nothing to time yet
-
-    let isMounted = true; // guards against setting state after unmount
-    let intervalId: ReturnType<typeof setInterval> | undefined;
-
-    async function startTimer() {
-      try {
-        const info = await getSessionTimerInfo(sessionId!); // real duration + start time
-        const totalSeconds = info.durationMinutes * 60; // convert minutes to seconds
-        const joinedAtMs = new Date(info.joinedAt).getTime(); // when the session actually began
-
-        // seconds left, from the real clock each time (negative once the limit has passed)
-        const remainingNow = () => {
-          const elapsedSeconds = Math.max(Math.floor((Date.now() - joinedAtMs) / 1000), 0); // never let clock skew make this negative
-          return totalSeconds - elapsedSeconds;
-        };
-
-        if (!isMounted) return;
-        setSecondsLeft(remainingNow());
-
-        // Ticks every second, based on real elapsed time, not just a counter.
-        intervalId = setInterval(() => {
-          const remaining = remainingNow();
-          const { allowOvertime, rulesReady } = optionsRef.current;
-
-          if (remaining <= 0 && rulesReady && !allowOvertime) {
-            // hard stop: show zero, stop ticking, and hand the attempt in (once)
-            if (intervalId) clearInterval(intervalId);
-            setSecondsLeft(0);
-            if (!hasExpiredRef.current) {
-              hasExpiredRef.current = true; // only fire the callback once
-              onExpireRef.current(); // FIX — always the latest onExpire, never stale
-            }
-            return;
-          }
-
-          // Normal countdown, or overtime. Until the rules are known the clock never expires,
-          // so a student who is allowed overtime is not handed in by mistake.
-          setSecondsLeft(remaining);
-        }, 1000);
-      } catch (err) {
-        console.error('useExamTimer failed to load session timer info:', err); // real error, not swallowed
-        if (isMounted) setSecondsLeft(0); // fail safe: treat errors as time already up
+    let active = true, fetching = false, expired = false;
+    let snapshot: SessionTiming | null = null;
+    let receivedAt = 0;
+    let unsubscribe: (() => void) | undefined;
+    setTiming(null); setSecondsLeft(null); setError(null);
+    if (!sessionId) return;
+    function tick() {
+      if (!active || !snapshot) return;
+      const now = Date.parse(snapshot.serverNow) + Date.now() - receivedAt;
+      const normalLeft = Math.ceil((Date.parse(snapshot.normalDeadline) - now) / 1000);
+      const mustFinish = snapshot.forceSubmit || now >= Date.parse(snapshot.hardDeadline);
+      if (mustFinish && callbacks.current.options.rulesReady) {
+        setSecondsLeft(snapshot.allowOvertime ? Math.min(normalLeft, 0) : 0);
+        if (!expired) { expired = true; callbacks.current.onExpire(); }
+        return;
       }
+      if (expired && !mustFinish && snapshot.sessionStatus === "in_progress") {
+        if (callbacks.current.options.onTimeRestored?.() === false) return;
+        expired = false;
+      }
+      if (!expired) setSecondsLeft(normalLeft);
     }
-
-    startTimer();
-
-    return () => {
-      isMounted = false; // cleanup if the screen unmounts
-      if (intervalId) clearInterval(intervalId);
-    };
-  }, [sessionId]);
-
-  return secondsLeft;
+    async function refresh() {
+      if (fetching || !active) return;
+      fetching = true;
+      try {
+        const next = await getSessionTiming(sessionId!);
+        if (!active) return;
+        snapshot = next; receivedAt = Date.now();
+        setTiming(next); setError(null);
+        if (!unsubscribe) unsubscribe = subscribeSessionTiming(next.classExamId, () => { void refresh(); });
+        tick();
+      } catch {
+        if (active) setError("Could not refresh the exam timer. Reconnect and retry.");
+      } finally { fetching = false; }
+    }
+    void refresh();
+    const clock = setInterval(tick, 1000);
+    const polling = setInterval(refresh, 2500);
+    return () => { active = false; clearInterval(clock); clearInterval(polling); unsubscribe?.(); };
+  }, [sessionId, reload]);
+  return { secondsLeft, timing, error, retry: () => setReload(value => value + 1) };
 }

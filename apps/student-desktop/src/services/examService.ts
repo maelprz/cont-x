@@ -25,21 +25,16 @@ export async function lookupExamByCode(
       "id, max_attempts, starts_at, ends_at, ended_at, exams!inner(id, title, exam_code)",
     )
     .eq("exams.exam_code", examCode) // match on the student-entered code
-    .eq("status", "active")
+    .in("status", ["scheduled", "active"])
     .is("ended_at", null)
     .order("starts_at", { ascending: true, nullsFirst: true });
 
   if (examError) throw new Error(examError.message); // real DB/network errors bubble up
 
-  const nowMs = Date.now(); // one clock reading, reused for every row below
-  const openRows = (rows ?? []).filter((r) => {
-    const startsOk = !r.starts_at || new Date(r.starts_at).getTime() <= nowMs; // not started yet means not enterable
-    const endsOk = !r.ends_at || new Date(r.ends_at).getTime() > nowMs; // window already closed means not enterable
-    return startsOk && endsOk; // keep only rows that are open right now
-  });
-  if (openRows.length === 0) return null; // nothing open for this code, caller shows "not found"
-
-  const classExam = openRows[0]; // we expect exactly one row, so we can take the first one
+  // RLS controls display visibility; the start RPC controls entry and overtime resume.
+  // Keep delivery ordering and ended-at filtering without a client-clock cutoff.
+  if (!rows || rows.length === 0) return null;
+  const classExam = rows[0];
   const exam = unwrapOne(classExam.exams as any); // handles Supabase's array-or-object quirk
   if (!exam) return null;
 
@@ -86,6 +81,8 @@ export async function verifySessionCode(
   const result = data?.[0]; // rpc calls return an array, we only expect one row
 
   if (!result) throw new Error("Verification failed. Please try again.");
+  if (result.status === "invalid_code") throw new Error("Invalid verification code.");
+  if (result.status === "not_available") throw new Error("This exam is not available.");
   if (!result.session_id)
     throw new Error("You have no attempts left for this exam.");
 
@@ -140,6 +137,25 @@ function unwrapOne<T>(value: T | T[] | null | undefined): T | undefined {
 export interface SessionTimerInfo {
   durationMinutes: number; // class_exams.duration_minutes, the total time allowed
   joinedAt: string; // exam_sessions.joined_at, when the student actually started
+}
+
+export interface SessionTiming {
+  serverNow: string; normalDeadline: string; hardDeadline: string; forceSubmit: boolean;
+  classExamId: string; sessionStatus: string; classExamStatus: string;
+  allowOvertime: boolean; overtimeMinutes: number; overtimeDeduction: number; durationMinutes: number;
+}
+
+export async function getSessionTiming(sessionId: string): Promise<SessionTiming> {
+  const { data, error } = await supabase.rpc("get_session_timing", { p_session_id: sessionId });
+  if (error || !data) throw new Error(error?.message ?? "Exam timing not found.");
+  return data as SessionTiming;
+}
+
+export function subscribeSessionTiming(classExamId: string, onChange: () => void): () => void {
+  const channel = supabase.channel(`exam-timing:${classExamId}`)
+    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "class_exams", filter: `id=eq.${classExamId}` }, onChange)
+    .subscribe();
+  return () => { void supabase.removeChannel(channel); };
 }
 
 // Fetches the real duration and start time for one session, so the
@@ -337,6 +353,8 @@ export async function getSessionRules(
 
 // Everything one Result screen needs for a single session, fetched by id.
 export interface ExamResultDetails {
+  overtimeSeconds: number;
+  overtimeDeduction: number;
   examTitle: string; // exams.title
   examCode: string; // exams.exam_code
   durationMinutes: number; // class_exams.duration_minutes, the full allotted time
@@ -362,6 +380,8 @@ export async function getExamResultDetails(
       joined_at,
       submitted_at,
       total_score,
+      overtime_seconds,
+      overtime_deduction_applied,
       class_exams (
         duration_minutes,
         pass_mark,
@@ -420,6 +440,8 @@ export async function getExamResultDetails(
     joinedAt: data.joined_at,
     submittedAt: data.submitted_at,
     totalScore: data.total_score ?? 0,
+    overtimeSeconds: data.overtime_seconds ?? 0,
+    overtimeDeduction: Number(data.overtime_deduction_applied ?? 0),
     maxScore,
     totalQuestions: questionList.length + pooledList.length, // placed questions plus the pooled ones this attempt drew
     correctCount: correctCount ?? 0, // default to zero if the count came back null

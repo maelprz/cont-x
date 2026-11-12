@@ -14,7 +14,7 @@ import { countAnsweredQuestions, hasQuestionAnswer } from "../../lib/examProgres
 import { AnswerChangeTracker } from "../../lib/answerChanges";
 import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — logs violations to the database
 import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; // checks once a minute if the teacher removed this student
-import { checkIfRemoved } from "../../services/removalService"; // one-time check used when a submit fails
+import { checkIfRemoved, getSessionStatus } from "../../services/removalService";
 
 import type {
   ExamQuestionScreenProps,
@@ -185,27 +185,32 @@ export function ExamQuestionScreen({
     isLoading,
     error,
   } = useExamQuestions(sessionId); // this attempt's questions, in this student's own order
+  const { submitSession, isSubmitting, error: submissionError, clearError: clearSubmissionError } = useSubmitExamSession();
+  const submissionInFlightRef = useRef(false);
+  const timedOutAnswersRef = useRef<SubmittedAnswer[] | null>(null);
+  const answersLocked = () => submissionInFlightRef.current || timedOutAnswersRef.current !== null;
 
-  // When the real countdown hits zero, this fires exactly once and moves
-  // the student to the Result screen, same as a manual submit would.
+
+  // Retain exactly the answers present at the deadline if the network requires a retry.
   const handleTimeExpired = async () => {
-    if (sessionId) {
-      const answers = buildAnswers(); // every question's current answer, answered or not
-      const result = await submitSession(sessionId, "timed_out", answers); // real grading call
-      if (!result) {
-        console.error("Failed to mark session as timed out:"); // don't block navigation on this failing
-        if (await checkIfRemoved(sessionId)) return;
-      }
-    }
-    navigateTo("examResult");
+    timedOutAnswersRef.current = buildAnswers();
+    setShowSubmitConfirm(false);
+    await submitAndLeave();
   };
 
   const { rules, isLoaded: rulesLoaded, error: rulesError, retry: retryRules } = useSessionRules(sessionId);
   // Hard stop by default: at zero the answers are submitted automatically. With overtime allowed the clock keeps running past zero.
-  const timeLeftSeconds = useExamTimer(sessionId, handleTimeExpired, {
+  const timer = useExamTimer(sessionId, handleTimeExpired, {
     allowOvertime: rules.allowOvertime,
     rulesReady: rulesLoaded,
+    onTimeRestored: () => {
+      if (submissionInFlightRef.current) return false;
+      timedOutAnswersRef.current = null;
+      clearSubmissionError();
+      return true;
+    },
   }); // real countdown, ticks every second
+  const timeLeftSeconds = timer.secondsLeft;
 
   // NEW — real Run Tests / Run Code state and actions
   const {
@@ -223,7 +228,6 @@ export function ExamQuestionScreen({
   // WBS 6.7: how long the student spends on each question (only while it is on screen and the window is in front)
   const { getTimes } = useQuestionTimeTracker(fetchedQuestions[currentIndex]?.id ?? null);
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false); // the "are you sure?" step before submitting
-  const [isSubmitting, setIsSubmitting] = useState(false); // true while the submit call is running
   // The output panel height is kept here so it survives moving between questions (undefined = use the editor's default)
   const [panelHeight, setPanelHeight] = useState<number | undefined>(undefined);
   // WBS 8.13 / 8.16: when each answer was last changed, how many times it was changed after first being given,
@@ -357,6 +361,7 @@ export function ExamQuestionScreen({
   }, [currentQuestionId, hasQuestion]);
 
   const handleOptionSelect = (id: string) => {
+    if (answersLocked()) return;
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
     const questionId = fetchedQuestions[currentIndex].id;
     answeredAtRef.current[questionId] = new Date().toISOString();
@@ -369,6 +374,7 @@ export function ExamQuestionScreen({
   };
 
   const handleClearOption = () => {
+    if (answersLocked()) return;
     if (!fetchedQuestions[currentIndex]) return; // guard against no question loaded
     const id = fetchedQuestions[currentIndex].id;
     answeredAtRef.current[id] = new Date().toISOString();
@@ -382,6 +388,7 @@ export function ExamQuestionScreen({
 
   // fill-in-the-blank: remember what was typed for the current question
   const handleTextChange = (text: string) => {
+    if (answersLocked()) return;
     if (!fetchedQuestions[currentIndex]) return; // guard against no question loaded
     const id = fetchedQuestions[currentIndex].id;
     answeredAtRef.current[id] = new Date().toISOString();
@@ -389,6 +396,7 @@ export function ExamQuestionScreen({
   };
 
   const handleCodeChange = (code: string) => {
+    if (answersLocked()) return;
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
     answeredAtRef.current[fetchedQuestions[currentIndex].id] = new Date().toISOString();
     setLocalCode(code);
@@ -401,6 +409,7 @@ export function ExamQuestionScreen({
 
   // NEW — runs only the visible test cases, pure feedback, no writes.
   const handleRunTests = () => {
+    if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding") return; // guard, only coding questions can run tests
     runTests(
@@ -414,6 +423,7 @@ export function ExamQuestionScreen({
 
   // NEW — runs every test case, writes logs, and updates the real running score.
   const handleRunCode = () => {
+    if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding" || !sessionId) return; // guard, needs a real session to attribute the answer to
     runCode(
@@ -470,7 +480,6 @@ export function ExamQuestionScreen({
     onNext?.();
   };
 
-  const { submitSession } = useSubmitExamSession(); // real grading call + its own error state
 
   // WBS 8.16: how many times this answer was changed. Multiple choice and fill-in-the-blank only; for a fill-in-the-blank
   // that is still on screen, a different answer than the one last settled counts as one more.
@@ -496,26 +505,36 @@ export function ExamQuestionScreen({
   }
 
   const handleOnSubmit = async () => {
-    setIsSubmitting(true);
     try {
       await submitAndLeave();
     } finally {
-      setIsSubmitting(false);
       setShowSubmitConfirm(false);
     }
   };
 
   const submitAndLeave = async () => {
-    if (sessionId) {
-      const answers = buildAnswers(); // every question's current answer, answered or not
-      const result = await submitSession(sessionId, "submitted", answers); // real grading call
+    if (!sessionId || submissionInFlightRef.current) return;
+    submissionInFlightRef.current = true;
+    try {
+      const result = await submitSession(
+        sessionId,
+        timedOutAnswersRef.current ? "timed_out" : "submitted",
+        timedOutAnswersRef.current ?? buildAnswers(),
+      );
       if (!result) {
-        console.error("Failed to submit exam session:"); // don't block navigation on this failing
-        if (await checkIfRemoved(sessionId)) return;
+        // Removal has its own screen. A failed status check must retain the exam too.
+        try {
+          const status = await getSessionStatus(sessionId);
+          if (status === "submitted" || status === "timed_out") { onSubmit?.(); navigateTo("examResult"); return; }
+          if (status === "removed") await checkIfRemoved(sessionId);
+        } catch { /* the submission error stays visible */ }
+        return;
       }
+      onSubmit?.();
+      navigateTo("examResult");
+    } finally {
+      submissionInFlightRef.current = false;
     }
-    onSubmit?.();
-    navigateTo("examResult");
   };
 
   // A settings failure must not silently turn off sequential or other exam rules.
@@ -526,6 +545,13 @@ export function ExamQuestionScreen({
         {rulesError && <button type="button" onClick={retryRules} className="px-4 py-2 rounded border border-[var(--border-primary)]">Retry settings</button>}
       </div>
     );
+  }
+
+  if (!timer.timing) {
+    return <div className="h-screen flex flex-col gap-4 items-center justify-center text-[var(--text-inverted)] bg-[var(--bg-sidebar)]">
+      <p role={timer.error ? "alert" : "status"}>{timer.error ?? "Loading exam timer..."}</p>
+      {timer.error && <button type="button" onClick={timer.retry}>Retry timer</button>}
+    </div>;
   }
 
   // Show a simple loading state while questions are being fetched.
@@ -817,6 +843,15 @@ export function ExamQuestionScreen({
         </aside>
       </div>
 
+      {submissionError && (
+        <div role="alert" className="flex-shrink-0 flex items-center justify-between gap-4 px-6 py-3 bg-[var(--bg-app)] text-[var(--text-primary)]">
+          <p>{submissionError}{timedOutAnswersRef.current ? " Time is up; your deadline answers are retained for retry." : " Your answers are still here."}</p>
+          <button type="button" onClick={handleOnSubmit} disabled={isSubmitting} className="px-4 py-2 rounded border border-[var(--border-primary)] disabled:opacity-50">
+            {isSubmitting ? "Submitting..." : "Retry submission"}
+          </button>
+        </div>
+      )}
+
       {/* Bottom action bar */}
       <footer className="h-16 flex-shrink-0 flex items-center justify-between px-6 border-t border-[var(--border-primary)] backdrop-blur-sm bg-[var(--bg-sidebar)]">
         {/* Previous */}
@@ -854,9 +889,7 @@ export function ExamQuestionScreen({
           </div>
           {isOvertime && (
             <span className="font-mono text-[10px] text-[var(--warning-icon)]">
-              {rules.overtimePolicy === "zero"
-                ? "Time is up. Answers you change now score zero. Submit when you are done."
-                : "Time is up. Your overtime is recorded. Submit when you are done."}
+              Overtime: {timer.timing.overtimeDeduction} points deducted once; up to {timer.timing.overtimeMinutes} extra minutes.
             </span>
           )}
           {!isLastQuestion && nextBlocked && (
@@ -876,7 +909,7 @@ export function ExamQuestionScreen({
         {/* Merged Next/Submit button, Submit only appears on the last question */}
         <button
           onClick={isLastQuestion ? () => setShowSubmitConfirm(true) : handleNext}
-          disabled={!isLastQuestion && nextBlocked}
+          disabled={isSubmitting || (!isLastQuestion && nextBlocked)}
           className={
             isLastQuestion
               ? "flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]"

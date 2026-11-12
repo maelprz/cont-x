@@ -372,7 +372,7 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                               className="ml-2 text-[11px] font-medium"
                               style={{ color: "var(--color-warning)" }}
                             >
-                              {formatOvertime(row.overtimeSeconds)}
+                              {formatOvertime(row.overtimeSeconds)} (−{row.overtimeDeduction ?? 0} points)
                             </span>
                           )}
                         </td>

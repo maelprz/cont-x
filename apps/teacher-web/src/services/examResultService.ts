@@ -4,7 +4,7 @@ import type {
   QuestionScoreCell,
 } from "../screens/examResult/examResultsScreen.types";
 import { buildPoolScores } from "../lib/resultsPools";
-import { computeOvertimeSeconds } from "../lib/overtime";
+
 import type { PoolDrawRow } from "../lib/resultsPools";
 
 // raw shape of one question, used to build table columns
@@ -20,6 +20,8 @@ type SessionRow = {
   id: string; // session id
   attempt_number: number;
   joined_at: string | null; // when the attempt started, to work out overtime
+  overtime_seconds: number;
+  overtime_deduction_applied: number;
   submitted_at: string | null; // when it finished
   total_score: number | null; // null until the session is graded
   score_adjustment: number; // manual change on top of the auto-graded score
@@ -102,6 +104,8 @@ export async function getClassExamResults(
       attempt_number,
       joined_at,
       submitted_at,
+      overtime_seconds,
+      overtime_deduction_applied,
       total_score,
       score_adjustment,
       adjustment_reason,
@@ -177,11 +181,8 @@ export async function getClassExamResults(
       totalScore: session.total_score ?? 0,
       maxScore,
       attemptNumber: session.attempt_number,
-      overtimeSeconds: computeOvertimeSeconds(
-        session.joined_at,
-        session.submitted_at,
-        meta.duration_minutes,
-      ),
+      overtimeSeconds: session.overtime_seconds ?? 0,
+      overtimeDeduction: Number(session.overtime_deduction_applied ?? 0),
       scoreAdjustment: session.score_adjustment ?? 0,
       adjustmentReason: session.adjustment_reason,
       questionScores,
