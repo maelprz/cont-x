@@ -1,13 +1,15 @@
 type PublishSuccessOverlayProps = {
   isOpen: boolean;
   examCode: string;
+  sessionCode: string;
   onClose: () => void;
 };
 
-// shown right after publishing, so the teacher can grab the join code
+// Shown after publishing with the exam-wide code and this class's session code.
 export function PublishSuccessOverlay({
   isOpen,
   examCode,
+  sessionCode,
   onClose,
 }: PublishSuccessOverlayProps) {
   if (!isOpen) return null; // render nothing when closed
@@ -15,23 +17,33 @@ export function PublishSuccessOverlay({
   return (
     <div
       onClick={onClose}
-      className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
+      className="fixed inset-0 z-50 flex items-center justify-center bg-black/50 p-4"
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[420px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]"
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby="publish-success-title"
+        className="w-full max-w-[420px] rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-6"
       >
-        <h2 className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">
+        <h2 id="publish-success-title" className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">
           Exam Published
         </h2>
         <p className="text-[13px] mb-3 text-[var(--color-base-content)] opacity-60">
-          Share this code with your students so they can join.
+          Students use the exam code to find the exam and the session code to start their attempt.
         </p>
 
-        <div className="w-full px-3 py-3 rounded-lg border mb-5 text-center text-[20px] font-mono font-bold tracking-widest bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)]">
-          {examCode}
-        </div>
+        <dl className="mb-5 grid gap-3 text-[var(--color-base-content)]">
+          {[
+            { label: "Exam code", code: examCode },
+            { label: "Session code", code: sessionCode },
+          ].map(({ label, code }) => (
+            <div key={label} className="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] px-3 py-3 text-center">
+              <dt className="mb-1 text-[12px] font-medium opacity-60">{label}</dt>
+              <dd className="break-all font-mono text-[20px] font-bold tracking-widest">{code}</dd>
+            </div>
+          ))}
+        </dl>
 
         <div className="flex items-center justify-end">
           <button

@@ -31,18 +31,18 @@ export function useClassExamActions() {
   async function handlePublish(
     classExamId: string,
     verificationCode?: string,
-  ): Promise<"success" | "needsCode" | "error"> {
+  ): Promise<{ status: "success"; sessionCode: string } | { status: "needsCode" | "error" }> {
     setIsProcessing(true);
     setError(null);
     try {
-      await activateClassExam(classExamId, verificationCode);
-      return "success";
+      const sessionCode = await activateClassExam(classExamId, verificationCode);
+      return { status: "success", sessionCode };
     } catch (err) {
       if (err instanceof Error && err.message === SESSION_CODE_REQUIRED_MESSAGE) {
-        return "needsCode";
+        return { status: "needsCode" };
       }
       setError(err instanceof Error ? err.message : "Something went wrong. Try again.");
-      return "error";
+      return { status: "error" };
     } finally {
       setIsProcessing(false);
     }

@@ -201,7 +201,7 @@ export const SESSION_CODE_REQUIRED_MESSAGE =
 export async function activateClassExam(
   classExamId: string,
   verificationCode?: string,
-): Promise<void> {
+): Promise<string> {
   if (verificationCode) {
     await writeSessionCode(classExamId, verificationCode); // the code first, so a live exam always has one
     const { error } = await supabase
@@ -209,10 +209,11 @@ export async function activateClassExam(
       .update({ status: "active" })
       .eq("id", classExamId);
     if (error) throw error;
-    return;
+    return verificationCode.trim();
   }
 
-  if (!(await readSessionCode(classExamId))) {
+  const sessionCode = await readSessionCode(classExamId);
+  if (!sessionCode) {
     throw new Error(SESSION_CODE_REQUIRED_MESSAGE);
   }
 
@@ -221,6 +222,7 @@ export async function activateClassExam(
     .update({ status: "active" })
     .eq("id", classExamId);
   if (error) throw error;
+  return sessionCode;
 }
 
 export async function endClassExam(classExamId: string): Promise<void> {
