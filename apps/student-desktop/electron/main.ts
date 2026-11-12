@@ -110,7 +110,7 @@ function createWindow() {
   });
 
   // keeps the app above all other windows at the highest z-order level
-  win.setAlwaysOnTop(true, "screen-saver");
+  //win.setAlwaysOnTop(true, "screen-saver");
 
   // if somehow minimized (e.g. via a hotkey we didn't catch), restore immediately
   win.on("minimize", () => {
@@ -186,6 +186,6 @@ app.on("activate", () => {
 app.whenReady().then(() => {
   cleanupStaleLockdownState(); // undo any restrictions left by a previous crash
   createWindow();
-  registerLockdown(); // lockdown starts the moment the window is ready
+  //registerLockdown(); // lockdown starts the moment the window is ready
   registerCompilerHandlers(); // sets up the run-test-cases IPC channel
 });

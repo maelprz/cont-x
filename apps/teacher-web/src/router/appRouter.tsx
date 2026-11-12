@@ -14,6 +14,7 @@ import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 import { QuestionBankScreen } from "../screens/questionBank/questionBankScreen";
 import { ViolationMonitoringScreen } from "../screens/violationLogs/violationMonitoringScreen";
 import { SubjectsClassesScreen } from "../screens/subjectsClasses/subjectsClassesScreen"; 
+import { ForcePasswordChangeModal } from "../components/shared/forcePasswordChangeModal"; // new: the first-login screen
 
 import { Toast } from "../components/shared/toast";
 import { useToastStore } from "../store/useToastStore";
@@ -109,6 +110,15 @@ export function AppRouter() {
       </div>
     );
   }
+
+    if (user?.mustChangePassword) { // this account still has the default or reset password
+    return ( // show only the modal, so no other screen loads or can be clicked
+      <>
+        <ForcePasswordChangeModal /> {/* blocks everything until the password is changed */}
+        <Toast toast={toast} onDismiss={dismissToast} /> {/* keeps toasts working */}
+      </>
+    ); // end of the gated view
+  } // end of the gate
 
   return (
     <>

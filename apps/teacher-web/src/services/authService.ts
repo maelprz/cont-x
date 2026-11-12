@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient"; 
+import { FunctionsHttpError } from "@supabase/supabase-js";
 
 export interface AuthUser { 
   id: string;
@@ -9,6 +10,7 @@ export interface AuthUser {
   role: "teacher" | "admin" | "superadmin"; 
   idNumber: string; 
   hasAdminGrant: boolean; 
+  mustChangePassword: boolean; // true while the account still has to choose its own password
 } 
 
 // checks whether this account holds the admin grant, using the user's own row
@@ -49,7 +51,7 @@ export async function login(
   // Step 3 — fetch full profile now that we're authenticated.
   const { data: userData, error: userError } = await supabase
     .from("users")
-    .select("id, first_name, last_name, email, role, id_number")
+    .select("id, first_name, last_name, email, role, id_number, must_change_password") // new column added at the end so the flag comes back with the profile
     .eq("id", authData.user.id)
     .single();
 
@@ -76,6 +78,7 @@ export async function login(
     role: userData.role as "teacher" | "admin" | "superadmin",
     idNumber: userData.id_number,
     hasAdminGrant: await fetchHasAdminGrant(userData.id),
+    mustChangePassword: userData.must_change_password === true, // anything other than true counts as false, so a missing value never traps someone
   };
 }
 
@@ -90,7 +93,7 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
 
   const { data: userData, error } = await supabase
     .from("users")
-    .select("id, first_name, last_name, email, role, id_number")
+    .select("id, first_name, last_name, email, role, id_number, must_change_password") // new column added at the end so the flag comes back with the profile
     .eq("id", sessionData.session.user.id)
     .single();
 
@@ -105,5 +108,26 @@ export async function getCurrentUser(): Promise<AuthUser | null> {
     role: userData.role as "teacher" | "admin" | "superadmin",
     idNumber: userData.id_number,
     hasAdminGrant: await fetchHasAdminGrant(userData.id),
+    mustChangePassword: userData.must_change_password === true, // same rule as in login
   };
 }
+
+// pulls the real message out of an edge function error, falling back to a generic one
+async function readFunctionError(error: unknown): Promise<string> { // same idea as in userManagementService
+  if (error instanceof FunctionsHttpError) { // the function replied with an error status
+    try { // reading the body can fail, so guard it
+      const body = await error.context.json(); // the JSON our function sent back, such as { error: "..." }
+      if (body?.error) return String(body.error); // use our own message when there is one
+    } catch { /* ignore and fall through */ } // body was not JSON, so keep going
+  } // end of the status check
+  return error instanceof Error ? error.message : "Request failed."; // generic fallback
+} // end of readFunctionError
+
+// sends the new password to the server, which changes it and clears the flag
+export async function completePasswordChange(newPassword: string): Promise<void> { // used by the first-login modal
+  const { data, error } = await supabase.functions.invoke("complete-password-change", { // calls the function you deployed
+    body: { newPassword }, // only the new password; the account comes from the login token
+  }); // end of the call
+  if (error) throw new Error(await readFunctionError(error)); // show the server's own message, for example "too weak"
+  if (data?.error) throw new Error(data.error); // a 200 reply that still carries an error
+} // end of completePasswordChange
