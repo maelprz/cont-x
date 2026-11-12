@@ -199,7 +199,7 @@ export function ExamQuestionScreen({
     navigateTo("examResult");
   };
 
-  const { rules, isLoaded: rulesLoaded } = useSessionRules(sessionId); // the teacher's rules for this attempt
+  const { rules, isLoaded: rulesLoaded, error: rulesError, retry: retryRules } = useSessionRules(sessionId);
   // Hard stop by default: at zero the answers are submitted automatically. With overtime allowed the clock keeps running past zero.
   const timeLeftSeconds = useExamTimer(sessionId, handleTimeExpired, {
     allowOvertime: rules.allowOvertime,
@@ -525,6 +525,16 @@ export function ExamQuestionScreen({
     onSubmit?.();
     navigateTo("examResult");
   };
+
+  // A settings failure must not silently turn off sequential or other exam rules.
+  if (!rulesLoaded) {
+    return (
+      <div className="h-screen w-full flex flex-col gap-4 items-center justify-center text-[var(--text-inverted)] bg-[var(--bg-sidebar)]">
+        <p role={rulesError ? "alert" : "status"}>{rulesError ?? "Loading exam settings..."}</p>
+        {rulesError && <button type="button" onClick={retryRules} className="px-4 py-2 rounded border border-[var(--border-primary)]">Retry settings</button>}
+      </div>
+    );
+  }
 
   // Show a simple loading state while questions are being fetched.
   if (isLoading) {

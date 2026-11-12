@@ -325,6 +325,7 @@ export async function getSessionRules(
   if (error) throw new Error(error.message); // let the hook decide what to do
 
   const rules = unwrapOne(data.class_exams as any) as any; // same array-or-object quirk as elsewhere
+  if (!rules) throw new Error("Exam settings not found.");
   return {
     sequential: rules?.sequential ?? false,
     allowReview: rules?.allow_review ?? false,
