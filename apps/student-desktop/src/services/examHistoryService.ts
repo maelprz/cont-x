@@ -26,56 +26,62 @@ export interface ExamHistoryEntry {
 type SessionRow = {
   id: string; // session id
   total_score: number | null; // score, null until graded
+  score_adjustment: number | null; // NEW: teacher's manual change
   submitted_at: string | null; // can be null for timed-out sessions
   exams: unknown; // nested exams row, object or array
   class_exams: unknown; // nested class_exams row, object or array
 };
 
-type ExamRel = { title: string; exam_code: string; questions: { max_points: number }[] }; // what we read from exams
+type ExamRel = { title: string; exam_code: string };
 type ClassExamRel = { pass_mark: number | null }; // what we read from class_exams
 
 // Same query for both functions, so the two can never drift apart again.
 const SESSION_SELECT = `
   id,
   total_score,
+  score_adjustment,
   submitted_at,
   class_exams ( pass_mark ),
-  exams (
-    title,
-    exam_code,
-    questions ( max_points )
-  )
+  exams ( title, exam_code )
 `; // pass_mark is read from class_exams because that is where the column lives
 
 // Points available from the random-pool questions each attempt drew, by session id.
 // (The exam's own question list does not include them: every student draws different ones.)
-async function loadPooledPoints(sessionIds: string[]): Promise<Map<string, number>> {
-  const pooled = new Map<string, number>();
-  if (sessionIds.length === 0) return pooled;
-  const { data, error } = await supabase
-    .from("session_pool_questions")
-    .select("session_id, max_points")
-    .in("session_id", sessionIds);
+async function loadMaxScores(
+  sessionIds: string[],
+): Promise<Map<string, number>> {
+  const maxScores = new Map<string, number>(); // session id mapped to its max score
+  if (sessionIds.length === 0) return maxScores; // nothing to ask the server
+  const { data, error } = await supabase.rpc("get_sessions_result_totals", {
+    p_session_ids: sessionIds, // one call for the whole list
+  });
   if (error) {
-    reportError("loadPooledPoints", error); // the lists still load, just without the pooled points
-    return pooled;
+    reportError("loadMaxScores", error); // keep real details away from the student
+    return maxScores; // lists still load, just with a 0 max score
   }
-  for (const row of data ?? []) {
-    pooled.set(row.session_id, (pooled.get(row.session_id) ?? 0) + (row.max_points ?? 0));
+  for (const row of (data ?? []) as any[]) {
+    maxScores.set(row.session_id, Number(row.max_score ?? 0)); // store each session's total
   }
-  return pooled;
+  return maxScores;
 }
 
 // Turns one database row into one table row, or null if the exam is not readable.
-function mapSession(session: SessionRow, pooledPoints = 0): ExamHistoryEntry | null {
+// Turns one database row into one table row, or null if the exam is not readable.
+function mapSession(
+  session: SessionRow, // one exam_sessions row from the query
+  maxScore = 0, // total points for this attempt, from get_sessions_result_totals
+): ExamHistoryEntry | null {
   const exam = unwrapOne(session.exams as ExamRel | ExamRel[] | null); // the exam this attempt belongs to
   if (!exam) return null; // skip rows where the exam could not be read
 
-  const classExam = unwrapOne(session.class_exams as ClassExamRel | ClassExamRel[] | null); // the class attempt, which holds the pass mark
-  const maxScore =
-    (exam.questions ?? []).reduce((sum, q) => sum + (q.max_points ?? 0), 0) + pooledPoints; // total points available, including this attempt's pooled questions
-  const totalScore = session.total_score ?? 0; // treat a missing score as zero
-  const percentage = maxScore > 0 ? Math.round((totalScore / maxScore) * 1000) / 10 : 0; // percent with one decimal, never divides by zero
+  const classExam = unwrapOne(
+    session.class_exams as ClassExamRel | ClassExamRel[] | null,
+  ); // holds the pass mark
+
+  const totalScore =
+    (session.total_score ?? 0) + Number(session.score_adjustment ?? 0); // auto-graded score plus any teacher adjustment
+  const percentage =
+    maxScore > 0 ? Math.round((totalScore / maxScore) * 1000) / 10 : 0; // percent with one decimal, never divides by zero
   const passmark = classExam?.pass_mark ?? null; // null means the teacher left the pass mark blank
   const passed = passmark === null ? true : percentage >= passmark; // no minimum counts as passed, otherwise compare percents
 
@@ -84,10 +90,14 @@ function mapSession(session: SessionRow, pooledPoints = 0): ExamHistoryEntry | n
     examTitle: exam.title, // shown in the Module column
     examCode: exam.exam_code, // shown with the title
     submittedAt: session.submitted_at
-      ? new Date(session.submitted_at).toLocaleDateString("en-US", { year: "numeric", month: "short", day: "numeric" }) // readable date
+      ? new Date(session.submitted_at).toLocaleDateString("en-US", {
+          year: "numeric",
+          month: "short",
+          day: "numeric",
+        }) // readable date
       : "N/A", // timed-out sessions may have no submit time
-    totalScore, // raw score
-    maxScore, // total points
+    totalScore, // score including the teacher's adjustment
+    maxScore, // total points, bank-placed and pooled questions included
     percentage, // percent score
     passmark, // pass mark, or null
     hasPassMark: passmark !== null, // lets the screen tell "no minimum" apart from a real pass mark
@@ -105,16 +115,17 @@ export async function fetchExamHistory(): Promise<ExamHistoryEntry[]> {
     .order("submitted_at", { ascending: false, nullsFirst: false }) // newest first, sessions with no date go last
     .limit(3); // only the latest 3
 
-  if (error) { // the database refused or failed
+  if (error) {
+    // the database refused or failed
     reportError("fetchExamHistory", error); // keep the real details for the developers
     throw new Error("Could not load your exam history."); // the student sees only a friendly message
   }
   if (!data) return []; // nothing came back
 
   const rows = data as unknown as SessionRow[];
-  const pooledPoints = await loadPooledPoints(rows.map((row) => row.id)); // pooled questions count toward the maximum too
+  const maxScores = await loadMaxScores(rows.map((row) => row.id)); // CHANGED: server totals instead of pooled points
   return rows
-    .map((row) => mapSession(row, pooledPoints.get(row.id) ?? 0)) // convert each row
+    .map((row) => mapSession(row, maxScores.get(row.id) ?? 0)) // convert each row
     .filter((entry): entry is ExamHistoryEntry => entry !== null); // drop rows we could not read
 }
 
@@ -127,15 +138,16 @@ export async function fetchAllExamHistory(): Promise<ExamHistoryEntry[]> {
     .not("total_score", "is", null) // only sessions that have been scored
     .order("submitted_at", { ascending: false, nullsFirst: false }); // newest first, no limit
 
-  if (error) { // the database refused or failed
+  if (error) {
+    // the database refused or failed
     reportError("fetchAllExamHistory", error); // keep the real details for the developers
     throw new Error("Could not load your exam history."); // the student sees only a friendly message
   }
   if (!data) return []; // nothing came back
 
   const rows = data as unknown as SessionRow[];
-  const pooledPoints = await loadPooledPoints(rows.map((row) => row.id)); // pooled questions count toward the maximum too
+  const maxScores = await loadMaxScores(rows.map((row) => row.id)); // CHANGED: server totals instead of pooled points
   return rows
-    .map((row) => mapSession(row, pooledPoints.get(row.id) ?? 0)) // convert each row
+    .map((row) => mapSession(row, maxScores.get(row.id) ?? 0)) // convert each row
     .filter((entry): entry is ExamHistoryEntry => entry !== null); // drop rows we could not read
 }

@@ -42,7 +42,7 @@ export async function lookupExamByCode(
   const { count, error: countError } = await supabase
     .from("exam_sessions")
     .select("id", { count: "exact", head: true }) // only need the count, not the rows
-    .eq("class_exam_id", classExam.id) // CHANGED: attempts are limited per class exam, same as the server
+    .eq("class_exam_id", classExam.id) // attempts are limited per class exam, same as the server
     .eq("student_id", user.id)
     .in("status", ["submitted", "timed_out", "removed"]); // these are the statuses that use up an attempt
 
@@ -81,8 +81,10 @@ export async function verifySessionCode(
   const result = data?.[0]; // rpc calls return an array, we only expect one row
 
   if (!result) throw new Error("Verification failed. Please try again.");
-  if (result.status === "invalid_code") throw new Error("Invalid verification code.");
-  if (result.status === "not_available") throw new Error("This exam is not available.");
+  if (result.status === "invalid_code")
+    throw new Error("Invalid verification code.");
+  if (result.status === "not_available")
+    throw new Error("This exam is not available.");
   if (!result.session_id)
     throw new Error("You have no attempts left for this exam.");
 
@@ -112,7 +114,7 @@ export async function getExamConfirmationDetails(
   if (classExamError) throw new Error(classExamError.message); // bubble up, let the hook decide the message
 
   const { data: totalQuestions, error: countError } = await supabase.rpc(
-    "get_class_exam_question_count", // CHANGED: new server function that checks class_exams.status and counts pool picks
+    "get_class_exam_question_count", // server function that checks class_exams.status and counts pool picks
     { p_class_exam_id: classExamId }, // it takes the class exam id directly
   );
 
@@ -140,22 +142,50 @@ export interface SessionTimerInfo {
 }
 
 export interface SessionTiming {
-  serverNow: string; normalDeadline: string; hardDeadline: string; forceSubmit: boolean;
-  classExamId: string; sessionStatus: string; classExamStatus: string;
-  allowOvertime: boolean; overtimeMinutes: number; overtimeDeduction: number; durationMinutes: number;
+  serverNow: string;
+  normalDeadline: string;
+  hardDeadline: string;
+  forceSubmit: boolean;
+  classExamId: string;
+  sessionStatus: string;
+  classExamStatus: string;
+  allowOvertime: boolean;
+  overtimeMinutes: number;
+  overtimeDeduction: number;
+  durationMinutes: number;
 }
 
-export async function getSessionTiming(sessionId: string): Promise<SessionTiming> {
-  const { data, error } = await supabase.rpc("get_session_timing", { p_session_id: sessionId });
-  if (error || !data) throw new Error(error?.message ?? "Exam timing not found.");
+export async function getSessionTiming(
+  sessionId: string,
+): Promise<SessionTiming> {
+  const { data, error } = await supabase.rpc("get_session_timing", {
+    p_session_id: sessionId,
+  });
+  if (error || !data)
+    throw new Error(error?.message ?? "Exam timing not found.");
   return data as SessionTiming;
 }
 
-export function subscribeSessionTiming(classExamId: string, onChange: () => void): () => void {
-  const channel = supabase.channel(`exam-timing:${classExamId}`)
-    .on("postgres_changes", { event: "UPDATE", schema: "public", table: "class_exams", filter: `id=eq.${classExamId}` }, onChange)
+export function subscribeSessionTiming(
+  classExamId: string,
+  onChange: () => void,
+): () => void {
+  const channel = supabase
+    .channel(`exam-timing:${classExamId}`)
+    .on(
+      "postgres_changes",
+      {
+        event: "UPDATE",
+        schema: "public",
+        table: "class_exams",
+        filter: `id=eq.${classExamId}`,
+      },
+      onChange,
+    )
     .subscribe();
-  return () => { void supabase.removeChannel(channel); };
+  return () => {
+    void supabase.removeChannel(channel);
+  };
 }
 
 // Fetches the real duration and start time for one session, so the
@@ -165,7 +195,7 @@ export async function getSessionTimerInfo(
 ): Promise<SessionTimerInfo> {
   const { data, error } = await supabase
     .from("exam_sessions")
-    .select("joined_at, class_exams ( duration_minutes )") // CHANGED: duration comes through the session's class exam
+    .select("joined_at, class_exams ( duration_minutes )") // duration comes through the session's class exam
     .eq("id", sessionId)
     .single(); // exactly one session row expected
 
@@ -173,7 +203,7 @@ export async function getSessionTimerInfo(
 
   const classExam = unwrapOne(data.class_exams as any); // handles Supabase's array-or-object quirk, same as before
 
-  if (!classExam) throw new Error("Exam settings not found."); // CHANGED: fail loudly instead of silently timing 0 minutes
+  if (!classExam) throw new Error("Exam settings not found."); // fail loudly instead of silently timing 0 minutes
 
   return {
     durationMinutes: classExam.duration_minutes, // the real allowed minutes
@@ -184,7 +214,8 @@ export async function getSessionTimerInfo(
 // Fetches just the real student-facing exam_code for one exam.
 export async function getExamCode(
   examId: string, // which exam to pull the code for
-): Promise<string> {
+): Promise<string | null> {
+  // FIXED: exams.exam_code is nullable in the schema, so the type says so
   const { data, error } = await supabase
     .from("exams")
     .select("exam_code")
@@ -193,7 +224,7 @@ export async function getExamCode(
 
   if (error) throw new Error(error.message); // bubble up, let the caller decide the fallback
 
-  return data.exam_code ?? null; // real student-facing code
+  return data.exam_code ?? null; // real student-facing code, or null if none was set
 }
 
 // Shape of one answer option after being fetched and reshaped for the UI.
@@ -353,19 +384,22 @@ export async function getSessionRules(
 
 // Everything one Result screen needs for a single session, fetched by id.
 export interface ExamResultDetails {
-  overtimeSeconds: number;
-  overtimeDeduction: number;
+  overtimeSeconds: number; // exam_sessions.overtime_seconds, time spent past the normal deadline
+  overtimeDeduction: number; // exam_sessions.overtime_deduction_applied, points removed for overtime
   examTitle: string; // exams.title
   examCode: string; // exams.exam_code
-  durationMinutes: number; // class_exams.duration_minutes, the full allotted time
-  passMark: number; // class_exams.pass_mark (0 when the teacher set none)
+  durationMinutes: number; // class_exams.duration_minutes
+  passMark: number; // class_exams.pass_mark (0 when none)
   joinedAt: string; // exam_sessions.joined_at
-  submittedAt: string | null; // exam_sessions.submitted_at, null if somehow still open
-  totalScore: number; // exam_sessions.total_score
-  maxScore: number; // sum of max_points for this exam's questions plus the pooled questions this attempt drew
-  totalQuestions: number; // count of the exam's questions plus the pooled ones this attempt drew, for the "X/Y Correct" metric
-  correctCount: number; // how many saved answers scored above zero
-  allowReview: boolean; // class_exams.allow_review: may the student look at their answers? (read fresh each time the result opens, the teacher can change it after the exam)
+  submittedAt: string | null; // exam_sessions.submitted_at
+  totalScore: number; // exam_sessions.total_score, the auto-graded part only
+  scoreAdjustment: number; // exam_sessions.score_adjustment, the teacher's manual change (0 if none)
+  adjustmentReason: string | null; // exam_sessions.adjustment_reason, why the teacher changed it
+  finalScore: number; // totalScore + scoreAdjustment, the number the student should see
+  maxScore: number; // total points, including bank-placed and pooled questions
+  totalQuestions: number; // direct + bank-placed + pooled questions
+  correctCount: number; // saved answers that scored above zero
+  allowReview: boolean; // class_exams.allow_review
 }
 
 // Fetches full result data for one specific session, used by the
@@ -380,6 +414,8 @@ export async function getExamResultDetails(
       joined_at,
       submitted_at,
       total_score,
+      score_adjustment,
+      adjustment_reason,
       overtime_seconds,
       overtime_deduction_applied,
       class_exams (
@@ -389,61 +425,53 @@ export async function getExamResultDetails(
       ),
       exams (
         title,
-        exam_code,
-        questions ( max_points )
+        exam_code
       )
     `,
-    ) // CHANGED: duration, pass mark and the review switch come from class_exams
+    ) // FIXED: questions(max_points) removed because totals come from the server; adjustment columns added
     .eq("id", sessionId)
     .single(); // exactly one session row expected
 
   if (error) throw new Error(error.message); // bubble up, let the screen decide the fallback
 
-  const examRow = unwrapOne(data.exams as any); // handles the same array-or-object quirk as before
+  const examRow = unwrapOne(data.exams as any); // handles the array-or-object quirk
   const classExam = unwrapOne(data.class_exams as any); // same unwrap for the class exam
 
-  const questionList = examRow?.questions ?? []; // every question placed directly in this exam
+  const { data: totalsData, error: totalsError } = await supabase.rpc(
+    "get_sessions_result_totals", // server function that also sees bank-placed and pooled questions
+    { p_session_ids: [sessionId] }, // one session, wrapped in an array
+  );
+  if (totalsError) throw new Error(totalsError.message); // bubble up, let the screen decide the fallback
 
-  // the random-pool questions THIS attempt drew (every student draws different ones)
-  const { data: drawn, error: drawnError } = await supabase
-    .from("session_pool_questions")
-    .select("max_points")
-    .eq("session_id", sessionId);
-  if (drawnError) throw new Error(drawnError.message); // bubble up, let the screen decide the fallback
-  const pooledList = drawn ?? [];
+  const totals = ((totalsData ?? []) as any[])[0]; // the one row for this session
+  if (!totals) throw new Error("Could not load the exam totals."); // fail loudly rather than showing a wrong max score
 
-  const maxScore =
-    questionList.reduce(
-      (sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0),
-      0,
-    ) +
-    pooledList.reduce(
-      (sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0),
-      0,
-    ); // total possible points, pooled questions included
-
-  // separate, real query: how many of this session's saved answers scored
-  // above zero. Coding scores come from Run Code, so this is a rough count.
   const { count: correctCount, error: correctError } = await supabase
     .from("student_answers")
     .select("id", { count: "exact", head: true }) // only need the count, not the rows
     .eq("session_id", sessionId)
-    .gt("score", 0);
+    .gt("score", 0); // answers that earned points
 
   if (correctError) throw new Error(correctError.message); // bubble up, let the screen decide the fallback
+
+  const totalScore = data.total_score ?? 0; // auto-graded score, 0 if missing
+  const scoreAdjustment = Number(data.score_adjustment ?? 0); // numeric can arrive as text, so coerce
 
   return {
     examTitle: examRow?.title ?? "Exam",
     examCode: examRow?.exam_code ?? "\u2014", // dash shown when the code is missing
-    durationMinutes: classExam?.duration_minutes ?? 0, // CHANGED: read from class_exams
-    passMark: classExam?.pass_mark ?? 0, // CHANGED: read from class_exams
+    durationMinutes: classExam?.duration_minutes ?? 0, // read from class_exams
+    passMark: classExam?.pass_mark ?? 0, // read from class_exams
     joinedAt: data.joined_at,
     submittedAt: data.submitted_at,
-    totalScore: data.total_score ?? 0,
-    overtimeSeconds: data.overtime_seconds ?? 0,
-    overtimeDeduction: Number(data.overtime_deduction_applied ?? 0),
-    maxScore,
-    totalQuestions: questionList.length + pooledList.length, // placed questions plus the pooled ones this attempt drew
+    totalScore, // raw auto-graded score
+    scoreAdjustment, // teacher's manual change
+    adjustmentReason: data.adjustment_reason ?? null, // null when no adjustment
+    finalScore: totalScore + scoreAdjustment, // what the student should see and be judged on
+    overtimeSeconds: data.overtime_seconds ?? 0, // 0 when the student wasn't in overtime
+    overtimeDeduction: Number(data.overtime_deduction_applied ?? 0), // numeric can arrive as text, so coerce
+    maxScore: Number(totals.max_score ?? 0), // server total, bank-placed and pooled questions included
+    totalQuestions: Number(totals.total_questions ?? 0), // server count, bank-placed and pooled questions included
     correctCount: correctCount ?? 0, // default to zero if the count came back null
     allowReview: classExam?.allow_review ?? false, // off unless the teacher turned it on
   };
@@ -480,20 +508,37 @@ export interface SessionReview {
 }
 
 // Loads the student's reviewable answers. The server refuses unless review is allowed.
-export async function getSessionReview(sessionId: string): Promise<SessionReview> {
-  const { data, error } = await supabase.rpc("get_session_answer_review", { p_session_id: sessionId });
+export async function getSessionReview(
+  sessionId: string,
+): Promise<SessionReview> {
+  const { data, error } = await supabase.rpc("get_session_answer_review", {
+    p_session_id: sessionId,
+  });
   if (error) throw new Error(error.message);
   const rows = (data ?? []) as {
-    id: string; title: string; prompt: string; type: ReviewItem["type"];
-    sectionTitle: string | null; answer: string; correctAnswers: string[];
-    score: number; maxPoints: number;
+    id: string;
+    title: string;
+    prompt: string;
+    type: ReviewItem["type"];
+    sectionTitle: string | null;
+    answer: string;
+    correctAnswers: string[];
+    score: number;
+    maxPoints: number;
   }[];
   return {
     keysRevealed: true,
-    items: rows.map(row => ({
-      key: row.id, poolDrawId: null, title: row.title, prompt: row.prompt,
-      type: row.type, maxPoints: Number(row.maxPoints), sectionTitle: row.sectionTitle,
-      answerText: row.answer, score: Number(row.score), pointDeduction: 0,
+    items: rows.map((row) => ({
+      key: row.id,
+      poolDrawId: null,
+      title: row.title,
+      prompt: row.prompt,
+      type: row.type,
+      maxPoints: Number(row.maxPoints),
+      sectionTitle: row.sectionTitle,
+      answerText: row.answer,
+      score: Number(row.score),
+      pointDeduction: 0,
       acceptedAnswers: row.type === "fitb" ? row.correctAnswers : null,
       correctAnswers: row.correctAnswers,
     })),
