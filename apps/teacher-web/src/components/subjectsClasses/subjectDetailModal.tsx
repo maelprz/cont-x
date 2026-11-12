@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { X } from "lucide-react";
+import { ClassLogsModal } from "./classLogsModal";
 import type {
   SubjectSummary,
   ClassSummary,
@@ -24,6 +25,7 @@ export function SubjectDetailModal({
   unarchivingClassId: string | null; 
 }) {
   const [showArchived, setShowArchived] = useState(false); // whether archived classes are visible
+  const [logClass, setLogClass] = useState<ClassSummary | null>(null);
 
   useEffect(() => {
     // runs when a different subject is opened
@@ -38,7 +40,8 @@ export function SubjectDetailModal({
     ? [...activeClasses, ...archivedClasses]
     : activeClasses; // active first, archived only on request
 
-  return (
+  return (<>
+    {logClass && <ClassLogsModal key={logClass.id} classId={logClass.id} className={logClass.name} onClose={() => setLogClass(null)} />}
     <div
       onClick={onClose} // clicking the dark area closes the modal
       className="fixed inset-0 flex items-center justify-center z-50"
@@ -174,6 +177,7 @@ export function SubjectDetailModal({
                         </span>
                       </td>
                         <td className="py-2.5 text-right">
+                          <button type="button" onClick={() => setLogClass(c)} className="underline text-xs mb-2">Class logs</button>
                           {!isArchived && ( // only active classes can be enrolled into or archived
                             <div className="flex justify-end gap-2">
                               <button
@@ -220,6 +224,6 @@ export function SubjectDetailModal({
           )}
         </div>
       </div>
-    </div>
+    </div></>
   );
 }
