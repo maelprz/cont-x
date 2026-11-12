@@ -67,7 +67,7 @@ export function ExamLibraryScreen() {
   const actionError = deleteError ?? classExamError;
 
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const [publishedCode, setPublishedCode] = useState<string | null>(null); // shown after a successful activation
+  const [publishedCodes, setPublishedCodes] = useState<{ examCode: string; sessionCode: string } | null>(null);
   const [settingsClassExamId, setSettingsClassExamId] = useState<string | null>(null);
   const [manageClassesExamId, setManageClassesExamId] = useState<string | null>(null);
   const [attachClassExamId, setAttachClassExamId] = useState<string | null>(null);
@@ -114,10 +114,10 @@ export function ExamLibraryScreen() {
   // tries to activate immediately; if this class has no session code yet, opens the prompt instead
   const requestActivate = async (classExamId: string, examCode: string) => {
     const result = await handlePublish(classExamId);
-    if (result === "success") {
-      setPublishedCode(examCode);
+    if (result.status === "success") {
+      setPublishedCodes({ examCode, sessionCode: result.sessionCode });
       refetch();
-    } else if (result === "needsCode") {
+    } else if (result.status === "needsCode") {
       setActivateTarget({ classExamId, examCode });
     }
     // "error" case falls through — actionError is already set and shown via the existing banner
@@ -127,8 +127,8 @@ export function ExamLibraryScreen() {
   const confirmActivateWithCode = async (code: string) => {
     if (!activateTarget) return;
     const result = await handlePublish(activateTarget.classExamId, code);
-    if (result === "success") {
-      setPublishedCode(activateTarget.examCode);
+    if (result.status === "success") {
+      setPublishedCodes({ examCode: activateTarget.examCode, sessionCode: result.sessionCode });
       setActivateTarget(null);
       refetch();
     }
@@ -392,9 +392,10 @@ export function ExamLibraryScreen() {
       />
 
       <PublishSuccessOverlay
-        isOpen={publishedCode !== null}
-        examCode={publishedCode ?? ""}
-        onClose={() => setPublishedCode(null)}
+        isOpen={publishedCodes !== null}
+        examCode={publishedCodes?.examCode ?? ""}
+        sessionCode={publishedCodes?.sessionCode ?? ""}
+        onClose={() => setPublishedCodes(null)}
       />
 
       <SetSessionCodeModal
