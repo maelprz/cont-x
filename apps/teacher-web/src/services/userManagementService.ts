@@ -118,6 +118,15 @@ export async function setUserAdmin(
   if (data?.error) throw new Error(data.error);
 }
 
+// asks the server to set the account's password back to the default and force a change at next login
+export async function resetUserPassword(userId: string): Promise<void> { // used by the Reset password button
+  const { data, error } = await supabase.functions.invoke("reset-user-password", { // calls the function you just deployed
+    body: { userId }, // only the target; the caller comes from the login token
+  }); // end of the call
+  if (error) throw new Error(await readFunctionError(error)); // show the server's own message, for example the rank rule
+  if (data?.error) throw new Error(data.error); // a 200 reply that still carries an error
+} // end of resetUserPassword
+
 export type BulkRole = "teacher" | "student";
 
 export type BulkRoleOutcome =

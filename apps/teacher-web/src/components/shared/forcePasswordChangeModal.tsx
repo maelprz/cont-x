@@ -87,7 +87,7 @@ export function ForcePasswordChangeModal() {
             checked={showPassword} // controlled by state
             onChange={(e) => setShowPassword(e.target.checked)} // flips the toggle
           />
-          Show passwords
+          Show password
         </label>
 
         {/* error box, only rendered when there is a message */}

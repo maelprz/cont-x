@@ -5,6 +5,7 @@ import {
   updateUser,
   deleteUser,
   setUserAdmin,
+  resetUserPassword,
   createUsersBulk,
   type UserRecord,
   type CreateUserPayload,
@@ -25,6 +26,7 @@ interface UseUserManagementReturn {
   editUser: (userId: string, payload: UpdateUserPayload) => Promise<void>;
   removeUser: (userId: string) => Promise<void>;
   changeAdminRole: (userId: string, grant: boolean) => Promise<void>;
+  resetPassword: (userId: string) => Promise<void>; 
   createNewUsersBulk: (
     role: BulkRole,
     accounts: BulkAccountRow[],
@@ -167,7 +169,11 @@ export function useUserManagement(): UseUserManagementReturn {
     // grants or revokes the admin role
     await setUserAdmin(userId, grant); // the server checks rank and writes its own audit entry, so we do not log here
     await refetch(); // reloads so the badge and toggle match the database
-  } // end of changeAdminRole
+  } 
+
+  async function resetPassword(userId: string): Promise<void> {
+    await resetUserPassword(userId); // the server checks rank and writes its own audit entry, so we do not log here
+  }
 
   return {
     users,
@@ -178,6 +184,7 @@ export function useUserManagement(): UseUserManagementReturn {
     editUser,
     removeUser,
     changeAdminRole,
+    resetPassword,
     createNewUsersBulk,
   }; // exposes the new function to the screen
 }

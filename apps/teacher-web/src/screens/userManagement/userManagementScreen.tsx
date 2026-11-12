@@ -35,6 +35,7 @@ export function UserManagementScreen() {
     editUser,
     removeUser,
     changeAdminRole,
+    resetPassword, // new: resets one account's password
   } = // changed: changeAdminRole is new
     useUserManagement();
 
@@ -62,6 +63,7 @@ export function UserManagementScreen() {
 
   const [editingIsAdmin, setEditingIsAdmin] = useState(false); // new: value of the Admin checkbox while a row is being edited
   const [viewer, setViewer] = useState<AuthUser | null>(null); // new: the logged-in person looking at this screen
+  const [resettingUserId, setResettingUserId] = useState<string | null>(null); // new: which row has a reset running, so its button can be disabled
 
   useEffect(() => {
     // new: runs once when the screen opens
@@ -159,6 +161,23 @@ export function UserManagementScreen() {
       alert(err instanceof Error ? err.message : "Failed to delete user.");
     }
   }
+
+  // new: asks for confirmation, then resets the password through the server
+  async function handleResetPassword(user: UserRecord) { // runs when Reset password is pressed
+    const confirmed = window.confirm( // same confirmation style as delete
+      `Reset the password for ${user.first_name} ${user.last_name} to the default? They will be asked to choose a new password at their next login.`,
+    ); // the message never shows the password itself
+    if (!confirmed) return; // the admin changed their mind
+    setResettingUserId(user.id); // disables the button while the server works
+    try { // the server can refuse, for example on the rank rule
+      await resetPassword(user.id); // does the reset and the audit entry
+      alert("Password reset. The account must choose a new password at its next login."); // simple success message, like the rest of this screen
+    } catch (err) { // something was rejected
+      alert(err instanceof Error ? err.message : "Failed to reset the password."); // show the real reason
+    } finally { // runs in both cases
+      setResettingUserId(null); // re-enables the button
+    } // end of the try/catch
+  } // end of handleResetPassword
 
   return (
     <div className="flex h-screen bg-[var(--color-base-200)] text-[var(--color-base-content)]">
@@ -508,6 +527,15 @@ export function UserManagementScreen() {
                               >
                                 Cancel
                               </button>
+                              {user.id !== viewer?.id && ( // never offered on your own row
+                                <button
+                                  onClick={() => handleResetPassword(user)} // asks first, then resets
+                                  disabled={resettingUserId === user.id} // blocks double clicks
+                                  className="px-2 py-1 text-xs rounded border border-[var(--color-error)] text-[var(--color-error)] disabled:opacity-50" // red outline so it reads as a sensitive action
+                                >
+                                  {resettingUserId === user.id ? "Resetting..." : "Reset password"}
+                                </button>
+                              )}
                             </>
                           ) : (
                             canManage(user) && ( // hide the pencil on rows the viewer is not allowed to edit
