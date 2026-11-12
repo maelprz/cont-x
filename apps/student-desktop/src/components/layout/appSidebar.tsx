@@ -2,7 +2,6 @@ import { useState } from "react"; // remembers values across re-renders
 import {
   LayoutDashboard,
   Archive as ArchiveIcon,
-  Settings,
   LogOut,
   ChevronLeft,
   ChevronRight,
@@ -11,7 +10,6 @@ import type { AppSidebarProps } from "./appSidebar.types";
 import { useRouterLogic } from "../../router/routerLogic"; // this component's expected props
 import { useAuthStore } from "../../stores/useAuthStore"; // for logging out
 import { logout } from "../../services/authService"; // for logging out
-import { ipcRenderer } from "electron"; // for sending messages to the main process
 
 export function AppSidebar({ activeItem }: AppSidebarProps) {
   // Tracks whether the sidebar shows full labels or just icons. Local only.

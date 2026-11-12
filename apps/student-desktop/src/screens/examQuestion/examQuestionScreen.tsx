@@ -10,6 +10,7 @@ import { useCodeExecution } from "../../hooks/useCodeExecution"; // NEW — real
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SubmittedAnswer } from "../../services/examService";
+import { countAnsweredQuestions, hasQuestionAnswer } from "../../lib/examProgress";
 import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — logs violations to the database
 import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; // checks once a minute if the teacher removed this student
 import { checkIfRemoved } from "../../services/removalService"; // one-time check used when a submit fails
@@ -248,8 +249,11 @@ export function ExamQuestionScreen({
 
   // Builds the question map (sidebar grid) from the real fetched list.
   // Same idea as the "answered" status in the map: something was selected, typed or written.
-  const isAnswered = (id: string) =>
-    Boolean(selectedOptions[id] || codeByQuestion[id] || textAnswers[id]?.trim());
+  const answers = { selectedOptions, textAnswers, codeByQuestion };
+  const isAnswered = (id: string) => {
+    const current = fetchedQuestions.find((q) => q.id === id);
+    return current !== undefined && hasQuestionAnswer(current, answers);
+  };
 
   // In-order exams: the first question with no answer yet. Nothing past it can be opened.
   const firstUnansweredIndex = (() => {
@@ -268,7 +272,7 @@ export function ExamQuestionScreen({
         locked: rules.sequential && i > firstUnansweredIndex, // in-order exams: nothing past the first unanswered question
         status: flaggedIds.has(q.id)
           ? "flagged"
-          : selectedOptions[q.id] || codeByQuestion[q.id] || textAnswers[q.id]?.trim()
+          : hasQuestionAnswer(q, { selectedOptions, textAnswers, codeByQuestion })
             ? "answered"
             : "unanswered",
       })),
@@ -540,10 +544,7 @@ export function ExamQuestionScreen({
     );
   }
 
-  const progressCurrent =
-    Object.keys(selectedOptions).length +
-    Object.keys(codeByQuestion).length +
-    Object.values(textAnswers).filter((text) => text.trim() !== "").length; // rough answered count
+  const progressCurrent = countAnsweredQuestions(fetchedQuestions, answers);
   const progressTotal = fetchedQuestions.length; // real total question count
 
   const progressPct = Math.round((progressCurrent / progressTotal) * 100);
@@ -573,7 +574,15 @@ export function ExamQuestionScreen({
             <span className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--text-inverted-secondary)]">
               Assessment Progress
             </span>
-            <div className="w-full h-1.5 bg-[var(--bg-app)] rounded-full overflow-hidden grid grid-cols-[repeat(100,minmax(0,1fr))]">
+            <div
+              role="progressbar"
+              aria-label="Assessment progress"
+              aria-valuemin={0}
+              aria-valuemax={progressTotal}
+              aria-valuenow={progressCurrent}
+              aria-valuetext={`${progressCurrent} of ${progressTotal} questions answered`}
+              className="w-full h-1.5 bg-[var(--bg-app)] rounded-full overflow-hidden grid grid-cols-[repeat(100,minmax(0,1fr))]"
+            >
               {Array.from({ length: 100 }, (_, index) => (
                 <span
                   key={index}
@@ -899,11 +908,7 @@ export function ExamQuestionScreen({
       <SubmitConfirmationModal
         isOpen={showSubmitConfirm}
         totalCount={fetchedQuestions.length}
-        answeredCount={
-          fetchedQuestions.filter((q) =>
-            Boolean(selectedOptions[q.id] || codeByQuestion[q.id] || textAnswers[q.id]?.trim()),
-          ).length
-        }
+        answeredCount={progressCurrent}
         flaggedCount={flaggedIds.size}
         isSubmitting={isSubmitting}
         onConfirm={handleOnSubmit}
