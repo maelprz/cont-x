@@ -21,14 +21,25 @@ export async function lookupExamByCode(
 
   const { data: rows, error: examError } = await supabase
     .from("class_exams")
-    .select("id, max_attempts, exams!inner(id, title, exam_code)")
+    .select(
+      "id, max_attempts, starts_at, ends_at, ended_at, exams!inner(id, title, exam_code)",
+    )
     .eq("exams.exam_code", examCode) // match on the student-entered code
-    .eq("status", "active");
+    .eq("status", "active")
+    .is("ended_at", null)
+    .order("starts_at", { ascending: true, nullsFirst: true });
 
   if (examError) throw new Error(examError.message); // real DB/network errors bubble up
-  if (!rows || rows.length === 0) return null; // no match found, let the caller handle it
 
-  const classExam = rows[0]; // we expect exactly one row, so we can take the first one
+  const nowMs = Date.now(); // one clock reading, reused for every row below
+  const openRows = (rows ?? []).filter((r) => {
+    const startsOk = !r.starts_at || new Date(r.starts_at).getTime() <= nowMs; // not started yet means not enterable
+    const endsOk = !r.ends_at || new Date(r.ends_at).getTime() > nowMs; // window already closed means not enterable
+    return startsOk && endsOk; // keep only rows that are open right now
+  });
+  if (openRows.length === 0) return null; // nothing open for this code, caller shows "not found"
+
+  const classExam = openRows[0]; // we expect exactly one row, so we can take the first one
   const exam = unwrapOne(classExam.exams as any); // handles Supabase's array-or-object quirk
   if (!exam) return null;
 
@@ -166,7 +177,7 @@ export async function getExamCode(
 
   if (error) throw new Error(error.message); // bubble up, let the caller decide the fallback
 
-  return data.exam_code; // real student-facing code
+  return data.exam_code ?? null; // real student-facing code
 }
 
 // Shape of one answer option after being fetched and reshaped for the UI.
@@ -300,10 +311,14 @@ export interface SessionRules {
 }
 
 // Fetches the rules for one attempt. The student can read their own session and their own class exam.
-export async function getSessionRules(sessionId: string): Promise<SessionRules> {
+export async function getSessionRules(
+  sessionId: string,
+): Promise<SessionRules> {
   const { data, error } = await supabase
     .from("exam_sessions")
-    .select("class_exams ( sequential, allow_review, allow_overtime, overtime_policy, answer_change_deduction )")
+    .select(
+      "class_exams ( sequential, allow_review, allow_overtime, overtime_policy, answer_change_deduction )",
+    )
     .eq("id", sessionId)
     .single();
 
@@ -381,7 +396,10 @@ export async function getExamResultDetails(
       (sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0),
       0,
     ) +
-    pooledList.reduce((sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0), 0); // total possible points, pooled questions included
+    pooledList.reduce(
+      (sum: number, q: { max_points: number }) => sum + (q.max_points ?? 0),
+      0,
+    ); // total possible points, pooled questions included
 
   // separate, real query: how many of this session's saved answers scored
   // above zero. Coding scores come from Run Code, so this is a rough count.
@@ -405,5 +423,71 @@ export async function getExamResultDetails(
     totalQuestions: questionList.length + pooledList.length, // placed questions plus the pooled ones this attempt drew
     correctCount: correctCount ?? 0, // default to zero if the count came back null
     allowReview: classExam?.allow_review ?? false, // off unless the teacher turned it on
+  };
+}
+
+// One answer option in the review. isCorrect is null while keys are still hidden.
+export interface ReviewOption {
+  id: string; // option id, compared against the student's saved answer
+  text: string; // option label shown to the student
+  isCorrect: boolean | null; // null means "the server did not reveal it yet"
+}
+
+// One reviewed question with the student's own answer.
+export interface ReviewItem {
+  key: string; // questions.id, or the draw id for a pooled question
+  poolDrawId: string | null; // set only for pooled questions
+  title: string; // question heading
+  prompt: string; // question body
+  type: "mcq" | "coding" | "fitb"; // decides how the answer is drawn
+  maxPoints: number; // what the question was worth
+  sectionTitle: string | null; // section heading, if any
+  answerText: string | null; // null when the student left it blank
+  score: number; // points earned on this question
+  pointDeduction: number; // points removed by penalties
+  options?: ReviewOption[]; // present only for mcq
+  acceptedAnswers: string[] | null; // fitb answers, null while keys are hidden
+}
+
+// Everything the review section needs.
+export interface SessionReview {
+  keysRevealed: boolean; // false while other students may still be taking the exam
+  items: ReviewItem[]; // questions in display order
+}
+
+// Loads the student's reviewable answers. The server refuses unless review is allowed.
+export async function getSessionReview(
+  sessionId: string,
+): Promise<SessionReview> {
+  const { data, error } = await supabase.rpc("get_session_review", {
+    p_session_id: sessionId, // matches the SQL function's only parameter
+  });
+
+  if (error) throw new Error(error.message); // includes the server's "not allowed" messages
+
+  const rows = (data ?? []) as any[]; // one row per question
+  return {
+    keysRevealed: rows[0]?.keys_revealed ?? false, // every row carries the same flag
+    items: rows.map((row) => ({
+      key: row.item_key, // stable React key and answer lookup id
+      poolDrawId: row.pool_draw_id ?? null, // null for directly placed questions
+      title: row.title, // question heading
+      prompt: row.prompt, // question body
+      type: row.type, // "mcq", "coding" or "fitb"
+      maxPoints: Number(row.max_points ?? 0), // coerce in case it arrives as a string
+      sectionTitle: row.section_title ?? null, // shown above the first question of a section
+      answerText: row.answer_text ?? null, // the student's saved answer
+      score: Number(row.score ?? 0), // points earned
+      pointDeduction: Number(row.point_deduction ?? 0), // points lost to penalties
+      options:
+        row.type === "mcq"
+          ? (row.options ?? []).map((o: any) => ({
+              id: o.id, // option id
+              text: o.text, // option label
+              isCorrect: o.isCorrect ?? null, // stays null while keys are hidden
+            }))
+          : undefined, // only mcq has options
+      acceptedAnswers: row.accepted_answers ?? null, // null while keys are hidden
+    })),
   };
 }

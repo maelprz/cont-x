@@ -13,7 +13,9 @@ import type {
   ResultMetric,
 } from "./examResultScreen.types"; // this screen's props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
-import { useExamResultDetails } from "../../hooks/useExamResultDetails";
+import { useExamResultDetails } from "../../hooks/useExamResultDetails"; // loads the score, duration and pass mark
+import { AnswerReviewList } from "../../components/examResult/answerReviewList"; // NEW: the per-question answer review
+import { useSessionReview } from "../../hooks/useSessionReview"; // NEW: fetches the review, only when allowed
 
 // ---------------------------------------------------------------------------
 // Sub-component — small metric card, same role as DetailCard in examConfirmation
@@ -71,11 +73,18 @@ export function ExamResultScreen({
   const storeSessionId = useExamSessionStore((state) => state.sessionId); // set either right after finishing, or by clicking a history row
   const idToUse = sessionId ?? storeSessionId; // prop override wins, otherwise the real store value
 
-  const { details, isLoading, error } = useExamResultDetails(idToUse);
-
   // Fetches every real value this screen needs, in one call, keyed by
   // whichever session id is active — works the same whether the student
   // just finished the exam or clicked an old row in Archive
+  const { details, isLoading, error } = useExamResultDetails(idToUse);
+
+  // NEW: loads the answer review, but only once we know the teacher allows it.
+  // Must stay above the early returns below, because hooks have to run on every render.
+  const {
+    review, // loaded review, or null
+    isLoading: reviewLoading, // review fetch state, renamed so it doesn't clash with the one above
+    error: reviewError, // review error, renamed for the same reason
+  } = useSessionReview(idToUse, details?.allowReview === true); // stays disabled until details say review is allowed
 
   // returns to dashboard — calls optional prop callback first, then switches screen
   function handleReturnToDashboard() {
@@ -254,6 +263,16 @@ export function ExamResultScreen({
           ))}
         </section>
 
+        {/* ── NEW: Answer review, only rendered when the teacher allows it ── */}
+        {reviewPermitted && (
+          <AnswerReviewList
+            items={review?.items ?? []} // empty until the review loads
+            keysRevealed={review?.keysRevealed ?? false} // hide answer keys until the server says it is safe
+            isLoading={reviewLoading} // shows the loading line while fetching
+            error={reviewError} // shows the server's reason if it refused
+          />
+        )}
+
         {/* ── Return to dashboard ── */}
         <div className="flex justify-center pt-2">
           <button
@@ -266,7 +285,6 @@ export function ExamResultScreen({
           </button>
         </div>
       </main>
-
     </div>
   );
 }

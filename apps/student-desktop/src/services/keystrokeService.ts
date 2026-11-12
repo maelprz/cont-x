@@ -5,7 +5,7 @@ export async function logKeystrokeBatch(
   questionId: string,
   batch: string, //the compact text from the recorder
 ): Promise<boolean> {
-  const { error } = await supabase.from("keybstroke_logs").insert({
+  const { error } = await supabase.from("keystroke_logs").insert({
     session_id: sessionId,
     question_id: questionId,
     key_sequence: batch,
