@@ -1,6 +1,7 @@
 import { supabase } from "./supabaseClient";
 import { requireFitbAnswer } from "../lib/fitbAnswers";
 import { requireTopicIds } from "./questionTopicService";
+import type { SubjectTopic } from "./questionTopicService";
 import type {
   BuilderQuestion,
   CodingProgramType,
@@ -30,13 +31,9 @@ type TestCaseBankRow = {
   is_hidden: boolean;
 };
 
-// one tag row exactly as stored in the database
-export interface BankTag {
-  id: string;
-  name: string;
-}
+type TopicSummary = Pick<SubjectTopic, "id" | "name">;
 
-// one full question_bank row, with its child table and tags embedded
+// One full question_bank row, with its child table and subject topics embedded.
 type QuestionBankRow = {
   id: string;
   teacher_id: string; // owner — differs from the viewer for questions shared by a colleague
@@ -60,8 +57,7 @@ type QuestionBankRow = {
     reference_solution: string | null; // teacher's own solution, validation-only
     test_case_bank: TestCaseBankRow[];
   } | null;
-  question_bank_tag_links: { question_bank_tags: BankTag }[];
-  bank_question_topics: { topic_id: string; subject_topics: BankTag | null }[];
+  bank_question_topics: { topic_id: string; subject_topics: TopicSummary | null }[];
 };
 
 // the lightweight shape the table row needs, not the full editable question
@@ -73,8 +69,7 @@ export interface BankQuestionSummary {
   type: "multiple-choice" | "coding" | "fill-in-the-blank";
   points: number;
   createdAt: string; // display string, e.g. "Oct 12, 2023"
-  tags: BankTag[];
-  topics: BankTag[];
+  topics: TopicSummary[];
 }
 
 // turns one full bank row into the same union type the editor panels expect
@@ -157,7 +152,6 @@ function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuesti
       day: "2-digit",
       year: "numeric",
     }),
-    tags: row.question_bank_tag_links.map((link) => link.question_bank_tags),
     topics: (row.bank_question_topics ?? []).flatMap(link => link.subject_topics ? [link.subject_topics] : []),
   };
 }
@@ -188,10 +182,7 @@ const BANK_SELECT = `
     reference_solution,
     test_case_bank ( id, input, expected_output, is_hidden )
   ),
-  bank_question_topics (topic_id, subject_topics(id, name)),
-  question_bank_tag_links (
-    question_bank_tags ( id, name )
-  )
+  bank_question_topics (topic_id, subject_topics(id, name))
 `;
 
 // fetches all bank questions a teacher can see for one subject, newest first
@@ -407,51 +398,4 @@ export async function deleteBankQuestion(id: string): Promise<void> {
     }
     throw error;
   }
-}
-
-// fetches every tag this teacher has created, for the filter chips
-export async function getBankTags(teacherId: string): Promise<BankTag[]> {
-  const { data, error } = await supabase
-    .from("question_bank_tags")
-    .select("id, name")
-    .eq("teacher_id", teacherId)
-    .order("name");
-
-  if (error) throw error;
-  return data ?? [];
-}
-
-// creates a new tag the teacher can attach to bank questions
-export async function createBankTag(teacherId: string, name: string): Promise<BankTag> {
-  const { data, error } = await supabase
-    .from("question_bank_tags")
-    .insert({ teacher_id: teacherId, name })
-    .select("id, name")
-    .single();
-
-  if (error) throw error;
-  return data;
-}
-
-// attaches a tag to a bank question — only call this after the question is saved
-export async function addTagToQuestion(bankQuestionId: string, tagId: string): Promise<void> {
-  const { error } = await supabase
-    .from("question_bank_tag_links")
-    .upsert({ question_bank_id: bankQuestionId, tag_id: tagId });
-  if (error) throw error;
-}
-
-// removes a tag from a bank question
-export async function removeTagFromQuestion(bankQuestionId: string, tagId: string): Promise<void> {
-  const { error } = await supabase
-    .from("question_bank_tag_links")
-    .delete()
-    .eq("question_bank_id", bankQuestionId)
-    .eq("tag_id", tagId);
-  if (error) throw error;
-}
-
-export async function deleteBankTag(tagId: string): Promise<void> {
-  const { error } = await supabase.from("question_bank_tags").delete().eq("id", tagId);
-  if (error) throw error;
 }

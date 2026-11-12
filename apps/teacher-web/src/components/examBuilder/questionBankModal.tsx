@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { Search, Plus, Check, Tag as TagIcon } from "lucide-react";
+import { Search, Plus, Check } from "lucide-react";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { getBankQuestionById } from "../../services/questionBankService";
 import type { BankQuestionSummary } from "../../services/questionBankService";
@@ -39,7 +39,7 @@ export function QuestionBankModal({
 }) {
   // widens the list to questions shared from other subjects (account/department level)
   const [includeShared, setIncludeShared] = useState(false);
-  const { questions: bankQuestions, tags, isLoading, error: bankError } = useQuestionBank(
+  const { questions: bankQuestions, isLoading, error: bankError } = useQuestionBank(
     isOpen ? subjectId : null, // don't load anything while the modal is closed
     includeShared,
   );
@@ -48,7 +48,7 @@ export function QuestionBankModal({
   // chosen questions, kept as summaries so a pick survives the list being re-filtered
   const [selected, setSelected] = useState<Map<string, BankQuestionSummary>>(new Map());
   const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding" | "fill-in-the-blank">("all");
-  const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
+  const [activeTopicId, setActiveTopicId] = useState("");
   // what the teacher picked in "Add as" — null until they touch it, so the starting choice
   // (the pool this was opened from, or "Always included") is worked out below, not stored
   const [pickedDestination, setPickedDestination] = useState<string | null>(null);
@@ -66,7 +66,7 @@ export function QuestionBankModal({
     setSelected(new Map());
     setSubmitError(null);
     setActiveTypeFilter("all");
-    setActiveTagIds([]);
+    setActiveTopicId("");
     setIncludeShared(false);
     setPickCount(1);
     setPickedDestination(null);
@@ -76,9 +76,8 @@ export function QuestionBankModal({
   const filteredBankQuestions = bankQuestions.filter((q) => {
     const matchesSearch = q.title.toLowerCase().includes(search.toLowerCase());
     const matchesType = activeTypeFilter === "all" || q.type === activeTypeFilter;
-    const matchesTags =
-      activeTagIds.length === 0 || activeTagIds.every((tagId) => q.tags.some((t) => t.id === tagId));
-    return matchesSearch && matchesType && matchesTags;
+    const matchesTopic = !activeTopicId || q.topics.some((topic) => topic.id === activeTopicId);
+    return matchesSearch && matchesType && matchesTopic;
   });
 
   const toggleSelected = (question: BankQuestionSummary) => {
@@ -88,10 +87,6 @@ export function QuestionBankModal({
       else next.set(question.id, question);
       return next;
     });
-  };
-
-  const toggleTagFilter = (tagId: string) => {
-    setActiveTagIds((prev) => (prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId]));
   };
 
   // opens a blank MCQ directly in the main editor — no type prompt anymore
@@ -237,26 +232,20 @@ export function QuestionBankModal({
             ))}
           </div>
 
-          {/* Tag filter — same control as the bank screen */}
-          {tags.length > 0 && (
-            <div className="flex flex-wrap items-center gap-2 mb-4">
-              <TagIcon size={13} style={{ opacity: 0.5 }} />
-              {tags.map((tag) => (
-                <button
-                  key={tag.id}
-                  onClick={() => toggleTagFilter(tag.id)}
-                  className="px-3 py-1 rounded-full text-[12px] font-medium cursor-pointer border transition-opacity hover:opacity-80"
-                  style={{
-                    borderColor: activeTagIds.includes(tag.id) ? "var(--color-secondary)" : "var(--color-base-300)",
-                    backgroundColor: activeTagIds.includes(tag.id) ? "var(--color-secondary)" : "transparent",
-                    color: activeTagIds.includes(tag.id) ? "white" : "var(--color-base-content)",
-                  }}
-                >
-                  {tag.name}
-                </button>
-              ))}
-            </div>
-          )}
+          <label className="mb-4 flex items-center gap-2 text-[12px]">
+            Topic
+            <select
+              aria-label="Filter by subject topic"
+              value={activeTopicId}
+              onChange={(event) => setActiveTopicId(event.target.value)}
+              className="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] px-2 py-1.5 text-[var(--color-base-content)]"
+            >
+              <option value="">All topics</option>
+              {[...new Map(bankQuestions.flatMap((q) => q.topics).map((topic) => [topic.id, topic])).values()]
+                .sort((a, b) => a.name.localeCompare(b.name))
+                .map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
+            </select>
+          </label>
 
           <label className="flex items-center gap-2 mb-4 cursor-pointer text-[12px] opacity-80">
             <input
@@ -307,6 +296,9 @@ export function QuestionBankModal({
                     <p className="text-[12px] opacity-60" style={{ color: "var(--color-base-content)" }}>
                       {q.type === "multiple-choice" ? "Multiple Choice" : q.type === "coding" ? "Coding" : "Fill in the Blank"} • {q.points} pts
                     </p>
+                    {q.topics.length > 0 && <p className="mt-1 text-[11px] text-[var(--color-base-content)]/60">
+                      {q.topics.map((topic) => topic.name).join(", ")}
+                    </p>}
                   </div>
                 </button>
               );
