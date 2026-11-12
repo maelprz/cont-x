@@ -447,48 +447,33 @@ export interface ReviewItem {
   score: number; // points earned on this question
   pointDeduction: number; // points removed by penalties
   options?: ReviewOption[]; // present only for mcq
-  acceptedAnswers: string[] | null; // fitb answers, null while keys are hidden
+  acceptedAnswers: string[] | null; // accepted FITB alternatives
+  correctAnswers: string[]; // correct labels/answers or coding reference solution
 }
 
 // Everything the review section needs.
 export interface SessionReview {
-  keysRevealed: boolean; // false while other students may still be taking the exam
+  keysRevealed: boolean; // true once the server authorizes answer review
   items: ReviewItem[]; // questions in display order
 }
 
 // Loads the student's reviewable answers. The server refuses unless review is allowed.
-export async function getSessionReview(
-  sessionId: string,
-): Promise<SessionReview> {
-  const { data, error } = await supabase.rpc("get_session_review", {
-    p_session_id: sessionId, // matches the SQL function's only parameter
-  });
-
-  if (error) throw new Error(error.message); // includes the server's "not allowed" messages
-
-  const rows = (data ?? []) as any[]; // one row per question
+export async function getSessionReview(sessionId: string): Promise<SessionReview> {
+  const { data, error } = await supabase.rpc("get_session_answer_review", { p_session_id: sessionId });
+  if (error) throw new Error(error.message);
+  const rows = (data ?? []) as {
+    id: string; title: string; prompt: string; type: ReviewItem["type"];
+    sectionTitle: string | null; answer: string; correctAnswers: string[];
+    score: number; maxPoints: number;
+  }[];
   return {
-    keysRevealed: rows[0]?.keys_revealed ?? false, // every row carries the same flag
-    items: rows.map((row) => ({
-      key: row.item_key, // stable React key and answer lookup id
-      poolDrawId: row.pool_draw_id ?? null, // null for directly placed questions
-      title: row.title, // question heading
-      prompt: row.prompt, // question body
-      type: row.type, // "mcq", "coding" or "fitb"
-      maxPoints: Number(row.max_points ?? 0), // coerce in case it arrives as a string
-      sectionTitle: row.section_title ?? null, // shown above the first question of a section
-      answerText: row.answer_text ?? null, // the student's saved answer
-      score: Number(row.score ?? 0), // points earned
-      pointDeduction: Number(row.point_deduction ?? 0), // points lost to penalties
-      options:
-        row.type === "mcq"
-          ? (row.options ?? []).map((o: any) => ({
-              id: o.id, // option id
-              text: o.text, // option label
-              isCorrect: o.isCorrect ?? null, // stays null while keys are hidden
-            }))
-          : undefined, // only mcq has options
-      acceptedAnswers: row.accepted_answers ?? null, // null while keys are hidden
+    keysRevealed: true,
+    items: rows.map(row => ({
+      key: row.id, poolDrawId: null, title: row.title, prompt: row.prompt,
+      type: row.type, maxPoints: Number(row.maxPoints), sectionTitle: row.sectionTitle,
+      answerText: row.answer, score: Number(row.score), pointDeduction: 0,
+      acceptedAnswers: row.type === "fitb" ? row.correctAnswers : null,
+      correctAnswers: row.correctAnswers,
     })),
   };
 }

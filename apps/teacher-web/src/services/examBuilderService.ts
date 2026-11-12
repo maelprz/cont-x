@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { requireFitbAnswer } from "../lib/fitbAnswers";
+import { requireTopicIds } from "./questionTopicService";
 import type {
   BuilderQuestion,
   BuilderPool,
@@ -228,6 +229,10 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
     .eq("exam_id", examId);
   if (attachedError) throw attachedError;
 
+  const { data: topicLinks, error: topicError } = await supabase.from("exam_question_topics")
+    .select("question_id,topic_id").in("question_id",row.questions.map(q=>q.id));
+  if (topicError) throw topicError;
+
   return {
     id: row.id,
     subjectId: row.subject_id,
@@ -237,7 +242,8 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
     description: row.description ?? "",
     questions: row.questions
       .map(mapQuestionRow)
-      .filter((q): q is BuilderQuestion => q !== null), // drop unsupported/bad rows
+      .filter((q): q is BuilderQuestion => q !== null)
+      .map(q=>({...q,topicIds:(topicLinks??[]).filter(link=>link.question_id===q.id).map(link=>link.topic_id)})),
     pools: row.exam_question_pools.map(mapPoolRow),
     sections: (row.exam_sections ?? []).map((s) => ({ id: s.id, title: s.title })),
     attachedClassCount: attachedClassCount ?? 0,
@@ -496,6 +502,7 @@ export async function saveQuestion(
   examId: string,
   question: BuilderQuestion,
 ): Promise<void> {
+  const topicIds = requireTopicIds(question.topicIds);
   // checked before anything is written, so a question with no usable answer never reaches the database
   const fitbAnswers =
     question.type === "fill-in-the-blank" ? requireFitbAnswer(question.acceptedAnswers) : [];
@@ -507,34 +514,11 @@ export async function saveQuestion(
         ? "fitb"
         : "coding"; // matches db's check constraint
 
-  // if the points changed on a question students may already have answered, the database
-  // rescales every stored score (and total) by the same ratio and logs the change
-  const { data: existing, error: existingError } = await supabase
-    .from("questions")
-    .select("max_points")
-    .eq("id", question.id)
-    .maybeSingle();
-  if (existingError) throw existingError;
-
-  if (existing && existing.max_points !== question.points) {
-    const { count, error: countError } = await supabase
-      .from("exam_sessions")
-      .select("id", { count: "exact", head: true })
-      .eq("exam_id", examId);
-    if (countError) throw countError;
-
-    if ((count ?? 0) > 0) {
-      const { error: rescaleError } = await supabase.rpc("rescale_question_points", {
-        p_question_id: question.id,
-        p_new_max: question.points,
-      });
-      if (rescaleError) throw rescaleError;
-    }
-  }
-
-  const { error: questionError } = await supabase.from("questions").upsert({
+  const { error: questionError } = await supabase.rpc("save_question_base_with_topics", {
+    p_exam_id: examId,
+    p_topic_ids: topicIds,
+    p_question: {
     id: question.id, // real uuid, insert or update depending on if it exists
-    exam_id: examId,
     title: question.title,
     type: dbType,
     prompt: question.description,
@@ -542,6 +526,7 @@ export async function saveQuestion(
     max_points: question.points,
     // only written when the builder knows the section, so other callers can't wipe it
     ...(question.sectionId !== undefined ? { section_id: question.sectionId } : {}),
+    },
   });
   if (questionError) throw questionError;
 

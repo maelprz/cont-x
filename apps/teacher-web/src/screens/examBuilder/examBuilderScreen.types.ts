@@ -22,6 +22,7 @@ interface BaseBuilderQuestion {
   points: number;
   description: string; // markdown
   sectionId?: string | null; // the exam section this question sits in; null/absent = no sections used
+  topicIds?: string[]; // legacy questions may need classification before their next save/publish
 }
 
 export interface MCQBuilderQuestion extends BaseBuilderQuestion {

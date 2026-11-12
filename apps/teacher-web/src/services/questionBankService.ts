@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { requireFitbAnswer } from "../lib/fitbAnswers";
+import { requireTopicIds } from "./questionTopicService";
 import type {
   BuilderQuestion,
   CodingProgramType,
@@ -60,6 +61,7 @@ type QuestionBankRow = {
     test_case_bank: TestCaseBankRow[];
   } | null;
   question_bank_tag_links: { question_bank_tags: BankTag }[];
+  bank_question_topics: { topic_id: string; subject_topics: BankTag | null }[];
 };
 
 // the lightweight shape the table row needs, not the full editable question
@@ -72,6 +74,7 @@ export interface BankQuestionSummary {
   points: number;
   createdAt: string; // display string, e.g. "Oct 12, 2023"
   tags: BankTag[];
+  topics: BankTag[];
 }
 
 // turns one full bank row into the same union type the editor panels expect
@@ -155,6 +158,7 @@ function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuesti
       year: "numeric",
     }),
     tags: row.question_bank_tag_links.map((link) => link.question_bank_tags),
+    topics: (row.bank_question_topics ?? []).flatMap(link => link.subject_topics ? [link.subject_topics] : []),
   };
 }
 
@@ -184,6 +188,7 @@ const BANK_SELECT = `
     reference_solution,
     test_case_bank ( id, input, expected_output, is_hidden )
   ),
+  bank_question_topics (topic_id, subject_topics(id, name)),
   question_bank_tag_links (
     question_bank_tags ( id, name )
   )
@@ -235,7 +240,9 @@ export async function getBankQuestionById(id: string): Promise<BuilderQuestion> 
   const question = mapBankRowToBuilderQuestion(data as unknown as QuestionBankRow);
   if (!question) throw new Error("This question is missing required data.");
 
-  return question;
+  const { data: topics, error: topicError } = await supabase.from("bank_question_topics").select("topic_id").eq("bank_question_id",id);
+  if (topicError) throw topicError;
+  return { ...question, topicIds: (topics??[]).map(topic=>topic.topic_id) };
 }
 
 // deletes options no longer in the current list, then upserts the rest
@@ -328,10 +335,11 @@ async function syncTestCaseBank(bankQuestionId: string, testCases: TestCase[]): 
 
 // saves one bank question (and its type-specific child rows) to the database
 export async function saveBankQuestion(
-  teacherId: string,
+  _teacherId: string, // ownership comes from the authenticated RPC, never this argument
   subjectId: string, // every bank question lives under a subject now (NOT NULL in the db)
   question: BuilderQuestion,
 ): Promise<void> {
+  const topicIds = requireTopicIds(question.topicIds);
   // checked before anything is written, so a question with no usable answer never reaches the database
   const fitbAnswers =
     question.type === "fill-in-the-blank" ? requireFitbAnswer(question.acceptedAnswers) : [];
@@ -343,14 +351,16 @@ export async function saveBankQuestion(
         ? "fitb"
         : "coding"; // matches db's check constraint
 
-  const { error: questionError } = await supabase.from("question_bank").upsert({
+  const { error: questionError } = await supabase.rpc("save_question_base_with_topics", {
+    p_subject_id: subjectId,
+    p_topic_ids: topicIds,
+    p_question: {
     id: question.id, // real uuid, insert or update depending on if it exists
-    teacher_id: teacherId,
-    subject_id: subjectId,
     title: question.title,
     type: dbType,
     prompt: question.description,
     max_points: question.points,
+    },
   });
   if (questionError) throw questionError;
 
