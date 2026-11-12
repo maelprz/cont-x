@@ -11,6 +11,7 @@ import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SubmittedAnswer } from "../../services/examService";
 import { countAnsweredQuestions, hasQuestionAnswer } from "../../lib/examProgress";
+import { AnswerChangeTracker } from "../../lib/answerChanges";
 import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — logs violations to the database
 import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; // checks once a minute if the teacher removed this student
 import { checkIfRemoved } from "../../services/removalService"; // one-time check used when a submit fails
@@ -228,8 +229,7 @@ export function ExamQuestionScreen({
   // WBS 8.13 / 8.16: when each answer was last changed, how many times it was changed after first being given,
   // and the last answer the student settled on (used to tell a real change from the first answer)
   const answeredAtRef = useRef<Record<string, string>>({});
-  const changeCountRef = useRef<Record<string, number>>({});
-  const committedRef = useRef<Record<string, string>>({});
+  const changeTrackerRef = useRef(new AnswerChangeTracker());
   useEffect(() => {
     const current = fetchedQuestions[currentIndex];
     questionIdRef.current = current && !current.poolDrawId ? current.id : null; // null while loading, and for pooled questions (their id is a draw, not a question)
@@ -359,9 +359,6 @@ export function ExamQuestionScreen({
   const handleOptionSelect = (id: string) => {
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
     const questionId = fetchedQuestions[currentIndex].id;
-    const earlier = committedRef.current[questionId]; // the option chosen before, if any
-    if (earlier && earlier !== id) changeCountRef.current[questionId] = (changeCountRef.current[questionId] ?? 0) + 1;
-    committedRef.current[questionId] = id;
     answeredAtRef.current[questionId] = new Date().toISOString();
     setLocalSelectedOption(id);
     setSelectedOptions((prev) => ({
@@ -374,6 +371,7 @@ export function ExamQuestionScreen({
   const handleClearOption = () => {
     if (!fetchedQuestions[currentIndex]) return; // guard against no question loaded
     const id = fetchedQuestions[currentIndex].id;
+    answeredAtRef.current[id] = new Date().toISOString();
     setLocalSelectedOption(undefined); // clear the visible selection
     setSelectedOptions((prev) => {
       const next = { ...prev }; // copy so we don't mutate state directly
@@ -441,34 +439,33 @@ export function ExamQuestionScreen({
     onFlag?.(question.number);
   };
 
-  // Fill-in-the-blank: the answer counts as "given" when the student leaves the question. Leaving with a
-  // different non-empty answer than the one they left with last time is one change.
-  const settleTextAnswer = () => {
+  const answerValueOf = (q: (typeof fetchedQuestions)[number]): string =>
+    q.type === "mcq" ? (selectedOptions[q.id] ?? "") : (textAnswers[q.id] ?? "").trim();
+
+  // Commit the answer on leaving; only a subsequent visit can incur a deduction.
+  const settleCurrentAnswer = () => {
     const current = fetchedQuestions[currentIndex];
-    if (current?.type !== "fitb") return;
-    const text = (textAnswers[current.id] ?? "").trim();
-    if (!text) return;
-    const earlier = committedRef.current[current.id];
-    if (earlier && earlier !== text) changeCountRef.current[current.id] = (changeCountRef.current[current.id] ?? 0) + 1;
-    committedRef.current[current.id] = text;
+    if (!current || current.type === "coding") return;
+    changeTrackerRef.current.leave(current.id, answerValueOf(current));
   };
 
   const handleNavigate = (n: number) => {
+    if (n - 1 === currentIndex) return;
     if (rules.sequential && n - 1 > firstUnansweredIndex) return; // in-order exams: cannot jump past an unanswered question
-    settleTextAnswer();
+    settleCurrentAnswer();
     setCurrentIndex(n - 1); // convert 1-based display number to array index
     onNavigate?.(n);
   };
 
   const handlePrevious = () => {
-    settleTextAnswer();
+    settleCurrentAnswer();
     setCurrentIndex((i) => Math.max(i - 1, 0)); // never go below the first question
     onPrevious?.();
   };
 
   const handleNext = () => {
     if (nextBlocked) return; // in-order exams: this question has to be answered first
-    settleTextAnswer();
+    settleCurrentAnswer();
     setCurrentIndex((i) => Math.min(i + 1, fetchedQuestions.length - 1)); // never go past the last question
     onNext?.();
   };
@@ -478,12 +475,7 @@ export function ExamQuestionScreen({
   // WBS 8.16: how many times this answer was changed. Multiple choice and fill-in-the-blank only; for a fill-in-the-blank
   // that is still on screen, a different answer than the one last settled counts as one more.
   const changeCountOf = (q: (typeof fetchedQuestions)[number]): number => {
-    const settled = changeCountRef.current[q.id] ?? 0;
-    if (q.type === "mcq") return settled;
-    if (q.type !== "fitb") return 0;
-    const text = (textAnswers[q.id] ?? "").trim();
-    const earlier = committedRef.current[q.id];
-    return settled + (text && earlier && earlier !== text ? 1 : 0);
+    return q.type === "coding" ? 0 : changeTrackerRef.current.count(q.id, answerValueOf(q));
   };
 
   function buildAnswers(): SubmittedAnswer[] {
