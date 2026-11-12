@@ -14,7 +14,7 @@ interface UseAuthReturn {
 
 // no useEffect here — session check lives in AppRouter only
 export function useAuth(): UseAuthReturn {
-  const { user, setUser, isLoading, setIsLoading } = useAuthStore();
+  const { user, setUser, isLoading } = useAuthStore();
 
   async function login(idNumber: string, password: string) {
     const loggedInUser = await loginService(idNumber, password);
