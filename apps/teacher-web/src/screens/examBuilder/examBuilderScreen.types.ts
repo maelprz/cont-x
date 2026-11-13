@@ -23,6 +23,7 @@ interface BaseBuilderQuestion {
   description: string; // markdown
   sectionId?: string | null; // the exam section this question sits in; null/absent = no sections used
   topicIds?: string[]; // legacy questions may need classification before their next save/publish
+  sourceBankQuestionId?: string; // authorizes the original topics on a new independent exam copy
 }
 
 export interface MCQBuilderQuestion extends BaseBuilderQuestion {
@@ -66,6 +67,7 @@ export interface PoolItem {
   title: string;
   type: QuestionType;
   points: number;
+  topics?: { id: string; name: string }[]; // display metadata; associations remain on the bank question
 }
 
 // A "pick N of M" group: students get pickCount questions drawn from items.

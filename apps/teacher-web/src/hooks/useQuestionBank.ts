@@ -1,9 +1,7 @@
 import { useState, useEffect, useCallback } from "react";
 import {
   getQuestionBank,
-  getBankTags,
   type BankQuestionSummary,
-  type BankTag,
 } from "../services/questionBankService";
 import { useAuthStore } from "../store/useAuthStore";
 
@@ -11,7 +9,6 @@ import { useAuthStore } from "../store/useAuthStore";
 export function useQuestionBank(subjectId: string | null, includeShared = false) {
   const teacherId = useAuthStore((state) => state.user?.id);
   const [questions, setQuestions] = useState<BankQuestionSummary[]>([]);
-  const [tags, setTags] = useState<BankTag[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
 
@@ -25,12 +22,8 @@ export function useQuestionBank(subjectId: string | null, includeShared = false)
     setIsLoading(true);
     setError(null);
     try {
-      const [questionRows, tagRows] = await Promise.all([
-        getQuestionBank(teacherId, subjectId, includeShared),
-        getBankTags(teacherId), // tags stay personal to each teacher
-      ]);
+      const questionRows = await getQuestionBank(teacherId, subjectId, includeShared);
       setQuestions(questionRows);
-      setTags(tagRows);
     } catch (err) {
       setError(err instanceof Error ? err.message : "Could not load the question bank.");
     } finally {
@@ -42,5 +35,5 @@ export function useQuestionBank(subjectId: string | null, includeShared = false)
     refetch();
   }, [refetch]);
 
-  return { questions, tags, isLoading, error, refetch };
+  return { questions, isLoading, error, refetch };
 }

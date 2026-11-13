@@ -130,6 +130,9 @@ export function PoolEditorPanel({
                 <p className="text-[12px] opacity-60 text-[var(--color-base-content)]">
                   {item.type === "coding" ? "Coding" : item.type === "fill-in-the-blank" ? "Fill in the Blank" : "Multiple Choice"} • {item.points} pts
                 </p>
+                {(item.topics?.length ?? 0) > 0 && <p className="mt-1 text-xs text-[var(--color-base-content)]/60">
+                  {item.topics!.map((topic) => topic.name).join(", ")}
+                </p>}
               </div>
               {!readOnly && (
                 <button

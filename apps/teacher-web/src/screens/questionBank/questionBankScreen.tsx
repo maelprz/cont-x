@@ -1,5 +1,5 @@
 import { useState, useMemo, useEffect } from "react";
-import { Search, Plus, Tag as TagIcon, ArrowLeft, Trash2, X } from "lucide-react";
+import { Search, Plus, ArrowLeft, Trash2 } from "lucide-react";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { MCQEditorPanel } from "../../components/examBuilder/mcqEditorPanel";
@@ -15,15 +15,10 @@ import { SubjectTile } from "../../components/shared/subjectTile";
 import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog";
 import { BankVisibilitySelector } from "../../components/questionBank/bankVisibilitySelector";
 import { useSaveBankQuestion } from "../../hooks/useSaveBankQuestion";
-import { useAuthStore } from "../../store/useAuthStore";
 import { useRouterLogic } from "../../router/routerLogic";
 import {
   getBankQuestionById,
   deleteBankQuestion,
-  createBankTag,
-  deleteBankTag,
-  addTagToQuestion,
-  removeTagFromQuestion,
 } from "../../services/questionBankService";
 import {
   createBlankMCQuestion,
@@ -42,7 +37,6 @@ import { NewQuestionModal } from "../../components/questionBank/newQuestionModal
 import { QuestionTopics } from "../../components/questionBank/questionTopics";
 
 export function QuestionBankScreen() {
-  const teacherId = useAuthStore((state) => state.user?.id);
   // Two levels now: the sub-question banks (one per subject), then the chosen
   // subject's questions. The open subject lives in a store so it survives
   // leaving the screen and coming back.
@@ -64,7 +58,7 @@ export function QuestionBankScreen() {
     updateMainLevel,
   } = useBankVisibility();
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
-  const { questions, tags, isLoading, error, refetch } = useQuestionBank(
+  const { questions, isLoading, error, refetch } = useQuestionBank(
     selectedSubject?.id ?? null,
     includeShared,
   );
@@ -73,17 +67,13 @@ export function QuestionBankScreen() {
 
   const [search, setSearch] = useState("");
   const [activeTopicId, setActiveTopicId] = useState("");
-  const [activeTagIds, setActiveTagIds] = useState<string[]>([]);
-  const [originalTagIds, setOriginalTagIds] = useState<string[]>([]);
   const [activeTypeFilter, setActiveTypeFilter] = useState<"all" | "multiple-choice" | "coding" | "fill-in-the-blank">("all");
   const [showNewQuestionModal, setShowNewQuestionModal] = useState(false);
-  const [newTagNameInEditor, setNewTagNameInEditor] = useState("");
 
   const [editingQuestion, setEditingQuestion] = useState<BuilderQuestion | null>(null);
-  // deleting a question or a tag is permanent, so it always asks first
-  const [confirmDelete, setConfirmDelete] = useState<{ kind: "question" | "tag"; id: string } | null>(null);
+  // Deleting a question is permanent, so it always asks first.
+  const [deleteQuestionId, setDeleteQuestionId] = useState<string | null>(null);
   const [isDeleting, setIsDeleting] = useState(false);
-  const [editingTagIds, setEditingTagIds] = useState<string[]>([]);
 
   // last confirmed-saved version of the question being edited, null while creating brand new —
   // used the same way examBuilderScreen uses savedQuestions, just for a single question at a time
@@ -97,11 +87,10 @@ export function QuestionBankScreen() {
 
   const isNewQuestion = editingQuestion != null && !questions.some((q) => q.id === editingQuestion.id);
 
-  // true while editing and either the question content or its tag selection differs from what's saved
+  // Topic selections are part of the question and protected with its other edits.
   const hasUnsavedChanges =
     editingQuestion !== null &&
-    (JSON.stringify(editingQuestion) !== JSON.stringify(savedQuestionSnapshot) ||
-      JSON.stringify([...editingTagIds].sort()) !== JSON.stringify([...originalTagIds].sort()));
+    JSON.stringify(editingQuestion) !== JSON.stringify(savedQuestionSnapshot);
 
   // guards router-level navigation (e.g. clicking the sidebar) while there are unsaved changes
   useEffect(() => {
@@ -127,18 +116,15 @@ export function QuestionBankScreen() {
   const filteredQuestions = useMemo(() => {
     return questions.filter((q) => {
       const matchesSearch = q.title.toLowerCase().includes(search.toLowerCase());
-      const matchesTags =
-        activeTagIds.length === 0 || activeTagIds.every((tagId) => q.tags.some((t) => t.id === tagId));
       const matchesType = activeTypeFilter === "all" || q.type === activeTypeFilter;
-      return matchesSearch && matchesTags && matchesType && (!activeTopicId || q.topics.some(topic => topic.id === activeTopicId));
+      return matchesSearch && matchesType && (!activeTopicId || q.topics.some(topic => topic.id === activeTopicId));
     });
-  }, [questions, search, activeTagIds, activeTypeFilter, activeTopicId]);
+  }, [questions, search, activeTypeFilter, activeTopicId]);
 
   const openSubject = (subjectId: string) => {
     setSelectedSubjectId(subjectId);
     setIncludeShared(false);
     setSearch("");
-    setActiveTagIds([]);
     setActiveTopicId("");
     setActiveTypeFilter("all");
   };
@@ -147,37 +133,6 @@ export function QuestionBankScreen() {
     setSelectedSubjectId(null);
     setIncludeShared(false);
     refetchSubjects(); // counts on the tiles may have changed
-  };
-
-  const toggleTagFilter = (tagId: string) => {
-    setActiveTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
-    );
-  };
-
-  const handleCreateTagInEditor = async () => {
-    const trimmed = newTagNameInEditor.trim();
-    if (!trimmed || !teacherId) return;
-    try {
-      await createBankTag(teacherId, trimmed);
-      setNewTagNameInEditor("");
-      await refetch();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Could not create tag.", "error");
-    }
-  };
-
-  const handleDeleteTag = async (tagId: string) => {
-    try {
-      await deleteBankTag(tagId);
-      setEditingTagIds((prev) => prev.filter((id) => id !== tagId));
-      setOriginalTagIds((prev) => prev.filter((id) => id !== tagId));
-      setActiveTagIds((prev) => prev.filter((id) => id !== tagId));
-      showToast("Tag deleted.", "success");
-      await refetch();
-    } catch (err) {
-      showToast(err instanceof Error ? err.message : "Could not delete tag.", "error");
-    }
   };
 
   // opens the editor for an existing bank question, and snapshots it as the saved baseline
@@ -192,10 +147,6 @@ export function QuestionBankScreen() {
       const question = await getBankQuestionById(id);
       setEditingQuestion(question);
       setSavedQuestionSnapshot(question); // this is what "saved" means until the next edit
-      const row = questions.find((q) => q.id === id);
-      const tagIds = row?.tags.map((t) => t.id) ?? [];
-      setEditingTagIds(tagIds);
-      setOriginalTagIds(tagIds);
     } catch (err) {
       showToast(err instanceof Error ? err.message : "Could not load this question.", "error");
     }
@@ -211,8 +162,6 @@ export function QuestionBankScreen() {
           : createBlankCodingQuestion(crypto.randomUUID(), 0);
     setEditingQuestion(blank);
     setSavedQuestionSnapshot(null); // nothing saved yet — matches the "not yet persisted" state
-    setEditingTagIds([]);
-    setOriginalTagIds([]);
   };
 
   // leaves the editor — but if there are unsaved changes, asks first instead of leaving immediately
@@ -235,25 +184,10 @@ export function QuestionBankScreen() {
       return false;
     }
 
-    const tagsToAdd = editingTagIds.filter((id) => !originalTagIds.includes(id));
-    const tagsToRemove = originalTagIds.filter((id) => !editingTagIds.includes(id));
-
-    try {
-      await Promise.all([
-        ...tagsToAdd.map((tagId) => addTagToQuestion(editingQuestion.id, tagId)),
-        ...tagsToRemove.map((tagId) => removeTagFromQuestion(editingQuestion.id, tagId)),
-      ]);
-      showToast("Question saved to bank.", "success");
-      await refetch();
-      setEditingQuestion(null);
-      return true;
-    } catch (err) {
-      showToast(
-        err instanceof Error ? `Question saved, but tags failed: ${err.message}` : "Question saved, but tags failed to update.",
-        "error",
-      );
-      return false; // tag sync failed — don't treat this as a clean save for leave-prompt purposes
-    }
+    showToast("Question saved to bank.", "success");
+    await refetch();
+    setEditingQuestion(null);
+    return true;
   };
 
   // teacher chose "Save" from the leave prompt — save first, then continue leaving only if it worked
@@ -288,12 +222,11 @@ export function QuestionBankScreen() {
 
   // runs after the teacher confirms the delete dialog
   const runConfirmedDelete = async () => {
-    if (!confirmDelete) return;
+    if (!deleteQuestionId) return;
     setIsDeleting(true);
-    if (confirmDelete.kind === "question") await handleDelete(confirmDelete.id);
-    else await handleDeleteTag(confirmDelete.id);
+    await handleDelete(deleteQuestionId);
     setIsDeleting(false);
-    setConfirmDelete(null);
+    setDeleteQuestionId(null);
   };
 
   // The sidebar's "Question Bank" was clicked while already on this screen: go back to the
@@ -311,12 +244,6 @@ export function QuestionBankScreen() {
     });
     return () => setResetHandler(null);
   }, [hasUnsavedChanges, setResetHandler, setSelectedSubjectId, refetchSubjects]);
-
-  const handleToggleQuestionTag = (tagId: string) => {
-    setEditingTagIds((prev) =>
-      prev.includes(tagId) ? prev.filter((id) => id !== tagId) : [...prev, tagId],
-    );
-  };
 
   return (
     <div className="flex h-screen overflow-hidden" style={{ backgroundColor: "var(--color-base-200)" }}>
@@ -340,7 +267,7 @@ export function QuestionBankScreen() {
                 <div className="flex items-center gap-3">
                   {!isNewQuestion && (
                     <button
-                      onClick={() => setConfirmDelete({ kind: "question", id: editingQuestion.id })}
+                      onClick={() => setDeleteQuestionId(editingQuestion.id)}
                       className="flex items-center gap-1.5 text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
                       style={{ color: "var(--color-error)" }}
                     >
@@ -364,45 +291,6 @@ export function QuestionBankScreen() {
               </div>
 
               <QuestionTopics subjectId={selectedSubject?.id??null} selectedIds={editingQuestion.topicIds??[]} onChange={topicIds=>setEditingQuestion({...editingQuestion,topicIds})} />
-              <p className="text-xs opacity-70 mb-2">Additional tags (optional)</p>
-              <div className="flex flex-wrap items-center gap-2 mb-5">
-                <TagIcon size={14} style={{ opacity: 0.5 }} />
-                {tags.map((tag) => (
-                  <div
-                    key={tag.id}
-                    className="flex items-center gap-1 pl-3 pr-1.5 py-1 rounded-full text-[12px] font-medium border"
-                    style={{
-                      borderColor: editingTagIds.includes(tag.id) ? "var(--color-secondary)" : "var(--color-base-300)",
-                      backgroundColor: editingTagIds.includes(tag.id) ? "var(--color-secondary)" : "transparent",
-                      color: editingTagIds.includes(tag.id) ? "white" : "var(--color-base-content)",
-                    }}
-                  >
-                    <button
-                      onClick={() => handleToggleQuestionTag(tag.id)}
-                      className="cursor-pointer border-none bg-transparent p-0 text-inherit"
-                    >
-                      {tag.name}
-                    </button>
-                    <button
-                      onClick={() => setConfirmDelete({ kind: "tag", id: tag.id })}
-                      title="Delete this tag everywhere"
-                      className="cursor-pointer border-none bg-transparent p-0.5 opacity-60 hover:opacity-100"
-                    >
-                      <X size={11} />
-                    </button>
-                  </div>
-                ))}
-                <input
-                  type="text"
-                  placeholder="+ New tag"
-                  value={newTagNameInEditor}
-                  onChange={(e) => setNewTagNameInEditor(e.target.value)}
-                  onKeyDown={(e) => e.key === "Enter" && handleCreateTagInEditor()}
-                  className="px-3 py-1 rounded-full text-[12px] outline-none border border-dashed"
-                  style={{ borderColor: "var(--color-base-300)", backgroundColor: "transparent", color: "var(--color-base-content)", width: 100 }}
-                />
-              </div>
-
               {editingQuestion.type === "multiple-choice" ? (
                 <MCQEditorPanel
                   question={editingQuestion as MCQBuilderQuestion}
@@ -557,24 +445,6 @@ export function QuestionBankScreen() {
                 ))}
               </div>
 
-              <div className="flex flex-wrap items-center gap-2 mb-3">
-                <TagIcon size={14} style={{ opacity: 0.5 }} />
-                {tags.map((tag) => (
-                  <button
-                    key={tag.id}
-                    onClick={() => toggleTagFilter(tag.id)}
-                    className="px-3 py-1 rounded-full text-[12px] font-medium cursor-pointer border transition-opacity hover:opacity-80"
-                    style={{
-                      borderColor: activeTagIds.includes(tag.id) ? "var(--color-secondary)" : "var(--color-base-300)",
-                      backgroundColor: activeTagIds.includes(tag.id) ? "var(--color-secondary)" : "transparent",
-                      color: activeTagIds.includes(tag.id) ? "white" : "var(--color-base-content)",
-                    }}
-                  >
-                    {tag.name}
-                  </button>
-                ))}
-              </div>
-
               <label className="flex items-center gap-2 mb-6 cursor-pointer text-[12px] opacity-80">
                 <input
                   type="checkbox"
@@ -595,7 +465,7 @@ export function QuestionBankScreen() {
                         <th className="text-left text-[11px] uppercase tracking-wide opacity-60 py-3 px-5 border-b border-[var(--color-base-300)]">Title</th>
                         <th className="text-left text-[11px] uppercase tracking-wide opacity-60 py-3 px-5 border-b border-[var(--color-base-300)]">Type</th>
                         <th className="text-left text-[11px] uppercase tracking-wide opacity-60 py-3 px-5 border-b border-[var(--color-base-300)]">Points</th>
-                        <th className="text-left text-[11px] uppercase tracking-wide opacity-60 py-3 px-5 border-b border-[var(--color-base-300)]">Tags</th>
+                        <th className="text-left text-[11px] uppercase tracking-wide opacity-60 py-3 px-5 border-b border-[var(--color-base-300)]">Topics</th>
                         <th className="text-left text-[11px] uppercase tracking-wide opacity-60 py-3 px-5 border-b border-[var(--color-base-300)]">Created</th>
                       </tr>
                     </thead>
@@ -623,7 +493,7 @@ export function QuestionBankScreen() {
                           <td className="py-3.5 px-5 text-[13px] border-b border-[var(--color-base-300)] opacity-70">{q.points}</td>
                           <td className="py-3.5 px-5 text-[13px] border-b border-[var(--color-base-300)]">
                             <div className="flex flex-wrap gap-1">
-                              {q.tags.map((t) => (
+                              {q.topics.map((t) => (
                                 <span key={t.id} className="px-2 py-0.5 rounded-full text-[11px]" style={{ backgroundColor: "var(--color-base-200)" }}>
                                   {t.name}
                                 </span>
@@ -661,18 +531,14 @@ export function QuestionBankScreen() {
       />
 
       <ConfirmActionDialog
-        isOpen={confirmDelete !== null}
-        title={confirmDelete?.kind === "tag" ? "Delete this tag?" : "Delete this question?"}
-        message={
-          confirmDelete?.kind === "tag"
-            ? "It will be removed from every question that uses it. This can't be undone."
-            : "This permanently removes the question from your bank. Exams that already have a copy keep it."
-        }
-        confirmLabel={confirmDelete?.kind === "tag" ? "Delete Tag" : "Delete Question"}
+        isOpen={deleteQuestionId !== null}
+        title="Delete this question?"
+        message="This permanently removes the question from your bank. Exams that already have a copy keep it."
+        confirmLabel="Delete Question"
         isProcessing={isDeleting}
         error={null}
         onConfirm={runConfirmedDelete}
-        onCancel={() => setConfirmDelete(null)}
+        onCancel={() => setDeleteQuestionId(null)}
       />
 
       <UnsavedChangesPrompt
