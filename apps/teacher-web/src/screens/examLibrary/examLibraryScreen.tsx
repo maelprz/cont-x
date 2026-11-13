@@ -1,11 +1,10 @@
-import { useState } from "react";
-import { Plus } from "lucide-react";
+import { useRef, useState } from "react";
+import { ArrowRight, FileText, Plus, Search, Trash2, Users } from "lucide-react";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
+import { ExamSubjectFilter } from "../../components/examLibrary/examSubjectFilter";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
-import { ExamCardTile } from "../../components/examLibrary/examCardTile";
-import { ExamCardMenu } from "../../components/examLibrary/examCardMenu";
-import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog";
-import { SubjectTile } from "../../components/shared/subjectTile";
+import { ClassExamStatusBadge, StatusBadge } from "../../components/examLibrary/statusBadge";
+import { ExamConfirmDialog, examField, examPrimary, examSecondary } from "../../components/examLibrary/examDialog";
 import { PublishSuccessOverlay } from "../../components/examLibrary/publishSuccessOverlay";
 import { SetSessionCodeModal } from "../../components/examLibrary/setSessionCodeModal";
 import { EditSettingsModal } from "../../components/examLibrary/editSettingsModal";
@@ -31,10 +30,12 @@ type ConfirmAction =
 
 export function ExamLibraryScreen() {
   const [search, setSearch] = useState("");
+  const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
+  const detailsRef = useRef<HTMLElement>(null);
 
   const navigateTo = useRouterLogic((state) => state.navigateTo);
 
-  const { exams, isLoading: isLoadingExams, refetch } = useExamLibrary();
+  const { exams, isLoading: isLoadingExams, error: examsError, refetch } = useExamLibrary();
 
   // The library now has two levels: subjects first, then the exams under the
   // chosen subject. Which subject is open lives in a store so returning from
@@ -89,13 +90,9 @@ export function ExamLibraryScreen() {
     }
   };
 
-  // the search box means different things on each level, so clear it when switching
-  const openSubject = (subjectId: string) => {
+  const chooseSubject = (subjectId: string | null) => {
     setSelectedSubjectId(subjectId);
-    setSearch("");
-  };
-  const backToSubjects = () => {
-    setSelectedSubjectId(null);
+    setSelectedExamId(null);
     setSearch("");
   };
 
@@ -171,181 +168,132 @@ export function ExamLibraryScreen() {
     navigateTo(targetScreen);
   };
 
-  const query = search.toLowerCase();
-
-  // top level: subjects matching the search
-  const filteredSubjects = subjects.filter((s) => s.name.toLowerCase().includes(query));
-
-  // inside a subject: only that subject's exams, matching the search
-  const filtered = exams.filter(
-    (e) =>
-      e.subjectId === selectedSubject?.id &&
-      (e.title.toLowerCase().includes(query) || e.code.toLowerCase().includes(query)),
+  const query = search.trim().toLowerCase();
+  const filtered = exams.filter((exam) =>
+    (!selectedSubjectId || exam.subjectId === selectedSubjectId) &&
+    (exam.title.toLowerCase().includes(query) || exam.code.toLowerCase().includes(query)),
   );
+  const selectedExam = filtered.find((exam) => exam.id === selectedExamId) ?? filtered[0];
+  const selectedExamSubject = subjects.find((subject) => subject.id === selectedExam?.subjectId);
+  const canCreate = selectedSubject ? selectedSubject.isAssigned : subjects.some((subject) => subject.isAssigned);
+  const isLoading = isLoadingSubjects || isLoadingExams;
+  const loadError = subjectsError ?? examsError;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
+    <div className="flex h-dvh overflow-hidden bg-[var(--color-base-200)] text-[var(--color-base-content)]">
       <TeacherSidebar activeItem="examLibrary" />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TeacherHeader />
-
-        <main
-          className="flex-1 overflow-y-auto px-8 py-6"
-          style={{ color: "var(--color-base-content)" }}
-        >
-          <p className="text-[13px] mb-3 opacity-60">
-            Teacher Portal &gt;{" "}
-            {selectedSubject ? (
-              <>
-                <button
-                  onClick={backToSubjects}
-                  className="p-0 border-none bg-transparent cursor-pointer text-inherit text-[13px] hover:underline"
-                >
-                  Exam Library
-                </button>{" "}
-                &gt; {selectedSubject.name}
-              </>
-            ) : (
-              "Exam Library"
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TeacherHeader title="Exam Library" />
+        <main className="flex min-h-0 flex-1 flex-col">
+          <div role="group" aria-label="Exam library controls" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-base-300)] px-4 py-3 sm:px-6">
+            <ExamSubjectFilter subjects={subjects} value={selectedSubjectId} onChange={chooseSubject} />
+            <label className="relative min-w-0 flex-1 sm:max-w-xs">
+              <Search size={15} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-500" />
+              <input aria-label="Search exams" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title or code" className={`${examField} pl-9`} />
+            </label>
+            {canCreate && (
+              <button type="button" className={`${examPrimary} ml-auto shrink-0`} onClick={() => setIsCreateModalOpen(true)}>
+                <Plus size={16} aria-hidden="true" /> New exam
+              </button>
             )}
-          </p>
-
-          <div className="flex items-end justify-between gap-6 mb-7">
-            <div>
-              <h1 className="text-2xl font-bold">
-                {selectedSubject ? selectedSubject.name : "Exam Library"}
-              </h1>
-              <p className="text-sm opacity-70 mt-1">
-                {selectedSubject ? "Exams in this subject." : "Choose a subject to see its exams."}
-              </p>
-            </div>
-
-            <div className="flex items-center gap-3 shrink-0">
-              <div className="flex items-center gap-2 px-3 py-2 rounded-lg border w-[280px] border-[var(--color-base-300)] bg-[var(--color-base-100)]">
-                <svg
-                  width="14"
-                  height="14"
-                  viewBox="0 0 24 24"
-                  fill="none"
-                  stroke="currentColor"
-                  strokeWidth="1.75"
-                  style={{ opacity: 0.5, flexShrink: 0 }}
-                >
-                  <path
-                    strokeLinecap="round"
-                    strokeLinejoin="round"
-                    d="m21 21-5.197-5.197m0 0A7.5 7.5 0 1 0 5.196 5.196a7.5 7.5 0 0 0 10.607 10.607Z"
-                  />
-                </svg>
-                <input
-                  type="text"
-                  placeholder={selectedSubject ? "Search exams by title or code" : "Search subjects"}
-                  value={search}
-                  onChange={(e) => setSearch(e.target.value)}
-                  className="flex-grow text-[13px] outline-none bg-transparent border-none text-[var(--color-base-content)] font-[inherit]"
-                />
+          </div>
+          {actionError && <p role="alert" className="px-4 py-2 text-sm text-red-700 sm:px-7">{actionError}</p>}
+          <div className="grid min-h-0 flex-1 overflow-y-auto xl:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] xl:overflow-hidden">
+            <section aria-label="Exams" className="min-w-0 border-b border-[var(--color-base-300)] xl:flex xl:min-h-0 xl:flex-col xl:border-r xl:border-b-0">
+              <div className="px-3 py-2 xl:min-h-0 xl:overflow-y-auto">
+                {isLoading ? <p role="status" className="p-3 text-sm text-stone-600">Loading exams…</p>
+                  : loadError && !exams.length ? <p role="alert" className="p-3 text-sm text-red-700">{loadError}</p>
+                  : filtered.length ? (
+                    <ul className="divide-y divide-stone-200">
+                      {filtered.map((exam) => {
+                        const subject = subjects.find((item) => item.id === exam.subjectId);
+                        const live = exam.classAttachments.some((item) => item.status === "active");
+                        const selected = selectedExam?.id === exam.id;
+                        return (
+                          <li key={exam.id} className="py-1">
+                            <button type="button" aria-pressed={selected} onClick={() => {
+                              setSelectedExamId(exam.id);
+                              if (window.matchMedia("(width < 80rem)").matches) {
+                                requestAnimationFrame(() => detailsRef.current?.focus());
+                              }
+                            }} className={`flex w-full items-start justify-between gap-3 rounded-md px-3 py-3 text-left focus-visible:outline-2 focus-visible:outline-[#465a3b] ${selected ? "bg-[#e9eee3]" : "hover:bg-stone-100"}`}>
+                              <span className="min-w-0">
+                                <span className="block break-words text-sm font-semibold">{exam.title}</span>
+                                {subject && <span className="mt-1 block text-xs text-stone-600">{subject.name}</span>}
+                              </span>
+                              <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                                <StatusBadge status={exam.status} subtle />
+                                {live && <ClassExamStatusBadge status="active" subtle />}
+                              </span>
+                            </button>
+                          </li>
+                        );
+                      })}
+                    </ul>
+                  ) : (
+                    <p className="p-3 text-sm text-stone-600">
+                      {query ? `No exams match “${search.trim()}”.` : selectedSubject ? "No exams in this subject yet." : "No exams yet."}
+                    </p>
+                  )}
               </div>
-
-              {selectedSubject?.isAssigned && (
-                <button
-                  onClick={() => setIsCreateModalOpen(true)}
-                  className="flex items-center gap-1.5 px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)]"
-                >
-                  <Plus size={14} />
-                  New Exam
-                </button>
+            </section>
+            <section ref={detailsRef} tabIndex={-1} aria-label="Exam details" className="min-w-0 bg-[var(--color-base-100)] p-4 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#465a3b] sm:p-7 xl:overflow-y-auto">
+              {!isLoading && selectedExam && (
+                <div className="max-w-3xl">
+                  <div className="min-w-0">
+                    {selectedExamSubject && <p className="mb-1 text-sm text-stone-600">{selectedExamSubject.name}</p>}
+                    <div className="flex flex-wrap items-center gap-x-3 gap-y-1">
+                      <h2 className="break-words text-2xl font-semibold">{selectedExam.title}</h2>
+                      <StatusBadge status={selectedExam.status} subtle />
+                    </div>
+                  </div>
+                  {selectedExam.description && <p className="mt-3 whitespace-pre-wrap break-words text-sm leading-relaxed text-stone-600">{selectedExam.description}</p>}
+                  <dl className="mt-5 grid gap-3 text-sm text-stone-700 sm:grid-cols-2">
+                    <div className="flex items-center gap-2">
+                      <FileText size={16} aria-hidden="true" />
+                      <dt className="sr-only">Questions</dt>
+                      <dd>{selectedExam.questionCount} {selectedExam.questionCount === 1 ? "question" : "questions"}</dd>
+                    </div>
+                    <div className="flex items-center gap-2">
+                      <Users size={16} aria-hidden="true" />
+                      <dt className="sr-only">Classes</dt>
+                      <dd>{selectedExam.classAttachments.length} {selectedExam.classAttachments.length === 1 ? "class" : "classes"}</dd>
+                    </div>
+                    <div className="flex flex-wrap gap-2"><dt>Exam Code:</dt><dd className="tabular-nums">{selectedExam.code}</dd></div>
+                    <div className="flex flex-wrap gap-2"><dt>Created:</dt><dd>{selectedExam.createdAt}</dd></div>
+                  </dl>
+                  {selectedExam.classAttachments.length > 0 && (
+                    <div className="mt-5 border-t border-[var(--color-base-300)] pt-4">
+                      <h3 className="text-sm font-semibold">Class delivery</h3>
+                      <ul className="mt-2 divide-y divide-stone-200">
+                        {selectedExam.classAttachments.map((item) => (
+                          <li key={item.classExamId} className="flex items-center justify-between gap-3 py-2 text-sm">
+                            <span className="min-w-0 break-words">{item.className}</span><ClassExamStatusBadge status={item.status} subtle />
+                          </li>
+                        ))}
+                      </ul>
+                    </div>
+                  )}
+                  <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-base-300)] pt-4">
+                    <button type="button" className={examPrimary} disabled={isProcessing} onClick={() => handleCardCta(selectedExam.id, selectedExam.status, selectedExam.classAttachments.length > 0)}>
+                      {selectedExam.status === "draft" ? "Continue building" : selectedExam.classAttachments.length ? "Manage classes" : "Add to a class"}
+                      <ArrowRight size={16} aria-hidden="true" />
+                    </button>
+                    {selectedExam.status === "saved" && <button type="button" className={examSecondary} disabled={isProcessing} onClick={() => {
+                      setCurrentExamId(selectedExam.id);
+                      setOpenedFromEditExam(selectedExam.classAttachments.some((item) => item.status === "active"));
+                      navigateTo("examBuilder");
+                    }}>Edit exam</button>}
+                    {selectedExam.classAttachments.length === 0 && (
+                      <button type="button" className={`${examSecondary} text-red-700 hover:bg-red-50`} disabled={isProcessing} onClick={() => requestDelete(selectedExam.id)}>
+                        <Trash2 size={15} aria-hidden="true" /> Delete exam
+                      </button>
+                    )}
+                  </div>
+                </div>
               )}
-            </div>
+            </section>
           </div>
-
-          {actionError && (
-            <p
-              className="text-[13px] mb-4"
-              style={{ color: "var(--color-error)" }}
-            >
-              {actionError}
-            </p>
-          )}
-
-          {!selectedSubject ? (
-            // ── Level 1: subjects ──────────────────────────────────────────
-            isLoadingSubjects || isLoadingExams ? (
-              <p className="text-[13px] opacity-60">Loading subjects...</p>
-            ) : subjectsError ? (
-              <p className="text-[13px]" style={{ color: "var(--color-error)" }}>
-                {subjectsError}
-              </p>
-            ) : subjects.length === 0 ? (
-              <p className="text-[13px] opacity-60">
-                You aren't assigned to any subjects yet. Ask an admin to assign you one, and it
-                will show up here.
-              </p>
-            ) : filteredSubjects.length === 0 ? (
-              <p className="text-[13px] opacity-60">No subjects match "{search}".</p>
-            ) : (
-              <div className="grid grid-cols-3 gap-5">
-                {filteredSubjects.map((subject) => (
-                  <SubjectTile
-                    key={subject.id}
-                    name={subject.name}
-                    note={subject.isAssigned ? undefined : "You're no longer assigned to this subject."}
-                    badge={
-                      subject.liveClassCount > 0
-                        ? `Live in ${subject.liveClassCount} ${subject.liveClassCount === 1 ? "class" : "classes"}`
-                        : undefined
-                    }
-                    stats={[
-                      { label: "Exams", value: subject.examCount },
-                      { label: "Your classes", value: subject.classCount },
-                    ]}
-                    onClick={() => openSubject(subject.id)}
-                  />
-                ))}
-              </div>
-            )
-          ) : (
-          // ── Level 2: the exams under the chosen subject ────────────────
-          filtered.length === 0 ? (
-            <p className="text-[13px] opacity-60">
-              {exams.some((e) => e.subjectId === selectedSubject.id)
-                ? `No exams match "${search}".`
-                : selectedSubject.isAssigned
-                  ? "No exams in this subject yet. Use New Exam to create one."
-                  : "No exams to show."}
-            </p>
-          ) : (
-          <div className="grid grid-cols-3 gap-5">
-            {filtered.map((exam) => {
-              const hasAttachments = exam.classAttachments.length > 0;
-              const hasActiveAttachment = exam.classAttachments.some((a) => a.status === "active");
-
-              return (
-                <ExamCardTile
-                  key={exam.id}
-                  exam={{
-                    ...exam,
-                    onCta: () => handleCardCta(exam.id, exam.status, hasAttachments),
-                  }}
-                  onClick={() => handleCardCta(exam.id, exam.status, hasAttachments)}
-                  menu={
-                    <ExamCardMenu
-                      hasClassAttachments={hasAttachments}
-                      isProcessing={isProcessing}
-                      onDelete={() => requestDelete(exam.id)}
-                      onEditExam={() => {
-                        setCurrentExamId(exam.id);
-                        setOpenedFromEditExam(hasActiveAttachment);
-                        navigateTo("examBuilder");
-                      }}
-                    />
-                  }
-                />
-              );
-            })}
-          </div>
-          )
-          )}
         </main>
       </div>
 
@@ -355,7 +303,7 @@ export function ExamLibraryScreen() {
         onSubmit={handleCreateExam}
         isSubmitting={isCreating}
         error={createError}
-        fixedSubject={selectedSubject?.isAssigned ? { id: selectedSubject.id, name: selectedSubject.name } : null}
+        fixedSubject={selectedSubject?.isAssigned ? selectedSubject : null}
       />
 
       <ManageClassesModal
@@ -426,7 +374,7 @@ export function ExamLibraryScreen() {
       />
 
       {/* Rendered last so it always sits on top of the other modals (e.g. "End Exam" inside Manage Classes) */}
-      <ConfirmActionDialog
+      <ExamConfirmDialog
         isOpen={confirmAction !== null}
         title={confirmAction?.type === "endClassExam" ? "End this class's exam?" : "Delete this exam?"}
         message={

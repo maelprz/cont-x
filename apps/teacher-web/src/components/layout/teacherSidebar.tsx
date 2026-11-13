@@ -26,10 +26,7 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
   const setBankSubject = useQuestionBankStore((state) => state.setSelectedSubjectId);
   const bankResetHandler = useQuestionBankStore((state) => state.resetHandler);
 
-  // These two screens have a subject level and an inside-a-subject level.
-  // Coming in from the sidebar should always start at the subject list, not
-  // wherever the teacher last was. (Going back from the builder, or from a
-  // dashboard link, doesn't use the sidebar, so it still lands inside the subject.)
+  // The sidebar opens the full library. Returning from the builder can keep its subject filter.
   const openExamLibrary = () => {
     setLibrarySubject(null);
     navigateTo("examLibrary");
@@ -44,37 +41,38 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
   };
 
   // shared base classes every nav item gets
-  const navItemBase =
-    "flex items-center gap-2.5 px-3 py-2.5 rounded-lg text-sm cursor-pointer w-full text-left border-none bg-transparent";
+  const navItemBase = "flex w-full cursor-pointer items-center justify-center gap-2.5 rounded-lg border-none px-3 py-2.5 text-left text-sm focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-white lg:justify-start [&>span]:max-lg:sr-only [&>svg]:shrink-0";
 
   // active state classes
   const navItemActive =
-    "bg-[var(--color-primary)] text-[var(--color-primary-content)] font-semibold";
+    "bg-[#30476a] text-white font-semibold";
 
   // inactive state classes
   const navItemInactive =
     "text-[rgba(248,248,248,0.7)] hover:text-[var(--color-neutral-content)] hover:bg-[rgba(248,248,248,0.08)]";
 
   return (
-    <aside className="w-64 bg-[var(--color-primary)] flex flex-col shrink-0">
-      <div className="px-6 py-6">
+    <aside className="flex w-12 shrink-0 flex-col bg-[var(--color-primary)] lg:w-64">
+      <div className="px-3 py-5 lg:px-6 lg:py-6">
         <div className="flex items-center gap-2">
           <Shield size={20} className="text-[var(--color-primary-content)]" />
-          <span className="text-[var(--color-primary-content)] font-bold text-lg">
+          <span className="text-lg font-bold text-[var(--color-primary-content)] max-lg:sr-only">
             Cont/x
           </span>
         </div>
-        <p className="text-[var(--color-primary-content)]/70 text-[10px] uppercase tracking-wide mt-1">
+        <p className="mt-1 hidden text-[10px] tracking-wide text-[var(--color-primary-content)]/70 uppercase lg:block">
           Secure Ecosystem
         </p>
       </div>
 
       {/* nav items */}
-      <nav className="flex flex-col gap-1 px-3 py-4 flex-1">
-        <p className="text-[var(--color-primary-content)]/60 text-[10px] uppercase tracking-wider px-2 mb-1">
+      <nav aria-label="Teacher navigation" className="flex min-h-0 flex-1 flex-col gap-1 overflow-y-auto px-1 py-4 lg:px-3">
+        <p className="mb-1 hidden px-2 text-[10px] tracking-wider text-[var(--color-primary-content)]/60 uppercase lg:block">
           Main Menu
         </p>
         <button
+          aria-current={activeItem === "dashboard" ? "page" : undefined}
+          title="Dashboard"
           onClick={() => navigateTo("dashboard")}
           className={`${navItemBase} ${
             activeItem === "dashboard" ? navItemActive : navItemInactive
@@ -85,6 +83,8 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
         </button>
 
         <button
+          aria-current={activeItem === "examLibrary" ? "page" : undefined}
+          title="Exam Library"
           onClick={openExamLibrary}
           className={`${navItemBase} ${
             activeItem === "examLibrary" ? navItemActive : navItemInactive
@@ -95,6 +95,8 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
         </button>
 
         <button
+          aria-current={activeItem === "questionBank" ? "page" : undefined}
+          title="Question Bank"
           onClick={openQuestionBank}
           className={`${navItemBase} ${
             activeItem === "questionBank" ? navItemActive : navItemInactive
@@ -105,6 +107,8 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
         </button>
 
         <button
+          aria-current={activeItem === "examResultsList" ? "page" : undefined}
+          title="Exam Results"
           onClick={() => navigateTo("examResultsList")}
           className={`${navItemBase} ${
             activeItem === "examResultsList" ? navItemActive : navItemInactive
@@ -116,10 +120,12 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
 
         {user?.hasAdminGrant && ( // only teachers who hold the admin grant see this section
           <>
-            <p className="text-[var(--color-primary-content)]/60 text-[10px] uppercase tracking-wider px-2 mt-4 mb-1">
+            <p className="mt-4 mb-1 px-2 text-[10px] tracking-wider text-[var(--color-primary-content)]/60 uppercase max-lg:sr-only">
               Administration
             </p>
             <button
+              aria-current={activeItem === "userManagement" ? "page" : undefined}
+              title="User Management"
               onClick={() => navigateTo("userManagement")}
               className={`${navItemBase} ${
                 activeItem === "userManagement" ? navItemActive : navItemInactive
@@ -128,7 +134,9 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
               <Users size={16} />
               <span>User Management</span>
             </button>
-                        <button
+            <button
+              aria-current={activeItem === "subjectsClasses" ? "page" : undefined}
+              title="Subjects & Classes"
               onClick={() => navigateTo("subjectsClasses")} // opens the new Subjects & Classes screen
               className={`${navItemBase} ${activeItem === "subjectsClasses" ? navItemActive : navItemInactive}`} // highlighted when active
             >
@@ -136,7 +144,9 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
               <span>Subjects &amp; Classes</span>
             </button>
             <button
-              onClick={() => navigateTo("auditLogs")} 
+              aria-current={activeItem === "auditLogs" ? "page" : undefined}
+              title="Audit Logs"
+              onClick={() => navigateTo("auditLogs")}
               className={`${navItemBase} ${activeItem === "auditLogs" ? navItemActive : navItemInactive}`}
             >
               <FileClock size={16} />
@@ -150,6 +160,7 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
       <div className="border-t border-[rgba(248,248,248,0.1)]">
         <button
           type="button"
+          title="Log Out"
           onClick={handleLogout}
           className={`${navItemBase} px-4 py-3 rounded-none`}
           style={{ color: "rgba(248,248,248,0.7)" }}

@@ -1,4 +1,5 @@
 import { useState, useEffect, useRef } from "react";
+import { ArrowLeft } from "lucide-react";
 import type {
   ExamBuilderScreenProps,
   BuilderQuestion,
@@ -20,6 +21,7 @@ import {
   savePools,
   saveSections,
   deleteRemovedSections,
+  deleteSectionQuestions,
   countExamAttempts,
 } from "../../services/examBuilderService";
 import { applySectionLayout } from "../../lib/sectionLayout";
@@ -41,7 +43,7 @@ import {
   mainCodeFor,
 } from "../../components/examBuilder/createBlankQuestion";
 import { useToast } from "../../hooks/useToast";
-import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog";
+import { ExamConfirmDialog, examPrimary, examSecondary } from "../../components/examLibrary/examDialog";
 import { useExamLibraryStore } from "../../store/useExamLibraryStore";
 
 export function ExamBuilderScreen({
@@ -49,11 +51,9 @@ export function ExamBuilderScreen({
   activeQuestionId: externalActiveId,
   onSelectQuestion,
   onAddQuestion,
-  onReorderQuestions,
   onDiscardQuestion,
   onDeleteQuestion,
   onPreviewRendered,
-  onSaveAndContinue,
 }: ExamBuilderScreenProps) {
   const { examData, isLoading, error } = useExamBuilder();
   const teacherId = useAuthStore((state) => state.user?.id);
@@ -82,6 +82,10 @@ export function ExamBuilderScreen({
   const [sections, setSections] = useState<BuilderSection[]>([]);
   const [savedSections, setSavedSections] = useState<BuilderSection[]>([]);
   const [activeSectionId, setActiveSectionId] = useState<string | null>(null); // where new questions and pools go
+  const [sectionToDelete, setSectionToDelete] = useState<string | null>(null);
+  const [sectionDeletionError, setSectionDeletionError] = useState<string | null>(null);
+  const [checkingSectionDeletion, setCheckingSectionDeletion] = useState(false);
+  const [removedSectionContents, setRemovedSectionContents] = useState<{ questionIds: string[] } | null>(null);
   // after saving, the library should open inside this exam's subject
   const setLibrarySubject = useExamLibraryStore((state) => state.setSelectedSubjectId);
 
@@ -103,13 +107,11 @@ export function ExamBuilderScreen({
 
   const [showQuestionBankModal, setShowQuestionBankModal] = useState(false); // true when the "+" modal is open
 
-  const [isSavingQuestion, setIsSavingQuestion] = useState(false); // Save & Continue's own bank-write in flight
-  const [bankSaveError, setBankSaveError] = useState<string | null>(null);
-
-  const [isSavingDraftState, setIsSavingDraftState] = useState(false);
-  const [isSavingExamState, setIsSavingExamState] = useState(false); // Save Draft / Save Exam's bulk persist in flight
+  const [saveAction, setSaveAction] = useState<"draft" | "exam" | "leave" | null>(null);
+  const saving = useRef(false);
   const [saveAllError, setSaveAllError] = useState<string | null>(null);
   const [statusError, setStatusError] = useState<string | null>(null); // why the draft/saved status change failed
+  const [leaveSaveError, setLeaveSaveError] = useState<string | null>(null);
 
   const [pendingLeaveScreen, setPendingLeaveScreen] = useState<ScreenName | null>(null); // where the user tried to go, while we ask them to confirm
   // asks before a points change rescales scores students already earned
@@ -122,7 +124,7 @@ export function ExamBuilderScreen({
   const hasUnsavedChanges =
     JSON.stringify(questions) !== JSON.stringify(savedQuestions) ||
     JSON.stringify(pools) !== JSON.stringify(savedPools) ||
-    JSON.stringify(sections) !== JSON.stringify(savedSections);
+    JSON.stringify(sections) !== JSON.stringify(savedSections) || removedSectionContents !== null || pendingBankSaveIds.size > 0;
   
   const { showToast } = useToast();
 
@@ -131,17 +133,21 @@ export function ExamBuilderScreen({
     if (externalQuestions) return; // parent controls questions directly, skip
     if (!examData) return; // still loading, or no exam selected
 
-    // with sections, questions are laid out in section order (and numbered to match) before
-    // the saved snapshot is taken, so opening an exam never looks like it has unsaved changes
-    const layout = applySectionLayout(examData.questions, examData.pools, examData.sections);
+    // Older exams can have no sections, or items with no section. Use the first section
+    // for those items and persist the assignment with the next exam save.
+    const examSections = examData.sections.length ? examData.sections : [{ id: examData.id, title: "Section 1" }];
+    const sectionIds = new Set(examSections.map((section) => section.id));
+    const assignSection = <T extends { sectionId?: string | null },>(item: T): T =>
+      item.sectionId && sectionIds.has(item.sectionId) ? item : { ...item, sectionId: examSections[0].id };
+    const layout = applySectionLayout(examData.questions.map(assignSection), examData.pools.map(assignSection), examSections);
     const firstQuestion = layout.questions[0];
     setQuestions(layout.questions);
     setSavedQuestions(layout.questions); // snapshot of what's actually persisted
     setPools(layout.pools);
     setSavedPools(layout.pools);
-    setSections(examData.sections);
-    setSavedSections(examData.sections);
-    setActiveSectionId(firstQuestion?.sectionId ?? examData.sections[0]?.id ?? null);
+    setSections(examSections);
+    setSavedSections(examSections);
+    setActiveSectionId(firstQuestion?.sectionId ?? examSections[0].id);
     setActiveId(firstQuestion?.id ?? "");
     setEditorTab(firstQuestion?.type ?? "multiple-choice");
   }, [examData, externalQuestions]);
@@ -157,19 +163,23 @@ export function ExamBuilderScreen({
 
   // guard against leaving the screen with unsaved changes, both via in-app navigation and browser refresh/close
   useEffect(() => {
-    if (!hasUnsavedChanges) {
+    if (!hasUnsavedChanges && !saveAction) {
       setNavigationGuard(null); // nothing to protect, let navigation happen freely
       return;
     }
 
-    setNavigationGuard((nextScreen) => setPendingLeaveScreen(nextScreen)); // intercept, ask first
+    setNavigationGuard((nextScreen) => {
+      if (saving.current) return;
+      setLeaveSaveError(null);
+      setPendingLeaveScreen(nextScreen);
+    });
 
     return () => setNavigationGuard(null); // always clear on unmount or before the next effect run
-  }, [hasUnsavedChanges, setNavigationGuard]);
+  }, [hasUnsavedChanges, saveAction, setNavigationGuard]);
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
-      if (!hasUnsavedChanges) return;
+      if (!hasUnsavedChanges && !saving.current) return;
       e.preventDefault();
       e.returnValue = ""; // required for the browser's native confirm dialog to appear
     };
@@ -215,61 +225,27 @@ export function ExamBuilderScreen({
     setRescalePrompt(null);
   };
 
-  // teacher chose to save first, then continue to wherever they were headed
-  const handleSaveAndLeave = async () => {
-    if (!pendingLeaveScreen || !examData?.id) return;
-    if (!(await confirmRescaleIfNeeded(questions))) return; // stays on the unsaved-changes prompt
-
-    setIsSavingDraftState(true);
-    const saveProblem = await persistAllQuestions();
-    if (saveProblem) {
-      showToast(saveProblem, "error");
-      setIsSavingDraftState(false);
-      return;
-    }
-
-    setStatusError(null);
-    const statusProblem = isAlreadySaved ? await saveExam(examData.id) : await saveDraft(examData.id);
-    setIsSavingDraftState(false);
-    if (statusProblem) {
-      setStatusError(statusProblem);
-      showToast(statusProblem, "error");
-      return;
-    }
-
-    setNavigationGuard(null);
-    forceNavigateTo(pendingLeaveScreen);
-    setPendingLeaveScreen(null);
-  };
-
   // teacher chose to discard changes and leave anyway
   const handleLeaveWithoutSaving = () => {
-    if (!pendingLeaveScreen) return;
+    if (!pendingLeaveScreen || saving.current) return;
     setNavigationGuard(null);
     forceNavigateTo(pendingLeaveScreen);
     setPendingLeaveScreen(null);
   };
 
   // teacher chose to stay on this screen
-  const handleCancelLeave = () => setPendingLeaveScreen(null);
+  const handleCancelLeave = () => { if (!saving.current) setPendingLeaveScreen(null); };
 
-  // the section a new question or pool lands in: the one the teacher last opened (or the last one)
-  const sectionForNewItem = (): string | null => {
-    if (sections.length === 0) return null;
+  const sectionForNewItem = (): string | undefined => {
     if (activeSectionId && sections.some((s) => s.id === activeSectionId)) return activeSectionId;
-    return sections[sections.length - 1].id;
+    return sections[0]?.id;
   };
 
-  // first click wraps everything already in the exam into "Section 1"; later clicks add an empty one
   const handleAddSection = () => {
     const created: BuilderSection = {
       id: crypto.randomUUID(),
       title: `Section ${sections.length + 1}`,
     };
-    if (sections.length === 0) {
-      setQuestions((prev) => prev.map((q) => ({ ...q, sectionId: created.id })));
-      setPools((prev) => prev.map((p) => ({ ...p, sectionId: created.id })));
-    }
     setSections((prev) => [...prev, created]);
     setActiveSectionId(created.id);
   };
@@ -287,20 +263,77 @@ export function ExamBuilderScreen({
       return next;
     });
 
-  // a section can only be deleted once it is empty, so no question is ever left without a home
-  const handleDeleteSection = (id: string) => {
-    const inUse = questions.some((q) => q.sectionId === id) || pools.some((p) => p.sectionId === id);
-    if (inUse) {
-      showToast("Move this section's questions to another section first.", "error");
+  const sectionPendingRemoval = sections.find((section) => section.id === sectionToDelete);
+  const sectionQuestions = questions.filter((question) => sectionToDelete !== null && question.sectionId === sectionToDelete);
+  const sectionPools = pools.filter((pool) => sectionToDelete !== null && pool.sectionId === sectionToDelete);
+
+  const requestDeleteSection = (id: string) => {
+    if (openedFromEditExam || sections.length < 2) return;
+    if (questions.some((question) => question.sectionId === id) || pools.some((pool) => pool.sectionId === id)) {
+      setSectionDeletionError(null);
+      setSectionToDelete(id);
       return;
     }
-    setSections((prev) => prev.filter((s) => s.id !== id));
-    setActiveSectionId((current) => (current === id ? null : current));
+
+    setSections((prev) => prev.filter((section) => section.id !== id));
+    if (activeSectionId === id) setActiveSectionId(activeQuestion?.sectionId ?? sections.find((section) => section.id !== id)?.id ?? null);
   };
 
-  const handleMoveItemToSection = (kind: "question" | "pool", id: string, sectionId: string) => {
+  const confirmDeleteSection = async () => {
+    if (!sectionPendingRemoval || openedFromEditExam || sections.length < 2 || checkingSectionDeletion) return;
+    const hasContents = sectionQuestions.length > 0 || sectionPools.length > 0;
+    if (hasContents && examData?.id) {
+      setCheckingSectionDeletion(true);
+      try {
+        if (await countExamAttempts(examData.id) > 0) {
+          setSectionDeletionError("This exam has student attempts. Move the questions and pools to another section first to preserve student work.");
+          return;
+        }
+      } catch {
+        setSectionDeletionError("Could not check for student attempts. Try again.");
+        return;
+      } finally {
+        setCheckingSectionDeletion(false);
+      }
+    }
+
+    const id = sectionPendingRemoval.id;
+    const removedIds = new Set(sectionQuestions.map((question) => question.id));
+    const remaining = questions.filter((question) => !removedIds.has(question.id));
+    const remainingSections = sections.filter((section) => section.id !== id);
+    setQuestions(remaining.map((question, index) => ({ ...question, number: index + 1 })));
+    setPools((prev) => prev.filter((pool) => pool.sectionId !== id));
+    setSections(remainingSections);
+    setPendingBankSaveIds((prev) => new Set([...prev].filter((questionId) => !removedIds.has(questionId))));
+    setBankOriginSnapshots((prev) => new Map([...prev].filter(([questionId]) => !removedIds.has(questionId))));
+    if (sectionPools.some((pool) => pool.id === activePoolId)) setActivePoolId(null);
+    const nextActive = remaining.find((question) => question.id === activeQuestion?.id) ?? remaining[0];
+    setActiveId(nextActive?.id ?? "");
+    setEditorTab(nextActive?.type ?? "multiple-choice");
+    if (activeSectionId === id) setActiveSectionId(nextActive?.sectionId ?? remainingSections[0]?.id ?? null);
+    if (hasContents) {
+      setRemovedSectionContents((prev) => ({ questionIds: [...(prev?.questionIds ?? []), ...removedIds] }));
+    }
+    setSectionToDelete(null);
+  };
+
+  const handleMoveItemToSection = (
+    kind: "question" | "pool",
+    id: string,
+    sectionId: string,
+    placement?: { questionId: string; after: boolean },
+  ) => {
+    if (openedFromEditExam || !sections.some((section) => section.id === sectionId)) return;
     if (kind === "question") {
-      setQuestions((prev) => prev.map((q) => (q.id === id ? { ...q, sectionId } : q)));
+      setQuestions((previous) => {
+        const moved = previous.find((question) => question.id === id);
+        if (!moved) return previous;
+        const next = previous.filter((question) => question.id !== id);
+        const anchor = placement ? next.findIndex((question) => question.id === placement.questionId) : -1;
+        const index = anchor < 0 ? next.length : anchor + (placement?.after ? 1 : 0);
+        next.splice(index, 0, { ...moved, sectionId });
+        return applySectionLayout(next.map((question, position) => ({ ...question, number: position + 1 })), [], sections).questions;
+      });
     } else {
       setPools((prev) => prev.map((p) => (p.id === id ? { ...p, sectionId } : p)));
     }
@@ -316,6 +349,8 @@ export function ExamBuilderScreen({
 
   // starts a brand new blank question in the real editor — matches the old "+" flow exactly
   const handleCreateNewQuestionFromModal = (type: QuestionType) => {
+    const sectionId = sectionForNewItem();
+    if (!sectionId) return;
     const newQuestion =
       type === "multiple-choice"
         ? createBlankMCQuestion(crypto.randomUUID(), questions.length + 1)
@@ -323,7 +358,7 @@ export function ExamBuilderScreen({
           ? createBlankFitbQuestion(crypto.randomUUID(), questions.length + 1)
           : createBlankCodingQuestion(crypto.randomUUID(), questions.length + 1);
 
-    newQuestion.sectionId = sectionForNewItem(); // lands in the section the teacher is working in
+    newQuestion.sectionId = sectionId;
     setQuestions((prev) => [...prev, newQuestion]);
     setPendingBankSaveIds((prev) => new Set(prev).add(newQuestion.id)); // needs a bank copy on first save
     setActivePoolId(null);
@@ -334,6 +369,7 @@ export function ExamBuilderScreen({
   // runs once the modal finishes staging bank-selected questions — nothing is saved yet
   const handleQuestionsAddedFromBank = (pickedQuestions: BuilderQuestion[]) => {
     const targetSection = sectionForNewItem();
+    if (!targetSection) return;
     const newQuestions = pickedQuestions.map((q) => ({ ...q, sectionId: targetSection }));
     setQuestions((prev) => [...prev, ...newQuestions]);
     setBankOriginSnapshots((prev) => {
@@ -351,12 +387,14 @@ export function ExamBuilderScreen({
   // random pool changes are staged locally like questions — Save Draft/Exam persists them
   const handlePoolItemsAdded = (target: PoolTarget, items: PoolItem[]) => {
     if (target.kind === "new") {
+      const sectionId = sectionForNewItem();
+      if (!sectionId) return;
       const newPool: BuilderPool = {
         id: crypto.randomUUID(),
         title: `Pool ${pools.length + 1}`,
         pickCount: target.pickCount,
         pointsPerQuestion: null,
-        sectionId: sectionForNewItem(),
+        sectionId,
         items,
       };
       setPools((prev) => [...prev, newPool]);
@@ -508,72 +546,41 @@ export function ExamBuilderScreen({
     );
   };
 
-  // saves the active question to the bank (if new) and updates the savedQuestions snapshot
-  const handleSaveAndContinue = async () => {
-    if (!activeQuestion || !examData?.id) return; // nothing selected, nothing to save
-    if (!(await confirmRescaleIfNeeded([activeQuestion]))) return;
-
-    const isNewQuestion = pendingBankSaveIds.has(activeQuestion.id);
-
-    setIsSavingQuestion(true);
-    setBankSaveError(null);
-    try {
-      if (isNewQuestion && teacherId && examData?.subjectId) {
-        await saveBankQuestion(teacherId, examData.subjectId, { ...activeQuestion, id: bankIdFor(activeQuestion.id) });
-        setPendingBankSaveIds((prev) => {
-          const next = new Set(prev);
-          next.delete(activeQuestion.id);
-          return next;
-        });
-      }
-
-      await saveSections(examData.id, sections); // the question points at its section, so that row must exist first
-
-      // Write it into the exam too. This used to only mark the question as "saved" in memory,
-      // which switched off the unsaved-changes warning while nothing had reached the database.
-      await persistExamQuestion(examData.id, activeQuestion);
-
-      setSavedQuestions((prev) =>
-        prev.some((q) => q.id === activeQuestion.id)
-          ? prev.map((q) => (q.id === activeQuestion.id ? activeQuestion : q))
-          : [...prev, activeQuestion],
-      );
-      showToast(isNewQuestion ? "Question saved to the exam and your question bank." : "Question saved.", "success");
-      onSaveAndContinue?.();
-    } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not save this question to the bank.";
-      setBankSaveError(message);
-      showToast(message, "error");
-    } finally {
-      setIsSavingQuestion(false);
-    }
-  };
-
   // saves all questions to the exam (and any new ones to the bank) used by Save Draft and Save Exam
   const persistAllQuestions = async (): Promise<string | null> => {
     if (!examData?.id) return "Could not find this exam.";
 
     setSaveAllError(null);
     try {
+      const sectionIds = new Set(sections.map((section) => section.id));
+      if (!sections.length || [...questions, ...pools].some((item) => !item.sectionId || !sectionIds.has(item.sectionId))) {
+        throw new Error("Keep at least one section and assign every question and pool to a section.");
+      }
+      if (pendingBankSaveIds.size && (!teacherId || !examData.subjectId)) {
+        throw new Error("Could not find your account or exam subject to save new questions to the Question Bank.");
+      }
+      if (removedSectionContents && await countExamAttempts(examData.id) > 0) {
+        throw new Error("This exam now has student attempts. Reopen the Builder to keep the section and its questions.");
+      }
       await saveSections(examData.id, sections); // before questions and pools, which point at them
       for (const q of questions) {
         if (pendingBankSaveIds.has(q.id) && teacherId && examData.subjectId) {
-          // reusable copy in this exam's subject bank, first time only
+          // Retries use the same bank ID so they can update the copy without duplicating it.
           await saveBankQuestion(teacherId, examData.subjectId, { ...q, id: bankIdFor(q.id) });
-          // clear it right away so a retry after a later failure doesn't save a second copy
-          setPendingBankSaveIds((prev) => {
-            const next = new Set(prev);
-            next.delete(q.id);
-            return next;
-          });
         }
         await persistExamQuestion(examData.id, q); // upserts this question into the exam
+        setSavedQuestions((prev) => prev.some((saved) => saved.id === q.id)
+          ? prev.map((saved) => saved.id === q.id ? q : saved)
+          : [...prev, q]);
       }
       await savePools(examData.id, pools, questions.length); // random pools sit after the questions
+      if (removedSectionContents) await deleteSectionQuestions(examData.id, removedSectionContents.questionIds);
       await deleteRemovedSections(examData.id, sections); // after everything has moved out of them
       setSavedQuestions(questions);
       setSavedPools(pools);
       setSavedSections(sections);
+      setRemovedSectionContents(null);
+      setPendingBankSaveIds((prev) => new Set([...prev].filter((id) => !questions.some((question) => question.id === id))));
       return null;
     } catch (err) {
       const message = err instanceof Error ? err.message : "Could not save all questions.";
@@ -584,68 +591,68 @@ export function ExamBuilderScreen({
 
   const { saveDraft, saveExam } = useUpdateExamStatus();
 
-  // quick save — persists all question edits, marks the exam as draft, returns to the library
-  const handleSaveDraft = async (): Promise<boolean> => {
-    if (!(await confirmRescaleIfNeeded(questions))) return false;
-    setIsSavingDraftState(true);
-    const saveProblem = await persistAllQuestions();
-    if (saveProblem || !examData?.id) {
-      showToast(saveProblem ?? "Could not save draft.", "error");
-      setIsSavingDraftState(false); // was left on, so the button stayed stuck on "Saving..."
-      return false;
-    }
+  const handleSave = async (action: "draft" | "exam" | "leave") => {
+    if (saving.current || isDeleting || !examData?.id) return;
+    const destination = action === "leave" ? pendingLeaveScreen : "examLibrary";
+    if (!destination) return;
 
+    saving.current = true;
+    setSaveAction(action);
+    setLeaveSaveError(null);
     setStatusError(null);
-    const statusProblem = await saveDraft(examData.id);
-    setIsSavingDraftState(false);
+    setSaveAllError(null);
+    try {
+      if (!(await confirmRescaleIfNeeded(questions))) return;
+      const saveProblem = await persistAllQuestions();
+      if (saveProblem) throw new Error(saveProblem);
 
-    if (!statusProblem) {
-      showToast("Draft saved.", "success");
-      setLibrarySubject(examData.subjectId);
-      navigateTo("examLibrary");
-      return true;
-    }
-    setStatusError(statusProblem);
-    showToast(statusProblem, "error");
-    return false;
-  };
+      const saveAsExam = action === "exam" || (action === "leave" && isAlreadySaved);
+      const statusProblem = await (saveAsExam ? saveExam(examData.id) : saveDraft(examData.id));
+      if (statusProblem) {
+        setStatusError(statusProblem);
+        throw new Error(statusProblem);
+      }
 
-  const handleSaveExam = async (): Promise<boolean> => {
-    if (!examData?.id) return false;
-    if (!(await confirmRescaleIfNeeded(questions))) return false;
-
-    setIsSavingExamState(true);
-    const saveProblem = await persistAllQuestions();
-    if (saveProblem) {
-      showToast(saveProblem, "error");
-      setIsSavingExamState(false);
-      return false;
+      showToast(saveAsExam ? (openedFromEditExam ? "Exam updated." : "Exam saved.") : "Draft saved.", "success");
+      if (destination === "examLibrary") setLibrarySubject(examData.subjectId);
+      setNavigationGuard(null);
+      forceNavigateTo(destination);
+    } catch (error) {
+      const message = error instanceof Error ? error.message : "Could not save the exam. Try again.";
+      if (action === "leave") setLeaveSaveError(message);
+      showToast(message, "error");
+    } finally {
+      saving.current = false;
+      setSaveAction(null);
     }
-    setStatusError(null);
-    const statusProblem = await saveExam(examData.id);
-    setIsSavingExamState(false);
-    if (!statusProblem) {
-      showToast(openedFromEditExam ? "Exam updated." : "Exam saved.", "success");
-      setLibrarySubject(examData.subjectId);
-      navigateTo("examLibrary");
-      return true;
-    }
-    setStatusError(statusProblem);
-    showToast(statusProblem, "error");
-    return false;
   };
 
   return (
     <div
-      className="flex h-screen overflow-hidden"
+      className="flex h-dvh overflow-hidden text-[var(--color-base-content)]"
       style={{ backgroundColor: "var(--color-base-200)" }}
     >
-      <TeacherSidebar activeItem="examBuilder" />
+      <TeacherSidebar activeItem="examLibrary" />
 
       <div className="flex-1 flex flex-col overflow-hidden min-w-0">
-        <TeacherHeader />
+        <TeacherHeader title={examData?.title || "Exam Builder"} />
 
-        <div className="flex flex-1 overflow-hidden min-w-0">
+        <header className="shrink-0 border-b border-[var(--color-base-300)] bg-[var(--color-base-100)] px-4 py-3 sm:px-7">
+          <div className="flex flex-wrap items-center justify-between gap-2">
+            <button type="button" className={`${examSecondary} shrink-0`} disabled={!!saveAction} onClick={() => {
+              if (examData) setLibrarySubject(examData.subjectId);
+              navigateTo("examLibrary");
+            }}>
+              <ArrowLeft size={15} aria-hidden="true" /> Exam Library
+            </button>
+            <div className="ml-auto flex flex-wrap gap-2">
+              {!isAlreadySaved && <button type="button" className={examSecondary} onClick={() => handleSave("draft")} disabled={!examData || isLoading || !!saveAction || isDeleting}>{saveAction === "draft" ? "Saving…" : "Save draft"}</button>}
+              <button type="button" className={examPrimary} onClick={() => handleSave("exam")} disabled={!examData || isLoading || !!saveAction || isDeleting}>{saveAction === "exam" ? "Saving…" : "Save exam"}</button>
+            </div>
+          </div>
+          {statusError && <p role="alert" className="mt-2 text-sm text-red-700">{statusError}</p>}
+        </header>
+        <div inert={!!saveAction} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden md:flex-row">
           {/* Left: question list */}
           <QuestionListPanel
             questions={questions}
@@ -664,12 +671,11 @@ export function ExamBuilderScreen({
             onAddSection={handleAddSection}
             onRenameSection={handleRenameSection}
             onMoveSection={handleMoveSection}
-            onDeleteSection={handleDeleteSection}
+            onDeleteSection={requestDeleteSection}
             onMoveItemToSection={handleMoveItemToSection}
             onSelectQuestion={handleSelectQuestion}
             onAddQuestion={handleAddQuestion}
-            onReorderQuestions={onReorderQuestions}
-            hideAddButton={openedFromEditExam}
+            hideAddButton={openedFromEditExam || !sections.length}
           />
 
           <ExamBuilderEditorPanel
@@ -678,16 +684,12 @@ export function ExamBuilderScreen({
             error={error}
             activeQuestion={activeQuestion}
             editorTab={editorTab}
-            isSavingDraft={isSavingDraftState}
-            isSavingExam={isSavingExamState}
-            statusError={statusError}
-            bankSaveError={bankSaveError}
+
             saveAllError={saveAllError}
             deleteError={deleteError}
             isDeleting={isDeleting}
-            isSavingQuestion={isSavingQuestion}
-            pendingBankSaveIds={pendingBankSaveIds}
-            canSaveDraft={!isAlreadySaved}
+
+
             poolPanel={
               activePool ? (
                 <PoolEditorPanel
@@ -705,11 +707,9 @@ export function ExamBuilderScreen({
             onTabSwitch={handleTabSwitch}
             onQuestionChange={handleQuestionChange}
             onPreviewRendered={onPreviewRendered}
-            onSaveDraft={handleSaveDraft}
-            onSaveExam={handleSaveExam}
             onDeleteQuestion={() => handleDeleteQuestion(activeQuestion?.id ?? "")}
             onDiscard={handleDiscard}
-            onSaveAndContinue={handleSaveAndContinue}
+
           />
         </div>
       </div>
@@ -730,7 +730,18 @@ export function ExamBuilderScreen({
         onCreateNewQuestion={handleCreateNewQuestionFromModal}
       />
       
-      <ConfirmActionDialog
+      <ExamConfirmDialog
+        isOpen={Boolean(sectionPendingRemoval)}
+        title={`Delete ${sectionPendingRemoval?.title.trim() || "this section"}?`}
+        message="Deleting this section removes all questions and random pools under it from this exam the next time you use Save draft or Save exam. Question Bank originals are kept."
+        confirmLabel="Delete section"
+        isProcessing={checkingSectionDeletion}
+        error={sectionDeletionError}
+        onConfirm={confirmDeleteSection}
+        onCancel={() => setSectionToDelete(null)}
+      />
+
+      <ExamConfirmDialog
         isOpen={poolToDelete !== null}
         title="Delete this random pool?"
         message="Its questions stay in the question bank."
@@ -743,13 +754,15 @@ export function ExamBuilderScreen({
 
       <UnsavedChangesPrompt
         isOpen={Boolean(pendingLeaveScreen)}
-        onSave={handleSaveAndLeave}
+        isSaving={saveAction === "leave"}
+        error={leaveSaveError}
+        onSave={() => handleSave("leave")}
         onLeaveWithoutSaving={handleLeaveWithoutSaving}
         onCancel={handleCancelLeave}
       />
 
       {/* last, so it sits on top of the unsaved-changes prompt when Save & Leave triggers it */}
-      <ConfirmActionDialog
+      <ExamConfirmDialog
         isOpen={rescalePrompt !== null}
         title="Rescale existing scores?"
         message={
@@ -762,6 +775,7 @@ export function ExamBuilderScreen({
             : ""
         }
         confirmLabel="Rescale and Save"
+        destructive={false}
         isProcessing={false}
         error={null}
         onConfirm={() => answerRescalePrompt(true)}

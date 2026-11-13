@@ -28,11 +28,11 @@ export function MCQEditorPanel({
     onChange({ ...question, options: [...question.options, { id: crypto.randomUUID(), text: "", isCorrect: false }] });
   
   return (
-    <div className="flex flex-col gap-6">
+    <div className="flex flex-col gap-4">
       {/* Title and Points row */}
-        <div className="flex items-end gap-6">
+        <div className="flex flex-wrap items-end gap-3">
           {/* Editable question title */}
-          <div className="w-[300px]">
+          <div className="min-w-0 flex-[1_1_12rem]">
             <label
               className="block text-[13px] font-medium mb-2"
               style={{ color: "var(--color-base-content)" }}
@@ -41,6 +41,7 @@ export function MCQEditorPanel({
             </label>
             <input
               type="text"
+              aria-label="Question title"
               value={question.title}
               onChange={(e) => setTitle(e.target.value)}
               className="w-full px-3 py-2 rounded-lg border text-[14px] outline-none"
@@ -63,9 +64,10 @@ export function MCQEditorPanel({
             </label>
             <input
               type="number"
+              aria-label="Points"
               value={question.points}
               onChange={(e) => setPoints(e.target.value)}
-              className="w-36 px-3 py-2 rounded-lg border text-[14px] outline-none"
+              className="w-24 rounded-lg border px-3 py-2 text-sm"
               style={{
                 backgroundColor: "var(--color-base-100)",
                 borderColor: "var(--color-base-300)",
@@ -78,56 +80,58 @@ export function MCQEditorPanel({
 
       {/* Problem description */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="font-mono text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-base-content)", opacity: 0.6 }}>
-            Problem Description (Markdown)
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <label className="text-[13px] font-medium">
+            Prompt (Markdown)
           </label>
-          <button onClick={onPreviewRendered} className="font-mono text-[11px] font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
+          <button onClick={onPreviewRendered} className="text-xs font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
             Preview Rendered
           </button>
         </div>
         <textarea
+          aria-label="Prompt (Markdown)"
           value={question.description}
           onChange={(e) => setDescription(e.target.value)}
-          rows={5}
+          rows={3}
           className="w-full px-3 py-2.5 rounded-lg border text-[13px] resize-y outline-none leading-relaxed"
-          style={{ backgroundColor: "var(--color-base-100)", borderColor: "var(--color-base-300)", color: "var(--color-base-content)", fontFamily: "'JetBrains Mono', monospace" }}
+          style={{ backgroundColor: "var(--color-base-100)", borderColor: "var(--color-base-300)", color: "var(--color-base-content)" }}
         />
       </div>
 
       {/* Options */}
       <div>
-        <p className="font-mono text-[11px] font-semibold uppercase tracking-widest mb-3" style={{ color: "var(--color-base-content)", opacity: 0.6 }}>
-          Question Options
+        <p className="mb-3 text-[13px] font-medium">
+          Answer options
         </p>
         <div className="flex flex-col gap-2.5">
-          {question.options.map((opt) => (
+          {question.options.map((opt, index) => (
             <div
               key={opt.id}
-              className="flex items-center gap-3 px-4 py-3 rounded-xl border"
+              className="flex min-w-0 items-center gap-2 rounded-lg border px-3 py-2"
               style={{
                 backgroundColor: opt.isCorrect ? "var(--color-base-200)" : "var(--color-base-100)",
                 borderColor: opt.isCorrect ? "var(--color-secondary)" : "var(--color-base-300)",
               }}
             >
-              <button onClick={() => setCorrect(opt.id)} className="flex-shrink-0 cursor-pointer border-none bg-transparent p-0">
+              <button type="button" aria-label={`Mark option ${index + 1} correct`} aria-pressed={opt.isCorrect} onClick={() => setCorrect(opt.id)} className="flex-shrink-0 cursor-pointer border-none bg-transparent p-0">
                 {opt.isCorrect
                   ? <CircleDot size={20} style={{ color: "var(--color-secondary)" }} />
                   : <Circle size={20} style={{ color: "var(--color-base-content)", opacity: 0.35 }} />}
               </button>
               <input
                 type="text"
+                aria-label={`Answer option ${index + 1}`}
                 value={opt.text}
                 onChange={(e) => setOptionText(opt.id, e.target.value)}
-                className="flex-grow text-[14px] border-none outline-none bg-transparent"
+                className="min-w-0 flex-1 border-none bg-transparent text-sm focus-visible:outline-2 focus-visible:outline-[#465a3b]"
                 style={{ color: "var(--color-base-content)", fontFamily: "inherit" }}
               />
               {opt.isCorrect && (
-                <span className="font-mono text-[10px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-secondary)" }}>
+                <span className="text-xs font-semibold" style={{ color: "var(--color-secondary)" }}>
                   Correct
                 </span>
               )}
-              <button onClick={() => removeOption(opt.id)} className="flex-shrink-0 cursor-pointer border-none bg-transparent p-0 transition-opacity hover:opacity-60" style={{ color: "var(--color-base-content)", opacity: 0.4 }}>
+              <button type="button" aria-label={`Remove option ${index + 1}`} onClick={() => removeOption(opt.id)} className="flex-shrink-0 cursor-pointer border-none bg-transparent p-0 transition-opacity hover:opacity-60" style={{ color: "var(--color-base-content)", opacity: 0.4 }}>
                 <X size={16} />
               </button>
             </div>
