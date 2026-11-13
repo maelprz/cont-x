@@ -41,8 +41,8 @@ export function FITBEditorPanel({
   return (
     <div className="flex flex-col gap-6">
       {/* Title and Points row */}
-      <div className="flex items-end gap-6">
-        <div className="w-[300px]">
+      <div className="flex flex-wrap items-end gap-3">
+        <div className="min-w-0 flex-[1_1_12rem]">
           <label
             className="block text-[13px] font-medium mb-2"
             style={{ color: "var(--color-base-content)" }}
@@ -74,7 +74,7 @@ export function FITBEditorPanel({
             type="number"
             value={question.points}
             onChange={(e) => setPoints(e.target.value)}
-            className="w-36 px-3 py-2 rounded-lg border text-[14px] outline-none"
+            className="w-24 rounded-lg border px-3 py-2 text-sm"
             style={{
               backgroundColor: "var(--color-base-100)",
               borderColor: "var(--color-base-300)",
@@ -87,16 +87,16 @@ export function FITBEditorPanel({
 
       {/* Problem description */}
       <div>
-        <div className="flex items-center justify-between mb-2">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
           <label
-            className="font-mono text-[11px] font-semibold uppercase tracking-widest"
+            className="text-[13px] font-medium"
             style={{ color: "var(--color-base-content)", opacity: 0.6 }}
           >
             Problem Description (Markdown)
           </label>
           <button
             onClick={onPreviewRendered}
-            className="font-mono text-[11px] font-semibold cursor-pointer border-none bg-transparent"
+            className="text-xs font-semibold cursor-pointer border-none bg-transparent"
             style={{ color: "var(--color-secondary)" }}
           >
             Preview Rendered
@@ -105,13 +105,12 @@ export function FITBEditorPanel({
         <textarea
           value={question.description}
           onChange={(e) => setDescription(e.target.value)}
-          rows={5}
+          rows={3}
           className="w-full px-3 py-2.5 rounded-lg border text-[13px] resize-y outline-none leading-relaxed"
           style={{
             backgroundColor: "var(--color-base-100)",
             borderColor: "var(--color-base-300)",
             color: "var(--color-base-content)",
-            fontFamily: "'JetBrains Mono', monospace",
           }}
         />
       </div>
@@ -119,7 +118,7 @@ export function FITBEditorPanel({
       {/* Accepted answers and how strictly they are matched */}
       <div>
         <p
-          className="font-mono text-[11px] font-semibold uppercase tracking-widest mb-3"
+          className="mb-3 text-[13px] font-medium"
           style={{ color: "var(--color-base-content)", opacity: 0.6 }}
         >
           Accepted Answers
@@ -140,7 +139,7 @@ export function FITBEditorPanel({
                 value={answer.text}
                 onChange={(e) => setAnswerText(answer.id, e.target.value)}
                 placeholder="An answer that earns full points, e.g. PowerPoint"
-                className="flex-grow text-[14px] border-none outline-none bg-transparent"
+                className="min-w-0 flex-1 border-none bg-transparent text-sm focus-visible:outline-2 focus-visible:outline-[#465a3b]"
                 style={{ color: "var(--color-base-content)", fontFamily: "inherit" }}
               />
               <button

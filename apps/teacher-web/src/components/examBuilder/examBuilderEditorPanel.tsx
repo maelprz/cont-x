@@ -1,4 +1,5 @@
 import { Trash2 } from "lucide-react";
+import { examSecondary } from "../examLibrary/examDialog";
 import type {
   BuilderQuestion,
   CodingBuilderQuestion,
@@ -18,25 +19,15 @@ interface ExamBuilderEditorPaneProps {
   error: string | null;
   activeQuestion?: BuilderQuestion;
   editorTab: QuestionType;
-  isSavingDraft: boolean;
-  isSavingExam: boolean;
-  statusError: string | null;
-  bankSaveError: string | null;
   saveAllError: string | null;
   deleteError: string | null;
   isDeleting: boolean;
-  isSavingQuestion: boolean;
-  pendingBankSaveIds: Set<string>;
-  canSaveDraft?: boolean; // false for an already-saved exam: it can't go back to draft
   poolPanel?: React.ReactNode; // when set, replaces the question editor (a random pool is selected)
   onTabSwitch: (tab: QuestionType) => void;
   onQuestionChange: (question: BuilderQuestion) => void;
   onPreviewRendered?: () => void;
-  onSaveDraft: () => void;
-  onSaveExam: () => void;
   onDeleteQuestion: () => void;
   onDiscard: () => void;
-  onSaveAndContinue: () => void;
 }
 
 export function ExamBuilderEditorPanel({
@@ -45,90 +36,19 @@ export function ExamBuilderEditorPanel({
   error,
   activeQuestion,
   editorTab,
-  isSavingDraft,
-  isSavingExam,
-  statusError,
-  bankSaveError,
   saveAllError,
   deleteError,
   isDeleting,
-  isSavingQuestion,
-  pendingBankSaveIds,
-  canSaveDraft = true,
   poolPanel,
   onTabSwitch,
   onQuestionChange,
   onPreviewRendered,
-  onSaveDraft,
-  onSaveExam,
   onDeleteQuestion,
   onDiscard,
-  onSaveAndContinue,
 }: ExamBuilderEditorPaneProps) {
   return (
-    <main className="flex-1 flex flex-col overflow-hidden min-w-0">
-      <div
-        className="relative flex items-start justify-between px-7 py-4 border-b flex-shrink-0"
-        style={{ borderColor: "var(--color-base-300)" }}
-      >
-        <div>
-          <h1
-            className="text-[24px] font-bold leading-tight mb-0.5"
-            style={{ color: "var(--color-base-content)" }}
-          >
-            {poolPanel ? "Edit Random Pool" : "Edit Question"}
-          </h1>
-          <p
-            className="text-[13px]"
-            style={{ color: "var(--color-base-content)", opacity: 0.6 }}
-          >
-            {poolPanel
-              ? "Each student gets a random selection of the questions in this pool."
-              : editorTab === "multiple-choice"
-                ? "Configure your multiple choice question and correct options."
-                : editorTab === "fill-in-the-blank"
-                  ? "Configure your fill-in-the-blank question and the answers it accepts."
-                  : "Configure your coding challenge requirements and test cases."}
-          </p>
-        </div>
-        <div className="flex items-center gap-3 flex-shrink-0">
-          {canSaveDraft && (
-          <button
-            onClick={onSaveDraft}
-            disabled={isSavingDraft}
-            className="px-4 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 disabled:opacity-60"
-            style={{
-              borderColor: "var(--color-base-300)",
-              color: "var(--color-base-content)",
-              backgroundColor: "var(--color-base-100)",
-            }}
-          >
-            {isSavingDraft ? "Saving..." : "Save Draft"}
-          </button>
-          )}
-          <button
-            onClick={onSaveExam}
-            disabled={isSavingExam}
-            className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-90 border-none"
-            style={{
-              backgroundColor: "var(--color-primary)",
-              color: "var(--color-primary-content)",
-            }}
-          >
-            {isSavingExam ? "Saving..." : "Save Exam"}
-          </button>
-        </div>
-        {statusError && (
-          <p
-            className="absolute top-full right-7 mt-2 text-[13px]"
-            style={{ color: "var(--color-error)" }}
-          >
-            {statusError}
-          </p>
-        )}
-      </div>
-
-      <div className="flex-1 overflow-y-auto px-7 py-5">
+    <main aria-label="Question editor" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-base-100)]">
+      <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-7 sm:py-5">
         {isLoading && (
           <p
             className="text-[13px]"
@@ -143,19 +63,24 @@ export function ExamBuilderEditorPanel({
           </p>
         )}
 
-        {!isLoading && !error && poolPanel}
+        {!isLoading && !error && poolPanel && <div className="mx-auto max-w-4xl">{poolPanel}</div>}
 
-        {!isLoading && !error && !poolPanel && (
-          <>
+        {!isLoading && !error && !poolPanel && !activeQuestion && (
+          <p className="mx-auto max-w-4xl text-sm text-stone-600">Add a question or select one in the exam outline.</p>
+        )}
+        {!isLoading && !error && !poolPanel && activeQuestion && (
+          <div className="mx-auto max-w-4xl">
+            <h2 className="mb-3 break-words text-lg font-semibold">Q{activeQuestion.number} · {activeQuestion.title || "Untitled question"}</h2>
             <div
-              className="inline-flex rounded-lg p-0.5 mb-6"
+              className="mb-4 flex w-fit max-w-full flex-wrap gap-1 rounded-lg p-1"
               style={{ backgroundColor: "var(--color-base-300)" }}
             >
               {(["multiple-choice", "coding", "fill-in-the-blank"] as QuestionType[]).map((tab) => (
                 <button
                   key={tab}
+                  aria-pressed={editorTab === tab}
                   onClick={() => onTabSwitch(tab)}
-                  className="px-4 py-1.5 rounded-md text-[13px] font-mono font-semibold cursor-pointer border-none transition-colors duration-150"
+                  className="rounded-md px-3 py-1.5 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-[#465a3b]"
                   style={{
                     backgroundColor:
                       editorTab === tab ? "var(--color-base-100)" : "transparent",
@@ -169,7 +94,7 @@ export function ExamBuilderEditorPanel({
               ))}
             </div>
 
-            {activeQuestion && <QuestionTopics subjectId={subjectId} selectedIds={activeQuestion.topicIds??[]} onChange={topicIds=>onQuestionChange({...activeQuestion,topicIds})} />}
+            <QuestionTopics key={activeQuestion.id} compact subjectId={subjectId} selectedIds={activeQuestion.topicIds ?? []} onChange={(topicIds) => onQuestionChange({ ...activeQuestion, topicIds })} />
 
             {activeQuestion &&
               (editorTab === "multiple-choice" ? (
@@ -222,13 +147,7 @@ export function ExamBuilderEditorPanel({
                   onPreviewRendered={onPreviewRendered}
                 />
               ))}
-          </>
-        )}
-
-        {bankSaveError && (
-          <p className="text-[13px] mb-2" style={{ color: "var(--color-error)" }}>
-            {bankSaveError}
-          </p>
+          </div>
         )}
 
         {saveAllError && (
@@ -243,9 +162,9 @@ export function ExamBuilderEditorPanel({
           </p>
         )}
 
-        {!poolPanel && (
+        {!poolPanel && activeQuestion && !isLoading && !error && (
         <div
-          className="flex items-center justify-between mt-8 pt-5 border-t"
+          className="mx-auto mt-6 flex max-w-4xl flex-wrap items-center justify-between gap-3 border-t pt-4"
           style={{ borderColor: "var(--color-base-300)" }}
         >
           <button
@@ -260,33 +179,12 @@ export function ExamBuilderEditorPanel({
             <Trash2 size={14} />
             {isDeleting ? "Deleting..." : "Delete Question"}
           </button>
-          <div className="flex items-center gap-3">
+          <div className="flex flex-wrap items-center gap-2">
             <button
               onClick={onDiscard}
-              className="px-5 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70"
-              style={{
-                borderColor: "var(--color-base-300)",
-                color: "var(--color-base-content)",
-                backgroundColor: "transparent",
-              }}
+              className={examSecondary}
             >
-              Discard
-            </button>
-            <button
-              onClick={onSaveAndContinue}
-              disabled={isSavingQuestion}
-              className="px-5 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90"
-              style={{
-                backgroundColor: "var(--color-primary)",
-                color: "var(--color-primary-content)",
-                opacity: isSavingQuestion ? 0.6 : 1,
-              }}
-            >
-              {isSavingQuestion
-                ? "Saving..."
-                : activeQuestion && pendingBankSaveIds.has(activeQuestion.id)
-                  ? "Save to Question Bank"
-                  : "Save Edits"}
+              Discard Changes
             </button>
           </div>
         </div>

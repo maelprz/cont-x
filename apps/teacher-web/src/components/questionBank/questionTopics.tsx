@@ -2,8 +2,9 @@ import { useEffect, useState } from "react";
 import { useAuthStore } from "../../store/useAuthStore";
 import { createSubjectTopic, getSubjectTopics, getTopicsByIds, type SubjectTopic } from "../../services/questionTopicService";
 
-export function QuestionTopics({ subjectId, selectedIds, onChange }: {
+export function QuestionTopics({ subjectId, selectedIds, onChange, compact = false }: {
   subjectId: string | null; selectedIds: string[]; onChange: (ids: string[]) => void;
+  compact?: boolean;
 }) {
   const teacherId = useAuthStore(state => state.user?.id);
   const [subjectState, setSubjectState] = useState<{ subjectId: string | null; topics: SubjectTopic[]; error?: string }>({ subjectId: null, topics: [] });
@@ -53,7 +54,7 @@ export function QuestionTopics({ subjectId, selectedIds, onChange }: {
     } catch(err) { setError(err instanceof Error ? err.message : "Could not add topic."); }
     finally { setBusy(false); }
   }
-  return <fieldset className="mb-6 rounded-lg border border-[var(--color-base-300)] p-4">
+  const fields = <fieldset className={compact ? "mt-2 min-w-0 rounded-lg border border-[var(--color-base-300)] p-3" : "mb-6 rounded-lg border border-[var(--color-base-300)] p-4"}>
     <legend className="px-2 font-semibold text-sm">Question topics — choose at least one</legend>
     <p className="text-xs opacity-70 mb-3">Select additional topics when this question covers several areas.</p>
     <div className="flex flex-wrap gap-3">
@@ -70,11 +71,25 @@ export function QuestionTopics({ subjectId, selectedIds, onChange }: {
     </div>}
     {missingDetails && <p role="alert" className="mt-2 text-sm text-[var(--color-error)]">Some selected topic details are unavailable. Existing selections have been kept.</p>}
     {selected.length===0 && <p className="text-sm mt-2 text-[var(--color-error)]">A subject topic is required before saving.</p>}
-    <div className="flex gap-2 mt-3">
-      <input aria-label="New subject topic" disabled={busy} value={name} onChange={event=>setName(event.target.value)} placeholder="New topic name" className="border rounded px-3 py-2 text-sm bg-[var(--color-base-100)]"/>
+    <div className={compact ? "mt-3 flex flex-wrap gap-2" : "flex gap-2 mt-3"}>
+      <input aria-label="New subject topic" disabled={busy} value={name} onChange={event=>setName(event.target.value)} placeholder="New topic name" className={`border rounded px-3 py-2 text-sm bg-[var(--color-base-100)] ${compact ? "min-w-0 max-w-full" : ""}`}/>
       <button type="button" onClick={addTopic} disabled={busy || !name.trim()} className="border rounded px-3 py-2 text-sm disabled:opacity-50">{busy?"Adding...":"Add topic"}</button>
     </div>
     {(error || loadError) && <p role="alert" className="text-sm mt-2 text-[var(--color-error)]">{error || loadError}</p>}
   </fieldset>;
+  if (!compact) return fields;
+
+  return (
+    <details className="mb-4 min-w-0">
+      <summary className="cursor-pointer rounded-lg border border-[var(--color-base-300)] px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[#465a3b]">
+        <span className="font-semibold">Topics</span>
+        <span className={selected.length ? "ml-2 break-words text-stone-600" : "ml-2 text-red-700"}>
+          {selected.length ? selected.map((id) => knownTopics.get(id)?.name).filter(Boolean).join(", ") || `${selected.length} selected` : "Choose at least one"}
+        </span>
+        {(loadError || missingDetails) && <span className="ml-2 text-red-700">Check topic details</span>}
+      </summary>
+      {fields}
+    </details>
+  );
 }
 

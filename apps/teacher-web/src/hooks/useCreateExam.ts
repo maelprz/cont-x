@@ -19,7 +19,7 @@ export function useCreateExam() {
       const newExamId = await createDraftExam(teacherId, settings);
       return newExamId;
     } catch (err) {
-      setError("Could not create exam. Try again.");
+      setError(err instanceof Error ? err.message : "Could not create exam. Try again.");
       return null;
     } finally {
       setIsCreating(false);

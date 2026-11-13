@@ -100,5 +100,4 @@ export interface ExamBuilderScreenProps {
   onPreviewExam?: () => void;
   onSaveExam?: () => void;
   onPreviewRendered?: () => void;
-  onSaveAndContinue?: () => void;
 }

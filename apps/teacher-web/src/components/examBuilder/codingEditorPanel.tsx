@@ -60,9 +60,9 @@ export function CodingEditorPanel({
   return (
     <div className="flex flex-col gap-6">
       {/* Title, question format, points per test case, and deduction row */}
-        <div className="flex items-end gap-6">
+        <div className="flex flex-wrap items-end gap-3">
           {/* Editable question title */}
-          <div className="w-[300px]">
+          <div className="min-w-0 flex-[1_1_12rem]">
             <label
               className="block text-[13px] font-medium mb-2"
               style={{ color: "var(--color-base-content)" }}
@@ -154,20 +154,20 @@ export function CodingEditorPanel({
 
       {/* Problem description */}
       <div>
-        <div className="flex items-center justify-between mb-2">
-          <label className="font-mono text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-base-content)", opacity: 0.6 }}>
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <label className="text-[13px] font-medium">
             Problem Description (Markdown)
           </label>
-          <button onClick={onPreviewRendered} className="font-mono text-[11px] font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
+          <button onClick={onPreviewRendered} className="text-xs font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
             Preview Rendered
           </button>
         </div>
         <textarea
           value={question.description}
           onChange={(e) => setDescription(e.target.value)}
-          rows={6}
+          rows={4}
           className="w-full px-3 py-2.5 rounded-lg border text-[13px] resize-y outline-none leading-relaxed"
-          style={{ backgroundColor: "var(--color-base-100)", borderColor: "var(--color-base-300)", color: "var(--color-base-content)", fontFamily: "'JetBrains Mono', monospace" }}
+          style={{ backgroundColor: "var(--color-base-100)", borderColor: "var(--color-base-300)", color: "var(--color-base-content)" }}
         />
       </div>
 
@@ -182,7 +182,7 @@ export function CodingEditorPanel({
               className="flex items-center justify-between px-4 py-2 border-b"
               style={{ backgroundColor: "var(--color-base-200)", borderColor: "var(--color-base-300)" }}
             >
-              <span className="font-mono text-[12px]" style={{ color: "var(--color-base-content)", opacity: 0.7 }}>
+              <span className="text-xs" style={{ color: "var(--color-base-content)", opacity: 0.7 }}>
                 main.c
               </span>
             </div>
@@ -219,7 +219,7 @@ export function CodingEditorPanel({
             className="flex items-center justify-between px-4 py-2 border-b"
             style={{ backgroundColor: "var(--color-base-200)", borderColor: "var(--color-base-300)" }}
           >
-            <span className="font-mono text-[12px]" style={{ color: "var(--color-base-content)", opacity: 0.7 }}>
+            <span className="text-xs" style={{ color: "var(--color-base-content)", opacity: 0.7 }}>
               Never shown to students — used only to check your test cases
             </span>
           </div>
@@ -229,21 +229,21 @@ export function CodingEditorPanel({
 
       {/* Test cases */}
       <div className="flex items-center justify-between mb-3">
-          <p className="font-mono text-[11px] font-semibold uppercase tracking-widest" style={{ color: "var(--color-base-content)", opacity: 0.6 }}>
+          <p className="text-[13px] font-medium">
             Test Case Configuration
           </p>
           <div className="flex items-center gap-4">
             <button
               onClick={() => validateAll(question)}
               disabled={isValidating || question.testCases.length === 0 || !question.referenceSolution.trim()}
-              className="flex items-center gap-1 font-mono text-[11px] font-semibold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 disabled:opacity-30"
+              className="flex items-center gap-1 text-xs font-semibold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 disabled:opacity-30"
               style={{ color: "var(--color-secondary)" }}
               title={!question.referenceSolution.trim() ? "Add a reference solution first" : undefined}
             >
               {isValidating ? <Loader2 size={13} className="animate-spin" /> : <PlayCircle size={13} />}
               {isValidating ? "Validating..." : "Validate All Test Cases"}
             </button>
-            <button onClick={addTestCase} className="flex items-center gap-1 font-mono text-[11px] font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
+            <button onClick={addTestCase} className="flex items-center gap-1 text-xs font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
               <Plus size={13} />
               Add Case
             </button>
@@ -267,7 +267,7 @@ export function CodingEditorPanel({
               >
                 <div className="flex items-center gap-3">
                   <div className="flex-1">
-                    <label className="block font-mono text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: "var(--color-base-content)", opacity: 0.5 }}>
+                    <label className="mb-1.5 block text-xs font-medium">
                       Input (n)
                     </label>
                     <input
@@ -279,7 +279,7 @@ export function CodingEditorPanel({
                     />
                   </div>
                   <div className="flex-1">
-                    <label className="block font-mono text-[10px] font-semibold uppercase tracking-widest mb-1.5" style={{ color: "var(--color-base-content)", opacity: 0.5 }}>
+                    <label className="mb-1.5 block text-xs font-medium">
                       Expected Output
                     </label>
                     <input
@@ -310,7 +310,7 @@ export function CodingEditorPanel({
 
                 {/* Shows why a test case failed, only when there's something to show */}
                 {result && result.status !== "passed" && result.status !== "running" && (
-                  <p className="font-mono text-[11px] pl-1" style={{ color: "var(--color-error)" }}>
+                  <p className="pl-1 text-xs" style={{ color: "var(--color-error)" }}>
                     {result.status === "failed"
                       ? `Got: "${result.actualOutput}" — expected "${tc.expectedOutput}"`
                       : result.message}

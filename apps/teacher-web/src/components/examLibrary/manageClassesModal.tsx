@@ -1,3 +1,4 @@
+import { ExamDialog, examDanger, examPrimary, examSecondary } from "./examDialog";
 import type { ExamCard, ClassExamSummary } from "../../screens/examLibrary/examLibraryScreen.types";
 import { ClassExamStatusBadge } from "./statusBadge";
 import { getClassExamNavigation } from "../../router/examCardNavigation";
@@ -39,9 +40,10 @@ export function ManageClassesModal({
     if (attachment.status === "scheduled") {
       return (
         <button
+          type="button"
           onClick={() => onActivate(attachment.classExamId)}
           disabled={isProcessing}
-          className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)] disabled:opacity-50"
+          className={examPrimary}
         >
           Publish
         </button>
@@ -51,6 +53,7 @@ export function ManageClassesModal({
     const nav = getClassExamNavigation(attachment.status);
     return (
       <button
+        type="button"
         onClick={() => nav && onNavigate(attachment.classExamId, nav.targetScreen as "studentMonitoring" | "examResults")}
         className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border border-[var(--color-base-300)] transition-opacity hover:opacity-70 bg-[var(--color-base-100)] text-[var(--color-base-content)]"
       >
@@ -60,109 +63,94 @@ export function ManageClassesModal({
   };
 
   return (
-    <div
-      onClick={onClose}
-      className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
-    >
-      <div
-        onClick={(e) => e.stopPropagation()}
-        className="w-[calc(100%-2rem)] max-w-[520px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)] max-h-[85vh] overflow-y-auto"
-      >
-        <h2 className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">Manage Classes</h2>
-        <p className="text-[13px] mb-5 text-[var(--color-base-content)] opacity-60">{exam.title}</p>
+    <ExamDialog title="Manage classes" subtitle={exam.title} wide busy={isProcessing} onClose={onClose}
+      footer={<button type="button" className={examPrimary} onClick={onClose} disabled={isProcessing}>Done</button>}>
+      {error && (
+        <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>
+          {error}
+        </p>
+      )}
 
-        {error && (
-          <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>
-            {error}
-          </p>
-        )}
-
-        {exam.classAttachments.length === 0 ? (
-          <p className="text-[13px] mb-5 opacity-60 text-[var(--color-base-content)]">
-            This exam isn't in any class yet.
-          </p>
-        ) : (
-          <div className="flex flex-col gap-2 mb-5">
-            {exam.classAttachments.map((attachment) => (
-              <div
-                key={attachment.classExamId}
-                className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[var(--color-base-300)]"
-              >
-                <div className="flex flex-col gap-1 min-w-0">
-                  <div className="flex items-center gap-2">
-                    <span className="text-[13px] font-semibold text-[var(--color-base-content)] truncate">
-                      {attachment.className}
-                    </span>
-                    <ClassExamStatusBadge status={attachment.status} />
-                  </div>
-                  <span className="text-[11px] opacity-55 text-[var(--color-base-content)]">
-                    {attachment.studentCount} students
+      {exam.classAttachments.length === 0 ? (
+        <p className="text-[13px] mb-5 opacity-60 text-[var(--color-base-content)]">
+          This exam isn't in any class yet.
+        </p>
+      ) : (
+        <div className="mb-4 divide-y divide-stone-200 border-y border-stone-200">
+          {exam.classAttachments.map((attachment) => (
+            <div
+              key={attachment.classExamId}
+              className="flex flex-wrap items-center justify-between gap-3 py-3"
+            >
+              <div className="flex flex-col gap-1 min-w-0">
+                <div className="flex items-center gap-2">
+                  <span className="text-[13px] font-semibold text-[var(--color-base-content)] truncate">
+                    {attachment.className}
                   </span>
+                    <ClassExamStatusBadge status={attachment.status} subtle />
                 </div>
-
-                <div className="flex items-center gap-2 shrink-0">
-                  {attachment.status === "ended" && (
-                    <button
-                      type="button"
-                      onClick={() => onReopen(attachment.classExamId)}
-                      disabled={isProcessing}
-                      className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 disabled:opacity-50"
-                    >
-                      Reopen
-                    </button>
-                  )}
-                  {attachment.status === "active" && (
-                    <button
-                      onClick={() => onEnd(attachment.classExamId)}
-                      disabled={isProcessing}
-                      className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-error)] text-[var(--color-error-content)] disabled:opacity-50"
-                    >
-                      End
-                    </button>
-                  )}
-                  {attachment.status !== "ended" && (
-                    <button
-                      onClick={() => onEditSettings(attachment.classExamId)}
-                      disabled={isProcessing}
-                      className="px-3 py-1.5 rounded-lg text-[12px] font-medium cursor-pointer border border-[var(--color-base-300)] transition-opacity hover:opacity-70 bg-[var(--color-base-100)] text-[var(--color-base-content)] disabled:opacity-50"
-                    >
-                      Settings
-                    </button>
-                  )}
-                  {attachment.status === "scheduled" && (
-                    <button
-                      onClick={() => onRemove(attachment.classExamId)}
-                      disabled={isProcessing}
-                      title="Remove from this class"
-                      className="px-2 py-1.5 rounded-lg text-[12px] cursor-pointer border-none transition-opacity hover:opacity-70 bg-transparent text-[var(--color-error)] disabled:opacity-50"
-                    >
-                      Remove
-                    </button>
-                  )}
-                  {renderRowAction(attachment)}
-                </div>
+                <span className="text-[11px] opacity-55 text-[var(--color-base-content)]">
+                  {attachment.studentCount} students
+                </span>
               </div>
-            ))}
-          </div>
-        )}
 
-        <button
-          onClick={onAttachNew}
-          className="w-full px-4 py-2 mb-5 rounded-lg border border-dashed text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 bg-transparent border-[var(--color-base-300)] text-[var(--color-base-content)]"
-        >
-          + Add to Another Class
-        </button>
-
-        <div className="flex items-center justify-end">
-          <button
-            onClick={onClose}
-            className="px-4 py-2 rounded-lg text-[13px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)]"
-          >
-            Done
-          </button>
+              <div className="flex max-w-full flex-wrap items-center gap-2">
+                {attachment.status === "ended" && (
+                  <button
+                    type="button"
+                    onClick={() => onReopen(attachment.classExamId)}
+                    disabled={isProcessing}
+                    className={examSecondary}
+                  >
+                    Reopen
+                  </button>
+                )}
+                {attachment.status === "active" && (
+                  <button
+                    type="button"
+                    onClick={() => onEnd(attachment.classExamId)}
+                    disabled={isProcessing}
+                      className={examDanger}
+                  >
+                    End
+                  </button>
+                )}
+                {attachment.status !== "ended" && (
+                  <button
+                    type="button"
+                    onClick={() => onEditSettings(attachment.classExamId)}
+                    disabled={isProcessing}
+                    className="px-3 py-1.5 rounded-lg text-[12px] font-medium cursor-pointer border border-[var(--color-base-300)] transition-opacity hover:opacity-70 bg-[var(--color-base-100)] text-[var(--color-base-content)] disabled:opacity-50"
+                  >
+                    Settings
+                  </button>
+                )}
+                {attachment.status === "scheduled" && (
+                  <button
+                    type="button"
+                    onClick={() => onRemove(attachment.classExamId)}
+                    disabled={isProcessing}
+                    title="Remove from this class"
+                    className="px-2 py-1.5 rounded-lg text-[12px] cursor-pointer border-none transition-opacity hover:opacity-70 bg-transparent text-[var(--color-error)] disabled:opacity-50"
+                  >
+                    Remove
+                  </button>
+                )}
+                {renderRowAction(attachment)}
+              </div>
+            </div>
+          ))}
         </div>
-      </div>
-    </div>
+      )}
+
+      <button
+        type="button"
+        onClick={onAttachNew}
+        className={`${examSecondary} w-full`}
+        disabled={isProcessing}
+      >
+        + Add to Another Class
+      </button>
+    </ExamDialog>
   );
 }

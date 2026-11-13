@@ -120,6 +120,15 @@ export async function createDraftExam(
 
   if (error || !data) throw error ?? new Error("Could not create exam.");
 
+  try {
+    await saveSections(data.id, [{ id: crypto.randomUUID(), title: "Section 1" }]);
+  } catch (sectionError) {
+    // The draft has no other content yet. Roll it back if its first section could not be created.
+    const { error: cleanupError } = await supabase.from("exams").delete().eq("id", data.id);
+    if (cleanupError) throw new Error("The draft was created without its first section. Open it from the Exam Library to continue.", { cause: sectionError });
+    throw sectionError;
+  }
+
   return data.id;
 }
 
@@ -321,6 +330,13 @@ export async function deleteRemovedSections(examId: string, sections: BuilderSec
 
   const { error: deleteError } = await supabase.from("exam_sections").delete().in("id", removedIds);
   if (deleteError) throw deleteError;
+}
+
+// Delete only the exam copies that were explicitly removed from a section.
+export async function deleteSectionQuestions(examId: string, questionIds: string[]): Promise<void> {
+  if (questionIds.length === 0) return;
+  const { error } = await supabase.from("questions").delete().eq("exam_id", examId).in("id", questionIds);
+  if (error) throw error;
 }
 
 // Saves the exam's random pools: removes pools (and items) the teacher deleted,
