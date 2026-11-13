@@ -16,6 +16,7 @@ import { useViolationLogger } from "../../hooks/useViolationLogger";
 import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; 
 import { useLiveStateReporter } from "../../hooks/useLiveStateReporter"; 
 import { checkIfRemoved, getSessionStatus } from "../../services/removalService";
+import { useMovementEvents } from "../../hooks/useMovementEvents"; 
 
 import type {
   ExamQuestionScreenProps,
@@ -261,14 +262,23 @@ export function ExamQuestionScreen({
     return current !== undefined && hasQuestionAnswer(current, answers);
   };
 
-    const liveQuestion = fetchedQuestions[currentIndex]; // the question on screen, undefined while loading
+  const liveQuestion = fetchedQuestions[currentIndex]; 
+  const reportingEnabled = !isLoading && !removed && fetchedQuestions.length > 0; 
+  const reportedQuestionId = liveQuestion && !liveQuestion.poolDrawId ? liveQuestion.id : null; 
+  const reportedPosition = fetchedQuestions.length > 0 ? currentIndex + 1 : null; 
   useLiveStateReporter({
-    sessionId, // the running attempt
-    enabled: !isLoading && !removed && fetchedQuestions.length > 0, // only report once questions are loaded and the student is still in
-    questionId: liveQuestion && !liveQuestion.poolDrawId ? liveQuestion.id : null, // null for pooled questions, same rule as questionIdRef
-    position: fetchedQuestions.length > 0 ? currentIndex + 1 : null, // 1-based place in this student's own order
-    total: fetchedQuestions.length > 0 ? fetchedQuestions.length : null, // this student's question count
-    answeredCount: countAnsweredQuestions(fetchedQuestions, answers), // the same helper your progress bar uses
+    sessionId, 
+    enabled: reportingEnabled,
+    questionId: reportedQuestionId, 
+    position: reportedPosition, 
+    total: fetchedQuestions.length > 0 ? fetchedQuestions.length : null, 
+    answeredCount: countAnsweredQuestions(fetchedQuestions, answers),
+  });
+  const { flushNow: flushMovementEvents } = useMovementEvents({
+    sessionId,
+    enabled: reportingEnabled, 
+    questionId: reportedQuestionId, 
+    position: reportedPosition, 
   });
 
   // In-order exams: the first question with no answer yet. Nothing past it can be opened.
@@ -526,8 +536,9 @@ export function ExamQuestionScreen({
 
   const submitAndLeave = async () => {
     if (!sessionId || submissionInFlightRef.current) return;
-    submissionInFlightRef.current = true;
+    submissionInFlightRef.current = true; 
     try {
+      await flushMovementEvents(1500); 
       const result = await submitSession(
         sessionId,
         timedOutAnswersRef.current ? "timed_out" : "submitted",
