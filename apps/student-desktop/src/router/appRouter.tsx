@@ -9,6 +9,7 @@ import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamConfirmationScreen } from "../screens/examConfirmation/examConfirmationScreen";
 import { ExamQuestionScreen } from "../screens/examQuestion/examQuestionScreen";
 import { ExamResultScreen } from "../screens/examResult/examResultScreen";
+import { ExamReviewScreen } from "../screens/examReview/examReviewScreen";
 import { ArchiveScreen } from "../screens/archive/archiveScreen";
 import { AppSidebar } from "../components/layout/appSidebar";
 import { useExamSessionStore } from "../stores/useExamSessionStore"; // holds the removed flag
@@ -25,6 +26,7 @@ const screenComponents: Record<ScreenName, ComponentType> = {
   examConfirmation: ExamConfirmationScreen,
   examQuestion: ExamQuestionScreen,
   examResult: ExamResultScreen,
+  examReview: ExamReviewScreen,
   archive: ArchiveScreen,
 };
 

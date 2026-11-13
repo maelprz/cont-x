@@ -1,4 +1,4 @@
-import { Fragment, useState, useMemo, useEffect, useRef } from "react"; 
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamSessionStore } from "../../stores/useExamSessionStore";
 import { useExamQuestions } from "../../hooks/useExamQuestions"; 
@@ -7,6 +7,8 @@ import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker";
 import { useSessionRules } from "../../hooks/useSessionRules"; 
 import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; 
 import { useCodeExecution } from "../../hooks/useCodeExecution"; 
+import { MultipleChoiceOptions } from "../../components/examQuestion/multipleChoiceOptions";
+import { QuestionMapGrid } from "../../components/examQuestion/questionMapGrid";
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SubmittedAnswer } from "../../services/examService";
@@ -37,135 +39,6 @@ function formatTime(seconds: number): string {
   const s = seconds % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
-
-function statusStyle(
-  status: "unanswered" | "answered" | "flagged",
-  isCurrent: boolean,
-): string {
-  if (isCurrent) return "bg-[#adc6ff] text-[#00285d] border-[#adc6ff]";
-  if (status === "answered")
-    return "bg-[#1c2b3c] text-[#d4e4fa] border-[#424754]";
-  if (status === "flagged")
-    return "bg-transparent text-[#c2c6d6] border-[#424754]";
-  return "bg-transparent text-[#8c909f] border-[#424754]";
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function QuestionMapGrid({
-  items,
-  currentNumber,
-  onNavigate,
-}: {
-  items: QuestionMapItem[];
-  currentNumber: number;
-  onNavigate?: (n: number) => void;
-}) {
-  return (
-    <div className="grid grid-cols-4 gap-2">
-      {items.map(({ number, status, sectionTitle, locked }, index) => (
-        <Fragment key={number}>
-          {/* a heading row whenever a new section starts (only exams with sections have these) */}
-          {sectionTitle && sectionTitle !== items[index - 1]?.sectionTitle && (
-            <p className="col-span-4 mt-2 first:mt-0 font-mono text-[10px] font-semibold tracking-[0.12em] uppercase text-[var(--text-inverted-secondary)] break-words">
-              {sectionTitle}
-            </p>
-          )}
-          <button
-            onClick={() => !locked && onNavigate?.(number)}
-            disabled={locked}
-            title={locked ? "Answer the earlier questions first" : undefined}
-            className={`
-              h-9 w-full rounded-lg border text-[12px] font-semibold font-mono
-              transition-colors duration-150 relative
-              ${locked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
-              ${statusStyle(status, number === currentNumber)}
-              ${status === "flagged" && number !== currentNumber ? "border-dashed" : ""}
-            `}
-          >
-            {number}
-            {status === "flagged" && number !== currentNumber && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[var(--warning-icon)]" />
-            )}
-          </button>
-        </Fragment>
-      ))}
-    </div>
-  );
-}
-
-// MCQ answer options
-function MCQOptions({
-  options,
-  selectedId,
-  onSelect,
-  onClear,
-}: {
-  options: (MCQQuestion["options"][number] & { displayLetter?: string })[];
-  selectedId?: string;
-  onSelect?: (id: string) => void;
-  onClear?: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3 mt-6 w-full min-w-0">
-      {options.map(({ id, text, displayLetter }) => {
-        const isSelected = selectedId === id;
-        return (
-          <button
-            key={id}
-            onClick={() => onSelect?.(id)}
-            style={{ outline: "none", boxShadow: "none" }}
-            className={`
-              flex items-start gap-4 w-full max-w-full text-left px-5 py-4 rounded-lg border
-              cursor-pointer transition-all duration-150 box-border overflow-hidden
-              ${
-                isSelected
-                  ? "border-[#00285d] bg-[var(--bg-app)]"
-                  : "border-[var(--border-subtle)] bg-[var(--bg-sidebar)]"
-              }
-            `}
-          >
-            {/* Option letter badge, shows A/B/C/D, not the raw database id */}
-            <span
-              className={`
-                flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center
-                font-mono text-[13px] font-bold border transition-colors duration-150
-                ${
-                  isSelected
-                    ? "bg-[var(--bg-sidebar)] text-[var(--text-inverted)] border-[var(--text-subtle)]"
-                    : "bg-[var(--bg-app)] text-[var(--text-primary)] border-[var(--border-primary)]"
-                }
-              `}
-            >
-              {displayLetter ?? id}
-            </span>
-            <span
-              className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? "text-[var(--text-primary)]" : "text-[var(--text-inverted)]"}`}
-            >
-              {text}
-            </span>
-          </button>
-        );
-      })}
-
-      {/* Clears the current selection, only shown if something is picked. Plain clickable text, not a button, so it never gets a native focus ring. */}
-      {selectedId && (
-        <span
-          onClick={() => onClear?.()}
-          className="self-end mt-1 text-[13px] font-semibold cursor-pointer text-[#00285d] hover:underline"
-        >
-          Clear Choice
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main screen, named export (not default)
-// ---------------------------------------------------------------------------
 
 export function ExamQuestionScreen({
   onNavigate,
@@ -805,7 +678,7 @@ export function ExamQuestionScreen({
 
             {/* MCQ: options */}
             {mcqQ && (
-              <MCQOptions
+              <MultipleChoiceOptions
                 options={mcqQ.options}
                 selectedId={localSelectedOption}
                 onSelect={handleOptionSelect}

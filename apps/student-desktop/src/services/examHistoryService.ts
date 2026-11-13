@@ -19,6 +19,7 @@ export interface ExamHistoryEntry {
   percentage: number; // totalScore out of maxScore as a percent, one decimal place
   passmark: number | null; // class_exams.pass_mark as a percent; null means the teacher set no minimum
   hasPassMark: boolean; // false when there is no minimum, so the screen can show "Completed" instead of "Passed"
+  allowReview: boolean;
   passed: boolean; // true when percentage reaches the pass mark, or when there is no minimum
 }
 
@@ -33,7 +34,7 @@ type SessionRow = {
 };
 
 type ExamRel = { title: string; exam_code: string };
-type ClassExamRel = { pass_mark: number | null }; // what we read from class_exams
+type ClassExamRel = { pass_mark: number | null; allow_review: boolean | null }; // what we read from class_exams
 
 // Same query for both functions, so the two can never drift apart again.
 const SESSION_SELECT = `
@@ -41,7 +42,7 @@ const SESSION_SELECT = `
   total_score,
   score_adjustment,
   submitted_at,
-  class_exams ( pass_mark ),
+  class_exams ( pass_mark, allow_review ),
   exams ( title, exam_code )
 `; // pass_mark is read from class_exams because that is where the column lives
 
@@ -101,6 +102,7 @@ function mapSession(
     percentage, // percent score
     passmark, // pass mark, or null
     hasPassMark: passmark !== null, // lets the screen tell "no minimum" apart from a real pass mark
+    allowReview: classExam?.allow_review === true,
     passed, // final result
   };
 }

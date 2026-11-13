@@ -3,6 +3,7 @@ import type { ChangeEvent } from "react"; // type of the event fired when the in
 import { ArrowRight } from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
+import { ViewAnswersButton } from "../../components/examHistory/viewAnswersButton";
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 import { useAuthStore } from "../../stores/useAuthStore"; // store controlling the user's auth state
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // carries exam to Confirmation, and which session to view on Result
@@ -180,16 +181,19 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                           : ""
                       }`}
                     >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation(); // prevent the row's own onClick from firing too
-                          handleViewResult(entry.id);
-                        }}
-                        className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-primary)] text-xs font-normal cursor-pointer hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] transition-colors duration-150"
-                      >
-                        View Results
-                      </button>
+                      <div className="flex flex-wrap gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewResult(entry.id);
+                          }}
+                          className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-primary)] text-xs font-normal cursor-pointer hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] transition-colors duration-150"
+                        >
+                          View Results
+                        </button>
+                        {entry.allowReview && <ViewAnswersButton sessionId={entry.id} />}
+                      </div>
                     </td>
                   </tr>
                 ))}

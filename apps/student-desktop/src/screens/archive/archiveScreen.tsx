@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ArchiveScreenProps } from "./archiveScreen.types";
+import { ViewAnswersButton } from "../../components/examHistory/viewAnswersButton";
 import { AppHeader } from "../../components/layout/appHeader";
 import { useAllExamHistory } from "../../hooks/useAllExamHistory"; // real data hook
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -151,6 +152,9 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                     <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
                       Status
                     </th>
+                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -201,6 +205,9 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                           >
                             {entry.passed ? "Pass" : "Fail"}
                           </span>
+                        </td>
+                        <td className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}>
+                          {entry.allowReview && <ViewAnswersButton sessionId={entry.id} />}
                         </td>
                       </tr>
                     );
