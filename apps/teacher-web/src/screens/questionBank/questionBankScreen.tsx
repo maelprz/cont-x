@@ -52,6 +52,7 @@ export function QuestionBankScreen() {
   } = useBankSubjects();
   const {
     settings: visibility,
+    isLoading: isLoadingVisibility,
     isSaving: isSavingVisibility,
     error: visibilityError,
     updateSubjectLevel,
@@ -322,13 +323,14 @@ export function QuestionBankScreen() {
                   <p className="text-[14px] font-semibold">Main question bank sharing</p>
                   <p className="text-[12px] opacity-60 mt-0.5 leading-relaxed">
                     Applies one sharing level to every subject at once, overriding each subject's own
-                    setting. "No override" goes back to per-subject settings.
+                    setting. With "No override", each subject uses its saved setting or defaults to "Only me".
                   </p>
                 </div>
                 <BankVisibilitySelector
                   allowNone
-                  value={visibility.mainLevel}
-                  disabled={isSavingVisibility}
+                  label="Main question bank sharing"
+                  value={visibility?.mainLevel}
+                  disabled={isLoadingVisibility || isSavingVisibility || !visibility}
                   onChange={(level) => updateMainLevel(level)}
                 />
               </div>
@@ -395,14 +397,15 @@ export function QuestionBankScreen() {
                 <div className="max-w-lg">
                   <p className="text-[14px] font-semibold">Sharing for this subject</p>
                   <p className="text-[12px] opacity-60 mt-0.5 leading-relaxed">
-                    {visibility.mainLevel
+                    {visibility?.mainLevel
                       ? "Your main question bank setting is overriding this. Change it from the sub-bank list."
                       : "Who else can see the questions you create here."}
                   </p>
                 </div>
                 <BankVisibilitySelector
-                  value={visibility.mainLevel ?? visibility.subjectLevels[selectedSubject.id] ?? "course"}
-                  disabled={visibility.mainLevel !== null || isSavingVisibility}
+                  label="Sharing for this subject"
+                  value={visibility ? visibility.mainLevel ?? visibility.subjectLevels[selectedSubject.id] ?? "private" : null}
+                  disabled={!visibility || visibility.mainLevel !== null || isLoadingVisibility || isSavingVisibility}
                   onChange={(level) => level && updateSubjectLevel(selectedSubject.id, level)}
                 />
               </div>

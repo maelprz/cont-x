@@ -1,15 +1,15 @@
 import { supabase } from "./supabaseClient";
 
 // matches the check constraint on both settings tables
-export type BankVisibilityLevel = "course" | "account" | "department";
+export type BankVisibilityLevel = "private" | "course" | "account" | "department";
 
 export interface BankVisibilitySettings {
   // The "main question bank" setting. When it's set (not null) it overrides
   // every per-subject setting below; null means no override.
   mainLevel: BankVisibilityLevel | null;
   // per-subject ("sub-question bank") level, keyed by subject id. A subject
-  // with no row yet behaves as 'course', the default.
-  subjectLevels: Record<string, BankVisibilityLevel>;
+  // with no saved setting is private unless the main bank overrides it.
+  subjectLevels: Partial<Record<string, BankVisibilityLevel>>;
 }
 
 // This controls how far the teacher's OWN questions travel — who else can see them.
