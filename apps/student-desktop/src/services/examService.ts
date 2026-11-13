@@ -496,6 +496,7 @@ export interface ReviewItem {
   answerText: string | null; // null when the student left it blank
   score: number; // points earned on this question
   pointDeduction: number; // points removed by penalties
+  selectedOptionId?: string | null;
   options?: ReviewOption[]; // present only for mcq
   acceptedAnswers: string[] | null; // accepted FITB alternatives
   correctAnswers: string[]; // correct labels/answers or coding reference solution
@@ -522,6 +523,8 @@ export async function getSessionReview(
     type: ReviewItem["type"];
     sectionTitle: string | null;
     answer: string;
+    selectedOptionId?: string | null;
+    options?: ReviewOption[] | null;
     correctAnswers: string[];
     score: number;
     maxPoints: number;
@@ -537,6 +540,8 @@ export async function getSessionReview(
       maxPoints: Number(row.maxPoints),
       sectionTitle: row.sectionTitle,
       answerText: row.answer,
+      selectedOptionId: row.selectedOptionId,
+      options: row.options ?? undefined,
       score: Number(row.score),
       pointDeduction: 0,
       acceptedAnswers: row.type === "fitb" ? row.correctAnswers : null,

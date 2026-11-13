@@ -1,5 +1,6 @@
 import { useState } from "react";
 import type { ArchiveScreenProps } from "./archiveScreen.types";
+import { ViewAnswersButton } from "../../components/examHistory/viewAnswersButton";
 import { AppHeader } from "../../components/layout/appHeader";
 import { useAllExamHistory } from "../../hooks/useAllExamHistory"; // real data hook
 import { ChevronLeft, ChevronRight } from "lucide-react";
@@ -151,6 +152,9 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                     <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
                       Status
                     </th>
+                    <th className="text-center font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                      Actions
+                    </th>
                   </tr>
                 </thead>
                 <tbody>
@@ -201,6 +205,21 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                           >
                             {entry.passed ? "Pass" : "Fail"}
                           </span>
+                        </td>
+                        <td className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}>
+                          <div className="flex flex-wrap justify-center gap-2">
+                            <button
+                              type="button"
+                              onClick={(e) => {
+                                e.stopPropagation();
+                                handleViewResult(entry.id);
+                              }}
+                              className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-primary)] text-xs font-normal cursor-pointer hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] transition-colors duration-150"
+                            >
+                              View Results
+                            </button>
+                            {entry.allowReview && <ViewAnswersButton sessionId={entry.id} />}
+                          </div>
                         </td>
                       </tr>
                     );

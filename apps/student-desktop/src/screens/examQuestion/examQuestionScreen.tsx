@@ -1,4 +1,5 @@
-import { Fragment, useState, useMemo, useEffect, useRef } from "react"; 
+import { Flag } from "lucide-react";
+import { useState, useMemo, useEffect, useRef } from "react";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamSessionStore } from "../../stores/useExamSessionStore";
 import { useExamQuestions } from "../../hooks/useExamQuestions"; 
@@ -7,6 +8,9 @@ import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker";
 import { useSessionRules } from "../../hooks/useSessionRules"; 
 import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; 
 import { useCodeExecution } from "../../hooks/useCodeExecution"; 
+import { MultipleChoiceOptions } from "../../components/examQuestion/multipleChoiceOptions";
+import { QuestionAnswerSplit } from "../../components/examQuestion/questionAnswerSplit";
+import { QuestionMapGrid } from "../../components/examQuestion/questionMapGrid";
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SubmittedAnswer } from "../../services/examService";
@@ -37,135 +41,6 @@ function formatTime(seconds: number): string {
   const s = seconds % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
-
-function statusStyle(
-  status: "unanswered" | "answered" | "flagged",
-  isCurrent: boolean,
-): string {
-  if (isCurrent) return "bg-[#adc6ff] text-[#00285d] border-[#adc6ff]";
-  if (status === "answered")
-    return "bg-[#1c2b3c] text-[#d4e4fa] border-[#424754]";
-  if (status === "flagged")
-    return "bg-transparent text-[#c2c6d6] border-[#424754]";
-  return "bg-transparent text-[#8c909f] border-[#424754]";
-}
-
-// ---------------------------------------------------------------------------
-// Sub-components
-// ---------------------------------------------------------------------------
-
-function QuestionMapGrid({
-  items,
-  currentNumber,
-  onNavigate,
-}: {
-  items: QuestionMapItem[];
-  currentNumber: number;
-  onNavigate?: (n: number) => void;
-}) {
-  return (
-    <div className="grid grid-cols-4 gap-2">
-      {items.map(({ number, status, sectionTitle, locked }, index) => (
-        <Fragment key={number}>
-          {/* a heading row whenever a new section starts (only exams with sections have these) */}
-          {sectionTitle && sectionTitle !== items[index - 1]?.sectionTitle && (
-            <p className="col-span-4 mt-2 first:mt-0 font-mono text-[10px] font-semibold tracking-[0.12em] uppercase text-[var(--text-inverted-secondary)] break-words">
-              {sectionTitle}
-            </p>
-          )}
-          <button
-            onClick={() => !locked && onNavigate?.(number)}
-            disabled={locked}
-            title={locked ? "Answer the earlier questions first" : undefined}
-            className={`
-              h-9 w-full rounded-lg border text-[12px] font-semibold font-mono
-              transition-colors duration-150 relative
-              ${locked ? "opacity-40 cursor-not-allowed" : "cursor-pointer"}
-              ${statusStyle(status, number === currentNumber)}
-              ${status === "flagged" && number !== currentNumber ? "border-dashed" : ""}
-            `}
-          >
-            {number}
-            {status === "flagged" && number !== currentNumber && (
-              <span className="absolute -top-1 -right-1 w-2 h-2 rounded-full bg-[var(--warning-icon)]" />
-            )}
-          </button>
-        </Fragment>
-      ))}
-    </div>
-  );
-}
-
-// MCQ answer options
-function MCQOptions({
-  options,
-  selectedId,
-  onSelect,
-  onClear,
-}: {
-  options: (MCQQuestion["options"][number] & { displayLetter?: string })[];
-  selectedId?: string;
-  onSelect?: (id: string) => void;
-  onClear?: () => void;
-}) {
-  return (
-    <div className="flex flex-col gap-3 mt-6 w-full min-w-0">
-      {options.map(({ id, text, displayLetter }) => {
-        const isSelected = selectedId === id;
-        return (
-          <button
-            key={id}
-            onClick={() => onSelect?.(id)}
-            style={{ outline: "none", boxShadow: "none" }}
-            className={`
-              flex items-start gap-4 w-full max-w-full text-left px-5 py-4 rounded-lg border
-              cursor-pointer transition-all duration-150 box-border overflow-hidden
-              ${
-                isSelected
-                  ? "border-[#00285d] bg-[var(--bg-app)]"
-                  : "border-[var(--border-subtle)] bg-[var(--bg-sidebar)]"
-              }
-            `}
-          >
-            {/* Option letter badge, shows A/B/C/D, not the raw database id */}
-            <span
-              className={`
-                flex-shrink-0 w-8 h-8 rounded-lg flex items-center justify-center
-                font-mono text-[13px] font-bold border transition-colors duration-150
-                ${
-                  isSelected
-                    ? "bg-[var(--bg-sidebar)] text-[var(--text-inverted)] border-[var(--text-subtle)]"
-                    : "bg-[var(--bg-app)] text-[var(--text-primary)] border-[var(--border-primary)]"
-                }
-              `}
-            >
-              {displayLetter ?? id}
-            </span>
-            <span
-              className={`text-[14px] leading-relaxed min-w-0 flex-1 break-words whitespace-normal ${isSelected ? "text-[var(--text-primary)]" : "text-[var(--text-inverted)]"}`}
-            >
-              {text}
-            </span>
-          </button>
-        );
-      })}
-
-      {/* Clears the current selection, only shown if something is picked. Plain clickable text, not a button, so it never gets a native focus ring. */}
-      {selectedId && (
-        <span
-          onClick={() => onClear?.()}
-          className="self-end mt-1 text-[13px] font-semibold cursor-pointer text-[#00285d] hover:underline"
-        >
-          Clear Choice
-        </span>
-      )}
-    </div>
-  );
-}
-
-// ---------------------------------------------------------------------------
-// Main screen, named export (not default)
-// ---------------------------------------------------------------------------
 
 export function ExamQuestionScreen({
   onNavigate,
@@ -296,9 +171,8 @@ export function ExamQuestionScreen({
         number: i + 1, // display position, not the database id
         sectionTitle: q.sectionTitle ?? undefined, // lets the map show section headings
         locked: rules.sequential && i > firstUnansweredIndex, // in-order exams: nothing past the first unanswered question
-        status: flaggedIds.has(q.id)
-          ? "flagged"
-          : hasQuestionAnswer(q, { selectedOptions, textAnswers, codeByQuestion })
+        flagged: flaggedIds.has(q.id),
+        status: hasQuestionAnswer(q, { selectedOptions, textAnswers, codeByQuestion })
             ? "answered"
             : "unanswered",
       })),
@@ -606,6 +480,165 @@ export function ExamQuestionScreen({
   const mcqQ = question.type === "multiple-choice" ? (question as MCQQuestion) : null;
   const fitbQ = question.type === "fill-in-blank" ? (question as FITBQuestion) : null;
 
+  const questionPane = (
+    <section
+      className={`flex flex-col overflow-y-auto bg-[var(--bg-app)] min-w-0 ${isCoding ? "w-[420px] shrink-0 border-r border-[var(--border-primary)]" : "flex-1"}`}
+    >
+      {/* Question header */}
+      <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
+        <div className="min-w-0">
+          {question.sectionTitle && (
+            <p className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-1 break-words">
+              {question.sectionTitle}
+            </p>
+          )}
+          <h2 className="text-[22px] font-semibold text-[var(--text-primary)] leading-tight">
+            {question.title}
+          </h2>
+        </div>
+        <button
+          type="button"
+          aria-label="Flag question"
+          aria-pressed={question.isFlagged ?? false}
+          onClick={handleFlag}
+          className={`
+            flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer
+            transition-colors duration-150 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase bg-[var(--warning-primary)] hover:bg-[var(--warning-secondary)]
+            ${
+              question.isFlagged
+                ? "border-[var(--warning-icon)] text-[var(--warning-icon)] bg-[color:var(--warning-accent)]"
+                : "border-[var(--border-primary)] text-[var(--text-primary)] hover:border-[var(--text-secondary)] hover:text-[var(--text-secondary)]"
+            }
+          `}
+        >
+          <svg
+            width="13"
+            height="13"
+            viewBox="0 0 24 24"
+            fill="none"
+            stroke={
+              question.isFlagged
+                ? "var(--warning-icon)"
+                : "var(--text-primary)"
+            }
+            strokeWidth="1.5"
+          >
+            <path
+              strokeLinecap="round"
+              strokeLinejoin="round"
+              d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5"
+            />
+          </svg>
+        </button>
+      </div>
+      {/* Question body */}
+      <div className="px-6 pb-4 min-w-0">
+        <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed mb-5 whitespace-pre-wrap wrap-break-word">
+          {question.body}
+        </p>
+
+        {/* Coding: code snippet example */}
+        {isCoding && codingQ?.codeSnippet && (
+          <div className="rounded-lg p-4 mb-5 font-mono text-[13px] leading-relaxed overflow-x-auto bg-[var(--bg-sidebar)] border border-[var(--border-primary)]">
+            {codingQ.codeSnippet.split("\n").map((line, i) => {
+              const isComment = line.trim().startsWith("//");
+              const isNote = line.trim().startsWith("(");
+              return (
+                <div
+                  key={i}
+                  className={
+                    isComment
+                      ? "text-[#8c909f]"
+                      : isNote
+                        ? "text-[#8c909f] italic"
+                        : "text-[#c2c6d6]"
+                  }
+                >
+                  {line || "\u00A0"}
+                </div>
+              );
+            })}
+          </div>
+        )}
+
+        {/* Coding: constraints */}
+        {isCoding && codingQ?.constraints && (
+          <>
+            <p className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-3">
+              Constraints
+            </p>
+            <ul className="flex flex-col gap-2">
+              {codingQ.constraints.map((c, i) => (
+                <li
+                  key={i}
+                  className="flex items-start gap-2 text-[13px] text-[var(--text-secondary)]"
+                >
+                  <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--border-primary)] flex-shrink-0" />
+                  {c}
+                </li>
+              ))}
+            </ul>
+          </>
+        )}
+      </div>
+    </section>
+  );
+
+  const answerPane = (
+    <section aria-label="Answer" className="min-w-0 overflow-y-auto border-t border-[var(--border-primary)] px-6 py-5 sm:border-t-0">
+      {/* Fill in the blank: one text box */}
+      {fitbQ && (
+        <div className="w-full min-w-0">
+          <label
+            htmlFor="fitb-answer"
+            className="block font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-2"
+          >
+            Your answer
+          </label>
+          <input
+            id="fitb-answer"
+            type="text"
+            value={fitbQ.answerText ?? ""}
+            onChange={(e) => handleTextChange(e.target.value)}
+            autoComplete="off"
+            spellCheck={false}
+            placeholder="Type your answer"
+            className="w-full px-4 py-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-sidebar)] text-[var(--text-inverted)] text-[15px] outline-none focus:border-[var(--text-secondary)]"
+          />
+        </div>
+      )}
+
+      {/* MCQ: options */}
+      {mcqQ && (
+        <MultipleChoiceOptions
+          options={mcqQ.options}
+          className="mt-0"
+          selectedId={localSelectedOption}
+          onSelect={handleOptionSelect}
+          onClear={handleClearOption}
+        />
+      )}
+    </section>
+  );
+
+  const codePane = codingQ && (
+    <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
+      <CodeEditor
+        code={localCode}
+        language={codingQ.language ?? "c"}
+        onChange={handleCodeChange}
+        onRunTests={handleRunTests}
+        onRunCode={handleRunCode}
+        isRunning={isRunning}
+        testsResult={testsResult}
+        codeResult={codeResult}
+        runError={runError}
+        panelHeight={panelHeight}
+        onPanelHeightChange={setPanelHeight}
+      />
+    </section>
+  );
+
   return (
     <div className="h-screen w-full flex flex-col text-[var(--text-primary)] overflow-hidden bg-[var(--bg-sidebar)]">
       {/* Top navigation bar */}
@@ -683,159 +716,17 @@ export function ExamQuestionScreen({
 
       {/* Body: sidebar and content */}
       <div className="flex flex-grow overflow-hidden">
-        {/* Left pane: question pane */}
-        <section
-          className={`flex flex-col overflow-y-auto bg-[var(--bg-app)] border-r border-[var(--border-primary)] min-w-0 ${isCoding ? "w-[420px] flex-shrink-0" : "flex-1"}`}
-        >
-          {/* Question header */}
-          <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
-            <div className="min-w-0">
-              {question.sectionTitle && (
-                <p className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-1 break-words">
-                  {question.sectionTitle}
-                </p>
-              )}
-              <h2 className="text-[22px] font-semibold text-[var(--text-primary)] leading-tight">
-                {question.title}
-              </h2>
-            </div>
-            <button
-              onClick={handleFlag}
-              className={`
-                flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer
-                transition-colors duration-150 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase bg-[var(--warning-primary)] hover:bg-[var(--warning-secondary)]
-                ${
-                  question.isFlagged
-                    ? "border-[var(--warning-icon)] text-[var(--warning-icon)] bg-[color:var(--warning-accent)]"
-                    : "border-[var(--border-primary)] text-[var(--text-primary)] hover:border-[var(--text-secondary)] hover:text-[var(--text-secondary)]"
-                }
-              `}
-            >
-              <svg
-                width="13"
-                height="13"
-                viewBox="0 0 24 24"
-                fill="none"
-                stroke={
-                  question.isFlagged
-                    ? "var(--warning-icon)"
-                    : "var(--text-primary)"
-                }
-                strokeWidth="1.5"
-              >
-                <path
-                  strokeLinecap="round"
-                  strokeLinejoin="round"
-                  d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5"
-                />
-              </svg>
-            </button>
-          </div>
-          {/* Question body */}
-          <div className="px-6 pb-4 min-w-0">
-            <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed mb-5">
-              {question.body}
-            </p>
-
-            {/* Coding: code snippet example */}
-            {isCoding && codingQ?.codeSnippet && (
-              <div className="rounded-lg p-4 mb-5 font-mono text-[13px] leading-relaxed overflow-x-auto bg-[var(--bg-sidebar)] border border-[var(--border-primary)]">
-                {codingQ.codeSnippet.split("\n").map((line, i) => {
-                  const isComment = line.trim().startsWith("//");
-                  const isNote = line.trim().startsWith("(");
-                  return (
-                    <div
-                      key={i}
-                      className={
-                        isComment
-                          ? "text-[#8c909f]"
-                          : isNote
-                            ? "text-[#8c909f] italic"
-                            : "text-[#c2c6d6]"
-                      }
-                    >
-                      {line || "\u00A0"}
-                    </div>
-                  );
-                })}
-              </div>
-            )}
-
-            {/* Coding: constraints */}
-            {isCoding && codingQ?.constraints && (
-              <>
-                <p className="font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-3">
-                  Constraints
-                </p>
-                <ul className="flex flex-col gap-2">
-                  {codingQ.constraints.map((c, i) => (
-                    <li
-                      key={i}
-                      className="flex items-start gap-2 text-[13px] text-[var(--text-secondary)]"
-                    >
-                      <span className="mt-1.5 w-1.5 h-1.5 rounded-full bg-[var(--border-primary)] flex-shrink-0" />
-                      {c}
-                    </li>
-                  ))}
-                </ul>
-              </>
-            )}
-
-            {/* Fill in the blank: one text box */}
-            {fitbQ && (
-              <div className="mt-6 w-full min-w-0">
-                <label
-                  htmlFor="fitb-answer"
-                  className="block font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-2"
-                >
-                  Your answer
-                </label>
-                <input
-                  id="fitb-answer"
-                  type="text"
-                  value={fitbQ.answerText ?? ""}
-                  onChange={(e) => handleTextChange(e.target.value)}
-                  autoComplete="off"
-                  spellCheck={false}
-                  placeholder="Type your answer"
-                  className="w-full px-4 py-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-sidebar)] text-[var(--text-inverted)] text-[15px] outline-none focus:border-[var(--text-secondary)]"
-                />
-              </div>
-            )}
-
-            {/* MCQ: options */}
-            {mcqQ && (
-              <MCQOptions
-                options={mcqQ.options}
-                selectedId={localSelectedOption}
-                onSelect={handleOptionSelect}
-                onClear={handleClearOption}
-              />
-            )}
-          </div>
-        </section>
-
-        {/* Center pane: code editor (coding only) */}
-        {isCoding && codingQ && (
-          <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
-            <CodeEditor
-              code={localCode}
-              language={codingQ.language ?? "c"}
-              onChange={handleCodeChange}
-              onRunTests={handleRunTests}
-              onRunCode={handleRunCode}
-              isRunning={isRunning}
-              testsResult={testsResult}
-              codeResult={codeResult}
-              runError={runError}
-              panelHeight={panelHeight}
-              onPanelHeightChange={setPanelHeight}
-            />
-          </section>
+        {isCoding && codingQ ? (
+          <>
+            {questionPane}
+            {codePane}
+          </>
+        ) : (
+          <QuestionAnswerSplit question={questionPane} answer={answerPane} />
         )}
         {/* Right sidebar: question map */}
-        <aside className="w-[220px] flex-shrink-0 flex flex-col border-l border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
-          <div className="p-4 flex-grow">
+        <aside className="w-[105px] lg:w-[180px] flex-shrink-0 flex flex-col border-l border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
+          <div className="p-2 lg:p-4 flex-grow">
             <p className="font-mono text-[10px] font-semibold tracking-[0.18em] uppercase text-[var(--text-inverted-secondary)] mb-3">
               Question Map
             </p>
@@ -847,19 +738,17 @@ export function ExamQuestionScreen({
           </div>
 
           {/* Legend */}
-          <div className="px-4 pb-4 flex flex-col gap-2 border-t border-[var(--border-primary)] pt-3">
+          <div aria-live="polite" className="px-2 pb-4 flex flex-col gap-2 border-t border-[var(--border-primary)] pt-3 lg:px-4">
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-[var(--bg-card)] border border-[var(--border-primary)]" />
+              <span aria-hidden="true" className="h-3 w-3 shrink-0 rounded-sm border border-[#424754] bg-[#1c2b3c]" />
               <span className="font-mono text-[10px] text-[var(--text-inverted-secondary)]">
-                Answered
+                Answered: {progressCurrent}
               </span>
             </div>
             <div className="flex items-center gap-2">
-              <span className="w-3 h-3 rounded-sm bg-transparent border border-dashed border-[var(--border-primary)] relative">
-                <span className="absolute -top-1 -right-1 w-1.5 h-1.5 rounded-full bg-[var(--warning-icon)]" />
-              </span>
+              <Flag size={12} className="shrink-0 fill-current text-[var(--warning-icon)]" aria-hidden="true" />
               <span className="font-mono text-[10px] text-[var(--text-inverted-secondary)]">
-                Flagged
+                Flagged: {flaggedIds.size}
               </span>
             </div>
           </div>

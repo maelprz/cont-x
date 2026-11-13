@@ -3,6 +3,7 @@ import type { ChangeEvent } from "react"; // type of the event fired when the in
 import { ArrowRight } from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
 import type { DashboardScreenProps } from "./dashboardScreen.types"; // this screen's (currently empty) props contract
+import { ViewAnswersButton } from "../../components/examHistory/viewAnswersButton";
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 import { useAuthStore } from "../../stores/useAuthStore"; // store controlling the user's auth state
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // carries exam to Confirmation, and which session to view on Result
@@ -93,8 +94,8 @@ export function DashboardScreen(_props: DashboardScreenProps) {
           )}
         </section>
 
-        {/* Previous exams table, using the mock data defined above */}
-        <section className="flex flex-col gap-4">
+        {/* Previous exams */}
+        <section className="flex min-w-0 flex-col gap-4">
           <div className="flex items-center justify-between">
             <h2 className="font-[var(--font-headline)] text-[var(--text-primary)] text-lg">
               Previous Exams
@@ -108,8 +109,14 @@ export function DashboardScreen(_props: DashboardScreenProps) {
             </button>
           </div>
           {/* Card wrapper — gives the table its background/border/shadow instead of floating bare */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden">
-            <table className="w-full border-collapse">
+          <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-x-auto">
+            <table className="w-full table-fixed border-collapse">
+              <colgroup>
+                <col className="w-1/4" />
+                <col className="w-1/4" />
+                <col className="w-1/4" />
+                <col className="w-1/4" />
+              </colgroup>
               <thead>
                 <tr className="bg-white/[0.02]">
                   <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
@@ -121,7 +128,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                   <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
                     Result
                   </th>
-                  <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                  <th className="text-center font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
                     Actions
                   </th>
                 </tr>
@@ -140,10 +147,10 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                           : ""
                       }`}
                     >
-                      <span className="block font-medium">
+                      <span className="block wrap-break-word font-medium">
                         {entry.examTitle}
                       </span>
-                      <span className="block font-[var(--font-label)] text-xs text-[var(--text-secondary)] mt-0.5">
+                      <span className="block wrap-break-word font-[var(--font-label)] text-xs text-[var(--text-secondary)] mt-0.5">
                         Module {entry.examCode}
                       </span>
                     </td>
@@ -180,16 +187,19 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                           : ""
                       }`}
                     >
-                      <button
-                        type="button"
-                        onClick={(e) => {
-                          e.stopPropagation(); // prevent the row's own onClick from firing too
-                          handleViewResult(entry.id);
-                        }}
-                        className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-primary)] text-xs font-normal cursor-pointer hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] transition-colors duration-150"
-                      >
-                        View Results
-                      </button>
+                      <div className="flex flex-wrap justify-center gap-2">
+                        <button
+                          type="button"
+                          onClick={(e) => {
+                            e.stopPropagation();
+                            handleViewResult(entry.id);
+                          }}
+                          className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-primary)] text-xs font-normal cursor-pointer hover:border-[var(--accent-blue)] hover:text-[var(--accent-blue)] transition-colors duration-150"
+                        >
+                          View Results
+                        </button>
+                        {entry.allowReview && <ViewAnswersButton sessionId={entry.id} />}
+                      </div>
                     </td>
                   </tr>
                 ))}

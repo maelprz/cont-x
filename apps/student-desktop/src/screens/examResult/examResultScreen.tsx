@@ -14,8 +14,6 @@ import type {
 } from "./examResultScreen.types"; // this screen's props contract
 import { AppHeader } from "../../components/layout/appHeader"; // shared header bar component
 import { useExamResultDetails } from "../../hooks/useExamResultDetails"; // loads the score, duration and pass mark
-import { AnswerReviewList } from "../../components/examResult/answerReviewList"; // the per-question answer review
-import { useSessionReview } from "../../hooks/useSessionReview"; // fetches the review, only when allowed
 
 // ---------------------------------------------------------------------------
 // Sub-component — small metric card, same role as DetailCard in examConfirmation
@@ -77,15 +75,6 @@ export function ExamResultScreen({
   // whichever session id is active — works the same whether the student
   // just finished the exam or clicked an old row in Archive
   const { details, isLoading, error } = useExamResultDetails(idToUse);
-
-  // Loads the answer review, but only once we know the teacher allows it.
-  // Must stay above the early returns below, because hooks have to run on every render.
-  const {
-    review, // loaded review, or null
-    isLoading: reviewLoading, // review fetch state, renamed so it doesn't clash with the one above
-    error: reviewError, // review error, renamed for the same reason
-    retry: retryReview,
-  } = useSessionReview(idToUse, details?.allowReview === true); // stays disabled until details say review is allowed
 
   // returns to dashboard — calls optional prop callback first, then switches screen
   function handleReturnToDashboard() {
@@ -158,7 +147,7 @@ export function ExamResultScreen({
       label: "Review",
       value: reviewPermitted ? "Permitted" : "Not permitted",
       subtext: reviewPermitted
-        ? "You can review your answers."
+        ? "Open View Answers from Dashboard or Archive."
         : "Your teacher has not allowed answer review for this exam.",
     },
   ];
@@ -276,17 +265,6 @@ export function ExamResultScreen({
             />
           ))}
         </section>
-
-        {/* ── Answer review, only rendered when the teacher allows it ── */}
-        {reviewPermitted && (
-          <AnswerReviewList
-            items={review?.items ?? []} // empty until the review loads
-            keysRevealed={review?.keysRevealed ?? false} // current server permission controls answer keys
-            isLoading={reviewLoading} // shows the loading line while fetching
-            error={reviewError} // shows the server's reason if it refused
-            onRetry={retryReview}
-          />
-        )}
 
         {/* ── Return to dashboard ── */}
         <div className="flex justify-center pt-2">

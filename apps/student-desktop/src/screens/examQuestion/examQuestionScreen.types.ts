@@ -4,12 +4,13 @@
 
 export type QuestionType = 'coding' | 'multiple-choice' | 'fill-in-blank';
 
-export type QuestionStatus = 'unanswered' | 'answered' | 'flagged';
+export type QuestionStatus = 'unanswered' | 'answered';
 
 // Question map entry — one per question in the exam
 export interface QuestionMapItem {
   number: number;
   status: QuestionStatus;
+  flagged?: boolean;
   sectionTitle?: string; // the section this question is in, so the map can show headings
   locked?: boolean; // true while the exam must be answered in order and this question is not reachable yet
 }
