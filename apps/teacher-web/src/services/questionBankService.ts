@@ -66,6 +66,7 @@ export interface BankQuestionSummary {
   subjectId: string;
   isOwn: boolean; // false = shared with this teacher by someone else (read-only here)
   title: string;
+  prompt: string;
   type: "multiple-choice" | "coding" | "fill-in-the-blank";
   points: number;
   createdAt: string; // display string, e.g. "Oct 12, 2023"
@@ -148,6 +149,7 @@ function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuesti
     subjectId: row.subject_id,
     isOwn: row.teacher_id === viewerId,
     title: row.title,
+    prompt: row.prompt,
     type:
       row.type === "mcq"
         ? "multiple-choice"

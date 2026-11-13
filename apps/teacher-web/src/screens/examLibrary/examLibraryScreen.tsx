@@ -252,19 +252,19 @@ export function ExamLibraryScreen() {
                     <div className="flex items-center gap-2">
                       <FileText size={16} aria-hidden="true" />
                       <dt className="sr-only">Questions</dt>
-                      <dd>{selectedExam.questionCount} {selectedExam.questionCount === 1 ? "question" : "questions"}</dd>
+                      <dd>{selectedExam.questionCount} {selectedExam.questionCount === 1 ? "Question" : "Questions"}</dd>
                     </div>
                     <div className="flex items-center gap-2">
                       <Users size={16} aria-hidden="true" />
                       <dt className="sr-only">Classes</dt>
-                      <dd>{selectedExam.classAttachments.length} {selectedExam.classAttachments.length === 1 ? "class" : "classes"}</dd>
+                      <dd>{selectedExam.classAttachments.length} {selectedExam.classAttachments.length === 1 ? "Class" : "Classes"}</dd>
                     </div>
                     <div className="flex flex-wrap gap-2"><dt>Exam Code:</dt><dd className="tabular-nums">{selectedExam.code}</dd></div>
                     <div className="flex flex-wrap gap-2"><dt>Created:</dt><dd>{selectedExam.createdAt}</dd></div>
                   </dl>
                   {selectedExam.classAttachments.length > 0 && (
                     <div className="mt-5 border-t border-[var(--color-base-300)] pt-4">
-                      <h3 className="text-sm font-semibold">Class delivery</h3>
+                      <h3 className="text-sm font-semibold">Class Delivery</h3>
                       <ul className="mt-2 divide-y divide-stone-200">
                         {selectedExam.classAttachments.map((item) => (
                           <li key={item.classExamId} className="flex items-center justify-between gap-3 py-2 text-sm">
@@ -276,17 +276,17 @@ export function ExamLibraryScreen() {
                   )}
                   <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-base-300)] pt-4">
                     <button type="button" className={examPrimary} disabled={isProcessing} onClick={() => handleCardCta(selectedExam.id, selectedExam.status, selectedExam.classAttachments.length > 0)}>
-                      {selectedExam.status === "draft" ? "Continue building" : selectedExam.classAttachments.length ? "Manage classes" : "Add to a class"}
+                      {selectedExam.status === "draft" ? "Continue Building" : selectedExam.classAttachments.length ? "Manage Classes" : "Add to a class"}
                       <ArrowRight size={16} aria-hidden="true" />
                     </button>
                     {selectedExam.status === "saved" && <button type="button" className={examSecondary} disabled={isProcessing} onClick={() => {
                       setCurrentExamId(selectedExam.id);
                       setOpenedFromEditExam(selectedExam.classAttachments.some((item) => item.status === "active"));
                       navigateTo("examBuilder");
-                    }}>Edit exam</button>}
+                    }}>Edit Exam</button>}
                     {selectedExam.classAttachments.length === 0 && (
                       <button type="button" className={`${examSecondary} text-red-700 hover:bg-red-50`} disabled={isProcessing} onClick={() => requestDelete(selectedExam.id)}>
-                        <Trash2 size={15} aria-hidden="true" /> Delete exam
+                        <Trash2 size={15} aria-hidden="true" /> Delete Exam
                       </button>
                     )}
                   </div>

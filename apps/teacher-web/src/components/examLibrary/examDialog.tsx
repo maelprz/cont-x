@@ -8,7 +8,7 @@ export const examSecondary = `${examButton} border-[var(--color-base-300)] bg-[v
 export const examDanger = `${examButton} border-transparent bg-red-700 text-white hover:bg-red-800`;
 export const examField = "w-full min-w-0 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-3 py-2 text-sm focus-visible:outline-2 focus-visible:outline-[#465a3b]";
 
-export function ExamDialog({ title, subtitle, children, footer, onClose, onSubmit, busy, wide }: {
+export function ExamDialog({ title, subtitle, children, footer, onClose, onSubmit, busy, wide, dismissOnBackdrop }: {
   title: string;
   subtitle?: string;
   children: ReactNode;
@@ -17,6 +17,7 @@ export function ExamDialog({ title, subtitle, children, footer, onClose, onSubmi
   onSubmit?: FormEventHandler<HTMLFormElement>;
   busy?: boolean;
   wide?: boolean;
+  dismissOnBackdrop?: boolean;
 }) {
   const id = useId();
   const dialogRef = useRef<HTMLDialogElement>(null);
@@ -31,7 +32,13 @@ export function ExamDialog({ title, subtitle, children, footer, onClose, onSubmi
     <dialog
       ref={dialogRef}
       aria-labelledby={id}
-      onCancel={(event) => { event.preventDefault(); if (!busy) onClose(); }}
+      closedby={dismissOnBackdrop && !busy ? "any" : undefined}
+      onCancel={(event) => {
+        event.preventDefault();
+        if (busy) return;
+        if (dismissOnBackdrop) event.currentTarget.close();
+        onClose();
+      }}
       className={`m-auto w-[calc(100%-1.5rem)] max-h-[calc(100dvh-1.5rem)] overflow-hidden rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-0 text-[var(--color-base-content)] shadow-xl backdrop:bg-slate-950/45 ${wide ? "max-w-[680px]" : "max-w-[460px]"}`}
     >
       <form onSubmit={onSubmit ?? ((event) => event.preventDefault())} className="flex max-h-[calc(100dvh-1.5rem-2px)] min-h-0 flex-col">

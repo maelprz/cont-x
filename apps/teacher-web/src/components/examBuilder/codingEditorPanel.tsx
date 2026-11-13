@@ -1,3 +1,4 @@
+import { TeacherSelect } from "../shared/teacherSelect";
 import { Plus, Trash2, Eye, Settings, PlayCircle, CheckCircle2, XCircle, Loader2 } from "lucide-react";
 import type { CodingBuilderQuestion, CodingProgramType, TestCase } from "../../screens/examBuilder/examBuilderScreen.types";
 import { CodeEditor } from "./codeEditor";
@@ -91,20 +92,13 @@ export function CodingEditorPanel({
             >
               Question Format
             </label>
-            <select
+            <TeacherSelect
+              label="Question format"
               value={question.programType}
-              onChange={(e) => setProgramType(e.target.value as CodingProgramType)}
-              className="w-40 px-3 py-2 rounded-lg border text-[14px] outline-none"
-              style={{
-                backgroundColor: "var(--color-base-100)",
-                borderColor: "var(--color-base-300)",
-                color: "var(--color-base-content)",
-                fontFamily: "inherit",
-              }}
-            >
-              <option value="cProgram">C Program</option>
-              <option value="cFunction">C Function</option>
-            </select>
+              onChange={setProgramType}
+              className="w-40"
+              options={[{ value: "cProgram", label: "C Program" }, { value: "cFunction", label: "C Function" }]}
+            />
           </div>
 
           {/* Points earned for each passing test case */}
@@ -158,9 +152,9 @@ export function CodingEditorPanel({
           <label className="text-[13px] font-medium">
             Problem Description (Markdown)
           </label>
-          <button onClick={onPreviewRendered} className="text-xs font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
+          {onPreviewRendered && <button type="button" onClick={onPreviewRendered} className="text-xs font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
             Preview Rendered
-          </button>
+          </button>}
         </div>
         <textarea
           value={question.description}

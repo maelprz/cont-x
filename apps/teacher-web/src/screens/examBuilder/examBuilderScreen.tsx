@@ -646,8 +646,8 @@ export function ExamBuilderScreen({
               <ArrowLeft size={15} aria-hidden="true" /> Exam Library
             </button>
             <div className="ml-auto flex flex-wrap gap-2">
-              {!isAlreadySaved && <button type="button" className={examSecondary} onClick={() => handleSave("draft")} disabled={!examData || isLoading || !!saveAction || isDeleting}>{saveAction === "draft" ? "Saving…" : "Save draft"}</button>}
-              <button type="button" className={examPrimary} onClick={() => handleSave("exam")} disabled={!examData || isLoading || !!saveAction || isDeleting}>{saveAction === "exam" ? "Saving…" : "Save exam"}</button>
+              {!isAlreadySaved && <button type="button" className={examSecondary} onClick={() => handleSave("draft")} disabled={!examData || isLoading || !!saveAction || isDeleting}>{saveAction === "draft" ? "Saving…" : "Save Draft"}</button>}
+              <button type="button" className={examPrimary} onClick={() => handleSave("exam")} disabled={!examData || isLoading || !!saveAction || isDeleting}>{saveAction === "exam" ? "Saving…" : "Save Exam"}</button>
             </div>
           </div>
           {statusError && <p role="alert" className="mt-2 text-sm text-red-700">{statusError}</p>}

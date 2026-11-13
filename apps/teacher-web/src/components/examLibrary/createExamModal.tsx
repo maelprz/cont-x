@@ -1,3 +1,4 @@
+import { TeacherSelect } from "../shared/teacherSelect";
 import { ExamDialog, examField, examPrimary, examSecondary } from "./examDialog";
 import { useState, useEffect } from "react";
 import type { NewExamSettings } from "../../services/examBuilderService";
@@ -91,18 +92,15 @@ function CreateExamForm({ onClose, onSubmit, isSubmitting, error, fixedSubject }
           You aren't assigned to any subjects yet. Ask an admin to assign you one first.
         </p>
       ) : (
-        <select
+        <TeacherSelect
           id="new-exam-subject"
+          label="Subject"
           value={subjectId}
-          onChange={(e) => setSubjectId(e.target.value)}
-          className={`${examField} mb-4`}
-        >
-          {subjects.map((subject) => (
-            <option key={subject.id} value={subject.id}>
-              {subject.name}
-            </option>
-          ))}
-        </select>
+          onChange={setSubjectId}
+          disabled={isSubmitting}
+          className="mb-4"
+          options={subjects.map((subject) => ({ value: subject.id, label: subject.name }))}
+        />
       )}
       {subjectsError && (
         <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>

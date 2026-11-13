@@ -1,5 +1,5 @@
 import { useState } from "react";
-import type { ChangeEvent } from "react";
+import { TeacherSelect } from "../../components/shared/teacherSelect";
 import { Loader2 } from "lucide-react";
 import { AdminHeader } from "../../components/layoutAdmin/adminHeader";
 import { AdminAreaSidebar } from "../../components/layoutAdmin/adminAreaSidebar";
@@ -48,10 +48,6 @@ export function AuditLogsScreen() {
     setSearchQuery(value);
   }
 
-  function handleActionFilterChange(event: ChangeEvent<HTMLSelectElement>) {
-    setActionFilter(event.target.value as AuditActionType | "all");
-  }
-
   // narrows the list to rows matching search and action filter
   const filteredLogs = logs.filter((log) => {
     const matchesSearch = `${log.adminName} ${log.targetName} ${log.details}`
@@ -88,20 +84,13 @@ export function AuditLogsScreen() {
             </div>
 
             {/* action type filter dropdown */}
-            <select
+            <TeacherSelect<AuditActionType | "all">
+              label="Filter by action"
               value={actionFilter}
-              onChange={handleActionFilterChange}
-              className="border border-[var(--color-base-300)] rounded-lg px-3 py-2 text-sm outline-none bg-[var(--color-base-100)] shrink-0"
-            >
-              <option value="all">All Actions</option>
-              <option value="create">Created</option>
-              <option value="update">Updated</option>
-              <option value="delete">Deleted</option>
-              <option value="disable">Disabled</option>
-              <option value="enable">Enabled</option>
-              <option value="reset_password">Reset Password</option>
-              <option value="enroll">Enrolled</option>
-            </select>
+              onChange={setActionFilter}
+              className="w-44 shrink-0"
+              options={[{ value: "all", label: "All Actions" }, ...(Object.keys(actionLabel) as AuditActionType[]).map((value) => ({ value, label: actionLabel[value] }))]}
+            />
           </div>
 
           {/* stat cards */}

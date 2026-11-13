@@ -1,4 +1,10 @@
-import type { MCQBuilderQuestion, CodingBuilderQuestion, FITBBuilderQuestion, CodingProgramType } from "../../screens/examBuilder/examBuilderScreen.types";
+import type { MCQBuilderQuestion, CodingBuilderQuestion, FITBBuilderQuestion, CodingProgramType, QuestionType } from "../../screens/examBuilder/examBuilderScreen.types";
+
+export const questionTypeLabels: Record<QuestionType, string> = {
+  "multiple-choice": "Multiple choice",
+  "fill-in-the-blank": "Fill in the blank",
+  coding: "Coding",
+};
 
 // blank starting point for a brand new multiple-choice question
 export function createBlankMCQuestion(id: string, number: number): MCQBuilderQuestion {

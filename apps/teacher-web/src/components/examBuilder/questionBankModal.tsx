@@ -1,3 +1,5 @@
+import { TeacherSelect } from "../shared/teacherSelect";
+import { TeacherSwitch } from "../shared/teacherSwitch";
 import { ExamDialog, examPrimary, examSecondary } from "../examLibrary/examDialog";
 import { useState } from "react";
 import { Search, Plus, Check } from "lucide-react";
@@ -185,20 +187,15 @@ export function QuestionBankModal({
       <div className="mr-auto flex min-w-0 flex-col gap-1">
         <div className="flex flex-wrap items-center gap-2">
           <label htmlFor="picker-destination" className="text-[12px] opacity-60 font-medium whitespace-nowrap">Add as</label>
-          <select
+          <TeacherSelect
             id="picker-destination"
+            label="Add as"
             value={destination}
-            onChange={(e) => setPickedDestination(e.target.value)}
-            className="px-2 py-1.5 rounded-lg border text-[13px] outline-none bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)] max-w-[220px]"
-          >
-            <option value={SPECIFIED}>Always included</option>
-            <option value={NEW_POOL}>New random pool</option>
-            {pools.map((pool) => (
-              <option key={pool.id} value={`pool:${pool.id}`}>
-                Pool: {pool.title.trim() || "Untitled pool"}
-              </option>
-            ))}
-          </select>
+            onChange={setPickedDestination}
+            className="w-52 max-w-full"
+            options={[{ value: SPECIFIED, label: "Always included" }, { value: NEW_POOL, label: "New random pool" },
+              ...pools.map((pool) => ({ value: `pool:${pool.id}`, label: `Pool: ${pool.title.trim() || "Untitled pool"}` }))]}
+          />
 
           {isNewPool && (
             <div className="flex items-center gap-1.5 text-[12px]">
@@ -279,29 +276,19 @@ export function QuestionBankModal({
         ))}
       </div>
 
-      <label className="mb-4 flex items-center gap-2 text-[12px]">
-        Topic
-        <select
-          aria-label="Filter by subject topic"
+      <div className="mb-4 flex flex-wrap items-center gap-3">
+        <TeacherSelect
+          label="Filter by subject topic"
           value={activeTopicId}
-          onChange={(event) => setActiveTopicId(event.target.value)}
-          className="rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] px-2 py-1.5 text-[var(--color-base-content)]"
-        >
-          <option value="">All topics</option>
-          {[...new Map(bankQuestions.flatMap((q) => q.topics).map((topic) => [topic.id, topic])).values()]
+          onChange={setActiveTopicId}
+          placeholder={activeTopicId ? "Selected topic" : "All topics"}
+          className="w-44 max-w-full"
+          options={[{ value: "", label: "All topics" }, ...[...new Map(bankQuestions.flatMap((q) => q.topics).map((topic) => [topic.id, topic])).values()]
             .sort((a, b) => a.name.localeCompare(b.name))
-            .map((topic) => <option key={topic.id} value={topic.id}>{topic.name}</option>)}
-        </select>
-      </label>
-
-      <label className="flex items-center gap-2 mb-4 cursor-pointer text-[12px] opacity-80">
-        <input
-          type="checkbox"
-          checked={includeShared}
-          onChange={(e) => setIncludeShared(e.target.checked)}
+            .map((topic) => ({ value: topic.id, label: topic.name }))]}
         />
-        Also show questions shared with me from other subjects
-      </label>
+        <TeacherSwitch label="Include questions shared from other subjects" checked={includeShared} onChange={setIncludeShared} />
+      </div>
 
       {isLoading && <p className="text-[13px] opacity-60">Loading question bank...</p>}
       {bankError && <p className="text-[13px]" style={{ color: "var(--color-error)" }}>{bankError}</p>}
