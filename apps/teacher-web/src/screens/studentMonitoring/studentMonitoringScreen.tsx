@@ -1,17 +1,21 @@
-import { TeacherHeader } from "../../components/layout/teacherHeader"; // same top bar as other screens
-import { TeacherSidebar } from "../../components/layout/teacherSidebar"; // same left menu as other screens
-import { useRouterLogic } from "../../router/routerLogic"; // gives us navigateTo
-import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // holds the selected class exam id
+import { TeacherHeader } from "../../components/layout/teacherHeader";
+import { TeacherSidebar } from "../../components/layout/teacherSidebar"; 
+import { useRouterLogic } from "../../router/routerLogic"; 
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore";
 
 const buttonClass =
-  "px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)]"; // one style shared by both buttons
+  "px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)]"; 
+
+const violationsButtonClass =
+  "px-3 py-2 rounded-lg border text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-80 border-transparent bg-[var(--color-error)] text-white"; 
 
 export function StudentMonitoringScreen() {
-  const navigateTo = useRouterLogic((state) => state.navigateTo); // used by the Violations button
-  const classExamId = useViolationMonitoringStore((state) => state.currentClassExamId); // which class exam we are watching
+  const navigateTo = useRouterLogic((state) => state.navigateTo); 
+  const classExamId = useViolationMonitoringStore((state) => state.currentClassExamId);
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]"> {/* full-screen shell */}
+    <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
+      {/* full-screen shell */}
       <TeacherSidebar activeItem="examLibrary" /> {/* keeps Exam Library highlighted */}
       <div className="flex-1 flex flex-col overflow-hidden">
         <TeacherHeader /> {/* top bar with the user's name */}
@@ -23,8 +27,12 @@ export function StudentMonitoringScreen() {
               <p className="text-sm opacity-70">Live view of the students in this class exam.</p> {/* placeholder, real header comes later */}
             </div>
             <div className="flex gap-2"> {/* Violations sits to the left of Refresh */}
-              <button onClick={() => navigateTo("violationMonitoring")} className={buttonClass}>Violations</button> {/* opens the existing screen */}
-              <button onClick={() => { /* refetch wired in step 3 */ }} className={buttonClass}>Refresh</button> {/* does nothing yet */}
+              <button onClick={() => navigateTo("violationMonitoring")} className={violationsButtonClass}>
+                Violations
+              </button> {/* opens the existing screen */}
+              <button onClick={() => { /* refetch wired in step 3 */ }} className={buttonClass}>
+                Refresh
+              </button> {/* does nothing yet */}
             </div>
           </div>
           <p className="text-sm opacity-60">Class exam: {classExamId ?? "none selected"}</p> {/* temporary, proves the id arrived */}
