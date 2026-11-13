@@ -161,7 +161,7 @@ export function ExamLibraryScreen() {
 
   const handleNavigateFromClassExam = (
     classExamId: string,
-    targetScreen: "violationMonitoring" | "examResults",
+    targetScreen: "studentMonitoring" | "examResults",
   ) => {
     if (targetScreen === "examResults") {
       setCurrentClassExamIdResult(classExamId); // results are shown for this one class

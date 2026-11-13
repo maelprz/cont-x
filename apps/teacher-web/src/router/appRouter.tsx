@@ -14,7 +14,8 @@ import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 import { QuestionBankScreen } from "../screens/questionBank/questionBankScreen";
 import { ViolationMonitoringScreen } from "../screens/violationLogs/violationMonitoringScreen";
 import { SubjectsClassesScreen } from "../screens/subjectsClasses/subjectsClassesScreen"; 
-import { ForcePasswordChangeModal } from "../components/shared/forcePasswordChangeModal"; // new: the first-login screen
+import { ForcePasswordChangeModal } from "../components/shared/forcePasswordChangeModal"; 
+import { StudentMonitoringScreen } from "../screens/studentMonitoring/studentMonitoringScreen"; 
 
 import { Toast } from "../components/shared/toast";
 import { useToastStore } from "../store/useToastStore";
@@ -34,6 +35,7 @@ const screenComponents: Record<ScreenName, ComponentType<any>> = {
   examResultsList: ExamResultsListScreen,
   examResults: ExamResultsScreen,
   violationMonitoring: ViolationMonitoringScreen,
+  studentMonitoring: StudentMonitoringScreen,
   subjectsClasses: SubjectsClassesScreen,
 };
 

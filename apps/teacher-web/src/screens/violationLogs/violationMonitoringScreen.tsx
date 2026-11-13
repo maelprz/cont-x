@@ -3,6 +3,7 @@ import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog"; // shared yes/no dialog, reused for the Remove confirmation
 import { useViolationMonitoring } from "../../hooks/useViolationMonitoring";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // reads which class exam is selected
+import { useRouterLogic } from "../../router/routerLogic"; // gives us navigateTo for the Back button
 import type { ViolationDetailRow } from "./violationMonitoringScreen.types";
 import { formatTimestamp } from "../../services/violationService"; // formats the raw log time for display
 
@@ -114,10 +115,10 @@ function ViolationDetailModal({
                     {getViolationTypeLabel(violation.violationType)}
                   </td>
                   <td className="py-2 pr-3 opacity-80">
-                    {violation.details ?? "—"}
+                    {violation.details ?? "\u2014"}
                   </td>
                   <td className="py-2 pr-3 opacity-80">
-                    {violation.questionTitle ?? "—"}
+                    {violation.questionTitle ?? "\u2014"}
                   </td>
                   <td className="py-2 opacity-80">{violation.loggedAt}</td>
                 </tr>
@@ -131,6 +132,7 @@ function ViolationDetailModal({
 }
 
 export function ViolationMonitoringScreen() {
+  const navigateTo = useRouterLogic((state) => state.navigateTo); // used by the Back button
   const classExamId = useViolationMonitoringStore(
     (state) => state.currentClassExamId,
   );
@@ -170,7 +172,8 @@ export function ViolationMonitoringScreen() {
           style={{ color: "var(--color-base-content)" }}
         >
           <p className="text-xs opacity-60 mb-2">
-            Teacher Portal &gt; Exam Library &gt; Violation Monitoring
+            Teacher Portal &gt; Exam Library &gt; Student Monitoring &gt;
+            Violation Monitoring
           </p>
 
           <div className="flex items-start justify-between gap-6 mb-6">
@@ -183,12 +186,22 @@ export function ViolationMonitoringScreen() {
               </p>
             </div>
 
-            <button
-              onClick={refetch}
-              className="px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)]"
-            >
-              Refresh
-            </button>
+            {/* both buttons share one row so the header layout stays two-column */}
+            <div className="flex gap-2">
+              <button
+                onClick={() => navigateTo("studentMonitoring")} // go back to the live student list
+                className="px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)]"
+              >
+                Back to Student Monitoring
+              </button>
+
+              <button
+                onClick={refetch}
+                className="px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)]"
+              >
+                Refresh
+              </button>
+            </div>
           </div>
 
           {error && (
@@ -291,7 +304,7 @@ export function ViolationMonitoringScreen() {
                           {session.joinedAt}
                         </td>
                         <td className="px-5 py-3 opacity-80">
-                          {session.submittedAt ?? "—"}
+                          {session.submittedAt ?? "\u2014"}
                         </td>
                         <td className="px-5 py-3">
                           <button
@@ -406,11 +419,11 @@ export function ViolationMonitoringScreen() {
                         </td>
                         {/* extra text logged with the violation */}
                         <td className="px-5 py-3 opacity-80">
-                          {entry.details ?? "—"}
+                          {entry.details ?? "\u2014"}
                         </td>
                         {/* question open at the time, if known */}
                         <td className="px-5 py-3 opacity-80">
-                          {entry.questionTitle ?? "—"}
+                          {entry.questionTitle ?? "\u2014"}
                         </td>
                       </tr>
                     ))}

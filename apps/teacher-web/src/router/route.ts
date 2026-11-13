@@ -9,5 +9,6 @@ export type ScreenName =
   | "questionBank"
   | "examResultsList"
   | "examResults"
+  | "studentMonitoring"
   | "violationMonitoring"
   | "subjectsClasses";
