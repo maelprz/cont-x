@@ -2,6 +2,7 @@ import { useState } from "react";
 import { Search, Plus, Check } from "lucide-react";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { getBankQuestionById } from "../../services/questionBankService";
+import { requireTopicIds } from "../../services/questionTopicService";
 import type { BankQuestionSummary } from "../../services/questionBankService";
 import type {
   BuilderPool,
@@ -116,7 +117,7 @@ export function QuestionBankModal({
         : addableForPool.length > 0);
 
   const toPoolItems = (questions: BankQuestionSummary[]): PoolItem[] =>
-    questions.map((q) => ({ bankQuestionId: q.id, title: q.title, type: q.type, points: q.points }));
+    questions.map((q) => ({ bankQuestionId: q.id, title: q.title, type: q.type, points: q.points, topics: q.topics }));
 
   // "always included" builds local, unsaved copies — nothing is written to the database here.
   // Pools just record which bank questions are in the running; Save Draft/Exam persists them.
@@ -132,11 +133,20 @@ export function QuestionBankModal({
 
         for (let i = 0; i < idsArray.length; i++) {
           const bankQuestion = await getBankQuestionById(idsArray[i]); // read-only fetch, nothing persisted
+          const topicIds = requireTopicIds(bankQuestion.topicIds);
           newExamQuestions.push({
             ...bankQuestion,
             id: crypto.randomUUID(), // fresh id — independent copy, not yet saved anywhere
+            sourceBankQuestionId: idsArray[i],
+            topicIds,
             number: startingNumber + i + 1,
-            // a fill-in-the-blank copy gets its own answer ids, so two copies never share a row
+            // Each independent copy owns its child rows, even when reused again.
+            ...(bankQuestion.type === "multiple-choice"
+              ? { options: bankQuestion.options.map((option) => ({ ...option, id: crypto.randomUUID() })) }
+              : {}),
+            ...(bankQuestion.type === "coding"
+              ? { testCases: bankQuestion.testCases.map((testCase) => ({ ...testCase, id: crypto.randomUUID() })) }
+              : {}),
             ...(bankQuestion.type === "fill-in-the-blank"
               ? {
                   acceptedAnswers: bankQuestion.acceptedAnswers.map((a) => ({
@@ -265,8 +275,9 @@ export function QuestionBankModal({
               return (
                 <button
                   key={q.id}
+                  disabled={q.topics.length === 0}
                   onClick={() => toggleSelected(q)}
-                  className="flex items-center gap-3 px-4 py-3 rounded-lg border text-left cursor-pointer transition-colors"
+                  className="flex items-center gap-3 px-4 py-3 rounded-lg border text-left cursor-pointer transition-colors disabled:cursor-not-allowed disabled:opacity-60"
                   style={{
                     borderColor: isSelected ? "var(--color-secondary)" : "var(--color-base-300)",
                     backgroundColor: isSelected ? "var(--color-base-200)" : "transparent",
@@ -298,6 +309,9 @@ export function QuestionBankModal({
                     </p>
                     {q.topics.length > 0 && <p className="mt-1 text-[11px] text-[var(--color-base-content)]/60">
                       {q.topics.map((topic) => topic.name).join(", ")}
+                    </p>}
+                    {q.topics.length === 0 && <p className="mt-1 text-xs text-[var(--color-error)]">
+                      {q.isOwn ? "Assign topics in Question Bank before reusing this question." : "The owner must assign topics before this question can be reused."}
                     </p>}
                   </div>
                 </button>

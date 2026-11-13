@@ -134,6 +134,14 @@ function mapBankRowToBuilderQuestion(row: QuestionBankRow): BuilderQuestion | nu
 }
 
 // turns a raw bank row into the summary shape the table needs
+function getBankTopics(row: QuestionBankRow): TopicSummary[] {
+  const links = row.bank_question_topics ?? [];
+  if (links.some((link) => !link.subject_topics)) {
+    throw new Error("Topic details could not be loaded. Refresh the question bank and try again.");
+  }
+  return links.map((link) => link.subject_topics!);
+}
+
 function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuestionSummary {
   return {
     id: row.id,
@@ -152,7 +160,7 @@ function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuesti
       day: "2-digit",
       year: "numeric",
     }),
-    topics: (row.bank_question_topics ?? []).flatMap(link => link.subject_topics ? [link.subject_topics] : []),
+    topics: getBankTopics(row),
   };
 }
 
@@ -228,12 +236,11 @@ export async function getBankQuestionById(id: string): Promise<BuilderQuestion> 
 
   if (error) throw error;
 
-  const question = mapBankRowToBuilderQuestion(data as unknown as QuestionBankRow);
+  const row = data as unknown as QuestionBankRow;
+  const question = mapBankRowToBuilderQuestion(row);
   if (!question) throw new Error("This question is missing required data.");
 
-  const { data: topics, error: topicError } = await supabase.from("bank_question_topics").select("topic_id").eq("bank_question_id",id);
-  if (topicError) throw topicError;
-  return { ...question, topicIds: (topics??[]).map(topic=>topic.topic_id) };
+  return { ...question, topicIds: getBankTopics(row).map((topic) => topic.id) };
 }
 
 // deletes options no longer in the current list, then upserts the rest

@@ -468,6 +468,7 @@ export function ExamBuilderScreen({
       description: activeQuestion.description,
       sectionId: activeQuestion.sectionId,
       topicIds: activeQuestion.topicIds,
+      sourceBankQuestionId: activeQuestion.sourceBankQuestionId,
     };
 
     // default coding format used when switching from MCQ into coding

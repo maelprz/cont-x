@@ -233,6 +233,22 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
     .select("question_id,topic_id").in("question_id",row.questions.map(q=>q.id));
   if (topicError) throw topicError;
 
+  const bankIds = [...new Set(row.exam_question_pools.flatMap((pool) =>
+    pool.exam_question_pool_items.filter((item) => item.question_bank !== null).map((item) => item.question_bank_id)))];
+  const poolTopics = new Map<string, { id: string; name: string }[]>();
+  if (bankIds.length > 0) {
+    const { data: links, error: poolTopicError } = await supabase.from("bank_question_topics")
+      .select("bank_question_id,subject_topics(id,name)").in("bank_question_id", bankIds);
+    if (poolTopicError) throw poolTopicError;
+    for (const link of links ?? []) {
+      const topic = link.subject_topics as unknown as { id: string; name: string } | null;
+      if (!topic) throw new Error("Topic details could not be loaded for a pool question. Try again.");
+      const topics = poolTopics.get(link.bank_question_id) ?? [];
+      topics.push(topic);
+      poolTopics.set(link.bank_question_id, topics);
+    }
+  }
+
   return {
     id: row.id,
     subjectId: row.subject_id,
@@ -244,13 +260,13 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
       .map(mapQuestionRow)
       .filter((q): q is BuilderQuestion => q !== null)
       .map(q=>({...q,topicIds:(topicLinks??[]).filter(link=>link.question_id===q.id).map(link=>link.topic_id)})),
-    pools: row.exam_question_pools.map(mapPoolRow),
+    pools: row.exam_question_pools.map((pool) => mapPoolRow(pool, poolTopics)),
     sections: (row.exam_sections ?? []).map((s) => ({ id: s.id, title: s.title })),
     attachedClassCount: attachedClassCount ?? 0,
   };
 }
 
-function mapPoolRow(row: PoolRow): BuilderPool {
+function mapPoolRow(row: PoolRow, topics: Map<string, { id: string; name: string }[]>): BuilderPool {
   return {
     id: row.id,
     title: row.title ?? "",
@@ -269,6 +285,7 @@ function mapPoolRow(row: PoolRow): BuilderPool {
             ? "fill-in-the-blank"
             : "multiple-choice",
       points: item.question_bank?.max_points ?? 0,
+      topics: item.question_bank ? topics.get(item.question_bank_id) ?? [] : [],
     })),
   };
 }
@@ -526,6 +543,7 @@ export async function saveQuestion(
     max_points: question.points,
     // only written when the builder knows the section, so other callers can't wipe it
     ...(question.sectionId !== undefined ? { section_id: question.sectionId } : {}),
+    ...(question.sourceBankQuestionId ? { source_bank_question_id: question.sourceBankQuestionId } : {}),
     },
   });
   if (questionError) throw questionError;
