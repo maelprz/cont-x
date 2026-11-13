@@ -10,8 +10,8 @@ import { useAuthStore } from "../store/useAuthStore";
 // Loads the teacher's bank sharing settings and saves changes to them.
 export function useBankVisibility() {
   const teacherId = useAuthStore((state) => state.user?.id);
-  const [settings, setSettings] = useState<BankVisibilitySettings>({ mainLevel: null, subjectLevels: {} });
-  const [isLoading, setIsLoading] = useState(true);
+  const [loaded, setLoaded] = useState<{ teacherId: string; settings: BankVisibilitySettings | null } | null>(null);
+  const current = loaded?.teacherId === teacherId ? loaded : null;
   const [isSaving, setIsSaving] = useState(false);
   const [error, setError] = useState<string | null>(null);
 
@@ -20,13 +20,16 @@ export function useBankVisibility() {
     let isActive = true;
     getBankVisibilitySettings(teacherId)
       .then((result) => {
-        if (isActive) setSettings(result);
+        if (isActive) {
+          setLoaded({ teacherId, settings: result });
+          setError(null);
+        }
       })
       .catch(() => {
-        if (isActive) setError("Could not load sharing settings.");
-      })
-      .finally(() => {
-        if (isActive) setIsLoading(false);
+        if (isActive) {
+          setLoaded({ teacherId, settings: null });
+          setError("Could not load sharing settings.");
+        }
       });
     return () => {
       isActive = false;
@@ -40,7 +43,9 @@ export function useBankVisibility() {
       setError(null);
       try {
         await setSubjectVisibility(teacherId, subjectId, level);
-        setSettings((prev) => ({ ...prev, subjectLevels: { ...prev.subjectLevels, [subjectId]: level } }));
+        setLoaded((prev) => prev?.teacherId === teacherId && prev.settings
+          ? { teacherId, settings: { ...prev.settings, subjectLevels: { ...prev.settings.subjectLevels, [subjectId]: level } } }
+          : prev);
         return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not save this setting.");
@@ -59,7 +64,9 @@ export function useBankVisibility() {
       setError(null);
       try {
         await setMainVisibility(teacherId, level);
-        setSettings((prev) => ({ ...prev, mainLevel: level }));
+        setLoaded((prev) => prev?.teacherId === teacherId && prev.settings
+          ? { teacherId, settings: { ...prev.settings, mainLevel: level } }
+          : prev);
         return true;
       } catch (err) {
         setError(err instanceof Error ? err.message : "Could not save this setting.");
@@ -71,5 +78,5 @@ export function useBankVisibility() {
     [teacherId],
   );
 
-  return { settings, isLoading, isSaving, error, updateSubjectLevel, updateMainLevel };
+  return { settings: current?.settings ?? null, isLoading: !current, isSaving, error: current ? error : null, updateSubjectLevel, updateMainLevel };
 }
