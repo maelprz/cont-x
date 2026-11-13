@@ -31,7 +31,7 @@ export function ManageClassesModal({
   onReopen: (classExamId: string) => void;
   onRemove: (classExamId: string) => void; // only ever enabled for 'scheduled' rows
   onEditSettings: (classExamId: string) => void;
-  onNavigate: (classExamId: string, targetScreen: "violationMonitoring" | "examResults") => void;
+  onNavigate: (classExamId: string, targetScreen: "studentMonitoring" | "examResults") => void;
 }) {
   if (!isOpen || !exam) return null;
 
@@ -51,7 +51,7 @@ export function ManageClassesModal({
     const nav = getClassExamNavigation(attachment.status);
     return (
       <button
-        onClick={() => nav && onNavigate(attachment.classExamId, nav.targetScreen as "violationMonitoring" | "examResults")}
+        onClick={() => nav && onNavigate(attachment.classExamId, nav.targetScreen as "studentMonitoring" | "examResults")}
         className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border border-[var(--color-base-300)] transition-opacity hover:opacity-70 bg-[var(--color-base-100)] text-[var(--color-base-content)]"
       >
         {nav?.ctaLabel ?? "View"}

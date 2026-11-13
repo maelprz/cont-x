@@ -12,7 +12,7 @@ export function getClassExamNavigation(status: ClassExamStatus): ExamCardNavigat
     case "scheduled":
       return null;
     case "active":
-      return { ctaLabel: "View Progress", targetScreen: "violationMonitoring" };
+      return { ctaLabel: "View Progress", targetScreen: "studentMonitoring" };
     case "ended":
       return { ctaLabel: "View Results", targetScreen: "examResults" };
   }
