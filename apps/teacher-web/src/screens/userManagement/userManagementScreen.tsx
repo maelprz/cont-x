@@ -1,3 +1,4 @@
+import { TeacherSelect } from "../../components/shared/teacherSelect";
 import { useState, useEffect } from "react";
 import { UserPlus, Pencil, Trash2, Loader2 } from "lucide-react";
 import { AdminHeader } from "../../components/layoutAdmin/adminHeader";
@@ -325,22 +326,21 @@ export function UserManagementScreen() {
                       )}
                     </div>
                     <div className="flex flex-col gap-1">
-                      <label className="text-xs opacity-60 uppercase tracking-wide">
+                      <label htmlFor="new-user-role" className="text-xs opacity-60 uppercase tracking-wide">
                         Role
                       </label>
-                      <select
+                      <TeacherSelect
+                        id="new-user-role"
+                        label="Role"
                         value={newUser.role}
-                        onChange={(e) =>
+                        onChange={(role) =>
                           setNewUser({
                             ...newUser,
-                            role: e.target.value as "teacher" | "student",
+                            role,
                           })
                         }
-                        className="border border-[var(--color-base-300)] rounded-lg px-3 py-2 text-sm outline-none bg-[var(--color-base-200)]"
-                      >
-                        <option value="student">Student</option>
-                        <option value="teacher">Teacher</option>
-                      </select>
+                        options={[{ value: "student", label: "Student" }, { value: "teacher", label: "Teacher" }]}
+                      />
                     </div>
                   </div>
                   <div className="flex gap-3 mt-5">

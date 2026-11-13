@@ -84,9 +84,9 @@ export function MCQEditorPanel({
           <label className="text-[13px] font-medium">
             Prompt (Markdown)
           </label>
-          <button onClick={onPreviewRendered} className="text-xs font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
+          {onPreviewRendered && <button type="button" onClick={onPreviewRendered} className="text-xs font-semibold cursor-pointer border-none bg-transparent" style={{ color: "var(--color-secondary)" }}>
             Preview Rendered
-          </button>
+          </button>}
         </div>
         <textarea
           aria-label="Prompt (Markdown)"

@@ -94,13 +94,14 @@ export function FITBEditorPanel({
           >
             Problem Description (Markdown)
           </label>
-          <button
+          {onPreviewRendered && <button
+            type="button"
             onClick={onPreviewRendered}
             className="text-xs font-semibold cursor-pointer border-none bg-transparent"
             style={{ color: "var(--color-secondary)" }}
           >
             Preview Rendered
-          </button>
+          </button>}
         </div>
         <textarea
           value={question.description}

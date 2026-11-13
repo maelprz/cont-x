@@ -1,3 +1,4 @@
+import { TeacherSelect } from "../shared/teacherSelect";
 import { useMemo, useRef, useState, type ChangeEvent } from "react";
 import {
   decodeCsvFile,
@@ -173,16 +174,14 @@ export function BulkAccountsPanel({
         >
           Role for every account in this file
         </label>
-        <select
+        <TeacherSelect<BulkRole>
           id="bulk-role"
+          label="Role for every account in this file"
           value={role}
-          onChange={(e) => setRole(e.target.value as BulkRole)}
+          onChange={setRole}
           disabled={isUploading}
-          className="border border-[var(--color-base-300)] rounded-lg px-3 py-2 text-sm outline-none bg-[var(--color-base-200)]"
-        >
-          <option value="student">Student</option>
-          <option value="teacher">Teacher</option>
-        </select>
+          options={[{ value: "student", label: "Student" }, { value: "teacher", label: "Teacher" }]}
+        />
         <p className="text-xs opacity-60">
           {role === "student"
             ? "Student IDs are exactly 10 digits."

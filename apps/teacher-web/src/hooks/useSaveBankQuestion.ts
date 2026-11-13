@@ -28,5 +28,5 @@ export function useSaveBankQuestion() {
     }
   }
 
-  return { saveQuestion, isSaving, error };
+  return { saveQuestion, isSaving, error, clearError: () => setError(null) };
 }

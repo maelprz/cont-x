@@ -1,5 +1,6 @@
 import { useEffect, useState } from "react";
 import { getClassLogs, type ClassLogEntry, type ClassLogFilters } from "../../services/classLogService";
+import { TeacherSelect } from "../shared/teacherSelect";
 
 const emptyFilters: ClassLogFilters = { search: "", event: "", outcome: "", from: "", to: "" };
 const eventLabels: Record<string, string> = {
@@ -33,8 +34,8 @@ export function ClassLogsModal({ classId, className, onClose }: { classId: strin
       <div className="flex justify-between gap-4 mb-4"><div><h2 className="text-xl font-bold">Class logs — {className}</h2><p className="text-xs opacity-70">Recorded from this update onward. Search by person, event or changed value.</p></div><button type="button" onClick={onClose} aria-label="Close class logs">Close</button></div>
       <form onSubmit={applyFilters} className="flex flex-wrap gap-3 items-end mb-4">
         <label className="text-sm">Search<input aria-label="Search class logs" maxLength={200} value={draft.search} onChange={e => setDraft({ ...draft, search: e.target.value })} className="block border rounded p-2" /></label>
-        <label className="text-sm">Event<select aria-label="Event type" value={draft.event} onChange={e => setDraft({ ...draft, event: e.target.value })} className="block border rounded p-2"><option value="">All events</option>{Object.entries(eventLabels).map(([key,label]) => <option key={key} value={key}>{label}</option>)}</select></label>
-        <label className="text-sm">Outcome<select aria-label="Event outcome" value={draft.outcome} onChange={e => setDraft({ ...draft, outcome: e.target.value })} className="block border rounded p-2"><option value="">All outcomes</option><option value="success">Success</option><option value="denied">Denied</option></select></label>
+        <div className="w-40 text-sm"><label htmlFor="class-log-event">Event</label><TeacherSelect id="class-log-event" label="Event type" value={draft.event} onChange={(event) => setDraft({ ...draft, event })} options={[{ value: "", label: "All events" }, ...Object.entries(eventLabels).map(([value, label]) => ({ value, label }))]} /></div>
+        <div className="w-40 text-sm"><label htmlFor="class-log-outcome">Outcome</label><TeacherSelect id="class-log-outcome" label="Event outcome" value={draft.outcome} onChange={(outcome) => setDraft({ ...draft, outcome })} options={[{ value: "", label: "All outcomes" }, { value: "success", label: "Success" }, { value: "denied", label: "Denied" }]} /></div>
         <label className="text-sm">From<input aria-label="Logs from" type="datetime-local" value={draft.from} onChange={e => setDraft({ ...draft, from: e.target.value })} className="block border rounded p-2" /></label>
         <label className="text-sm">To<input aria-label="Logs to" type="datetime-local" value={draft.to} onChange={e => setDraft({ ...draft, to: e.target.value })} className="block border rounded p-2" /></label>
         <button disabled={busy} type="submit" className="border rounded p-2">Search logs</button><button type="button" disabled={busy} onClick={refresh} className="border rounded p-2">Refresh</button>

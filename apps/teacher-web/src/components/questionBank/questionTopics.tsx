@@ -71,8 +71,8 @@ export function QuestionTopics({ subjectId, selectedIds, onChange, compact = fal
     </div>}
     {missingDetails && <p role="alert" className="mt-2 text-sm text-[var(--color-error)]">Some selected topic details are unavailable. Existing selections have been kept.</p>}
     {selected.length===0 && <p className="text-sm mt-2 text-[var(--color-error)]">A subject topic is required before saving.</p>}
-    <div className={compact ? "mt-3 flex flex-wrap gap-2" : "flex gap-2 mt-3"}>
-      <input aria-label="New subject topic" disabled={busy} value={name} onChange={event=>setName(event.target.value)} placeholder="New topic name" className={`border rounded px-3 py-2 text-sm bg-[var(--color-base-100)] ${compact ? "min-w-0 max-w-full" : ""}`}/>
+    <div className="mt-3 flex flex-wrap gap-2">
+      <input aria-label="New subject topic" disabled={busy} value={name} onChange={event=>setName(event.target.value)} placeholder="New topic name" className="min-w-0 max-w-full flex-1 border rounded px-3 py-2 text-sm bg-[var(--color-base-100)]"/>
       <button type="button" onClick={addTopic} disabled={busy || !name.trim()} className="border rounded px-3 py-2 text-sm disabled:opacity-50">{busy?"Adding...":"Add topic"}</button>
     </div>
     {(error || loadError) && <p role="alert" className="text-sm mt-2 text-[var(--color-error)]">{error || loadError}</p>}

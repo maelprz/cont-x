@@ -1,3 +1,4 @@
+import { Plus } from "lucide-react";
 import { ExamDialog, examDanger, examPrimary, examSecondary } from "./examDialog";
 import type { ExamCard, ClassExamSummary } from "../../screens/examLibrary/examLibraryScreen.types";
 import { ClassExamStatusBadge } from "./statusBadge";
@@ -55,7 +56,7 @@ export function ManageClassesModal({
       <button
         type="button"
         onClick={() => nav && onNavigate(attachment.classExamId, nav.targetScreen as "studentMonitoring" | "examResults")}
-        className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border border-[var(--color-base-300)] transition-opacity hover:opacity-70 bg-[var(--color-base-100)] text-[var(--color-base-content)]"
+        className={examSecondary}
       >
         {nav?.ctaLabel ?? "View"}
       </button>
@@ -63,8 +64,12 @@ export function ManageClassesModal({
   };
 
   return (
-    <ExamDialog title="Manage classes" subtitle={exam.title} wide busy={isProcessing} onClose={onClose}
-      footer={<button type="button" className={examPrimary} onClick={onClose} disabled={isProcessing}>Done</button>}>
+    <ExamDialog title="Manage classes" subtitle={exam.title} wide busy={isProcessing} onClose={onClose} dismissOnBackdrop
+      footer={
+        <button type="button" className={examPrimary} onClick={onAttachNew} disabled={isProcessing}>
+          <Plus size={16} aria-hidden="true" /> Add to Another Class
+        </button>
+      }>
       {error && (
         <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>
           {error}
@@ -72,11 +77,11 @@ export function ManageClassesModal({
       )}
 
       {exam.classAttachments.length === 0 ? (
-        <p className="text-[13px] mb-5 opacity-60 text-[var(--color-base-content)]">
+        <p className="text-[13px] opacity-60 text-[var(--color-base-content)]">
           This exam isn't in any class yet.
         </p>
       ) : (
-        <div className="mb-4 divide-y divide-stone-200 border-y border-stone-200">
+        <div className="divide-y divide-stone-200 border-y border-stone-200">
           {exam.classAttachments.map((attachment) => (
             <div
               key={attachment.classExamId}
@@ -110,7 +115,7 @@ export function ManageClassesModal({
                     type="button"
                     onClick={() => onEnd(attachment.classExamId)}
                     disabled={isProcessing}
-                      className={examDanger}
+                    className={examDanger}
                   >
                     End
                   </button>
@@ -120,7 +125,7 @@ export function ManageClassesModal({
                     type="button"
                     onClick={() => onEditSettings(attachment.classExamId)}
                     disabled={isProcessing}
-                    className="px-3 py-1.5 rounded-lg text-[12px] font-medium cursor-pointer border border-[var(--color-base-300)] transition-opacity hover:opacity-70 bg-[var(--color-base-100)] text-[var(--color-base-content)] disabled:opacity-50"
+                    className={examSecondary}
                   >
                     Settings
                   </button>
@@ -131,7 +136,7 @@ export function ManageClassesModal({
                     onClick={() => onRemove(attachment.classExamId)}
                     disabled={isProcessing}
                     title="Remove from this class"
-                    className="px-2 py-1.5 rounded-lg text-[12px] cursor-pointer border-none transition-opacity hover:opacity-70 bg-transparent text-[var(--color-error)] disabled:opacity-50"
+                    className={`${examSecondary} text-red-700 hover:bg-red-50`}
                   >
                     Remove
                   </button>
@@ -142,15 +147,6 @@ export function ManageClassesModal({
           ))}
         </div>
       )}
-
-      <button
-        type="button"
-        onClick={onAttachNew}
-        className={`${examSecondary} w-full`}
-        disabled={isProcessing}
-      >
-        + Add to Another Class
-      </button>
     </ExamDialog>
   );
 }

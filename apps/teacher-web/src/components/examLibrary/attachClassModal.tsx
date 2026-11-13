@@ -1,3 +1,4 @@
+import { TeacherSelect } from "../shared/teacherSelect";
 import { ExamDialog, examField, examPrimary, examSecondary } from "./examDialog";
 import { useState, useEffect } from "react";
 import { getAttachableClasses, attachExamToClass } from "../../services/classExamService";
@@ -100,18 +101,15 @@ function AttachClassForm({ examId, onClose, onAttached }: Omit<AttachClassProps,
           don't have a class here yet.
         </p>
       ) : (
-        <select
+        <TeacherSelect
           id="attach-exam-class"
+          label="Class"
           value={classId}
-          onChange={(e) => setClassId(e.target.value)}
-          className={`${examField} mb-4`}
-        >
-          {classes.map((c) => (
-            <option key={c.id} value={c.id}>
-              {c.name}
-            </option>
-          ))}
-        </select>
+          onChange={setClassId}
+          disabled={isSubmitting}
+          className="mb-4"
+          options={classes.map((item) => ({ value: item.id, label: item.name }))}
+        />
       )}
       {loadError && (
         <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>

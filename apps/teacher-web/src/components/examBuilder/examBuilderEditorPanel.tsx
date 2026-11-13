@@ -10,7 +10,7 @@ import type {
 import { MCQEditorPanel } from "./mcqEditorPanel";
 import { FITBEditorPanel } from "./fitbEditorPanel";
 import { CodingEditorPanel } from "./codingEditorPanel";
-import { starterCodeFor, mainCodeFor } from "./createBlankQuestion";
+import { starterCodeFor, mainCodeFor, questionTypeLabels } from "./createBlankQuestion";
 import { QuestionTopics } from "../questionBank/questionTopics";
 
 interface ExamBuilderEditorPaneProps {
@@ -18,16 +18,19 @@ interface ExamBuilderEditorPaneProps {
   isLoading: boolean;
   error: string | null;
   activeQuestion?: BuilderQuestion;
+  showQuestionNumber?: boolean;
+  subjectName?: string;
+  busy?: boolean;
   editorTab: QuestionType;
   saveAllError: string | null;
   deleteError: string | null;
   isDeleting: boolean;
   poolPanel?: React.ReactNode; // when set, replaces the question editor (a random pool is selected)
-  onTabSwitch: (tab: QuestionType) => void;
+  onTabSwitch?: (tab: QuestionType) => void;
   onQuestionChange: (question: BuilderQuestion) => void;
   onPreviewRendered?: () => void;
-  onDeleteQuestion: () => void;
-  onDiscard: () => void;
+  onDeleteQuestion?: () => void;
+  onDiscard?: () => void;
 }
 
 export function ExamBuilderEditorPanel({
@@ -35,6 +38,9 @@ export function ExamBuilderEditorPanel({
   isLoading,
   error,
   activeQuestion,
+  showQuestionNumber = true,
+  subjectName,
+  busy,
   editorTab,
   saveAllError,
   deleteError,
@@ -47,7 +53,7 @@ export function ExamBuilderEditorPanel({
   onDiscard,
 }: ExamBuilderEditorPaneProps) {
   return (
-    <main aria-label="Question editor" className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-base-100)]">
+    <main aria-label="Question editor" inert={busy} className="flex min-h-0 min-w-0 flex-1 flex-col overflow-hidden bg-[var(--color-base-100)]">
       <div className="min-h-0 flex-1 overflow-y-auto px-4 py-4 sm:px-7 sm:py-5">
         {isLoading && (
           <p
@@ -70,14 +76,19 @@ export function ExamBuilderEditorPanel({
         )}
         {!isLoading && !error && !poolPanel && activeQuestion && (
           <div className="mx-auto max-w-4xl">
-            <h2 className="mb-3 break-words text-lg font-semibold">Q{activeQuestion.number} · {activeQuestion.title || "Untitled question"}</h2>
-            <div
+            {subjectName && <p className="mb-1 wrap-anywhere text-sm text-stone-600">{subjectName}</p>}
+            <div className="mb-3 flex flex-wrap items-baseline gap-x-3 gap-y-1">
+              <h2 className="min-w-0 wrap-anywhere text-lg font-semibold">{showQuestionNumber && `Q${activeQuestion.number} · `}{activeQuestion.title || "Untitled question"}</h2>
+              {!onTabSwitch && <span className="text-xs text-stone-600">{questionTypeLabels[editorTab]}</span>}
+            </div>
+            {onTabSwitch && <div
               className="mb-4 flex w-fit max-w-full flex-wrap gap-1 rounded-lg p-1"
               style={{ backgroundColor: "var(--color-base-300)" }}
             >
               {(["multiple-choice", "coding", "fill-in-the-blank"] as QuestionType[]).map((tab) => (
                 <button
                   key={tab}
+                  type="button"
                   aria-pressed={editorTab === tab}
                   onClick={() => onTabSwitch(tab)}
                   className="rounded-md px-3 py-1.5 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-[#465a3b]"
@@ -92,7 +103,7 @@ export function ExamBuilderEditorPanel({
                   {tab === "multiple-choice" ? "Multiple Choice" : tab === "coding" ? "Coding Question" : "Fill in the Blank"}
                 </button>
               ))}
-            </div>
+            </div>}
 
             <QuestionTopics key={activeQuestion.id} compact subjectId={subjectId} selectedIds={activeQuestion.topicIds ?? []} onChange={(topicIds) => onQuestionChange({ ...activeQuestion, topicIds })} />
 
@@ -151,7 +162,7 @@ export function ExamBuilderEditorPanel({
         )}
 
         {saveAllError && (
-          <p className="text-[13px] mb-2" style={{ color: "var(--color-error)" }}>
+          <p role="alert" className="mx-auto mt-3 max-w-4xl text-sm text-red-700">
             {saveAllError}
           </p>
         )}
@@ -162,12 +173,12 @@ export function ExamBuilderEditorPanel({
           </p>
         )}
 
-        {!poolPanel && activeQuestion && !isLoading && !error && (
+        {!poolPanel && activeQuestion && !isLoading && !error && (onDeleteQuestion || onDiscard) && (
         <div
           className="mx-auto mt-6 flex max-w-4xl flex-wrap items-center justify-between gap-3 border-t pt-4"
           style={{ borderColor: "var(--color-base-300)" }}
         >
-          <button
+          {onDeleteQuestion && <button type="button"
             onClick={onDeleteQuestion}
             disabled={isDeleting}
             className="flex items-center gap-1.5 text-[13px] font-medium cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70"
@@ -178,14 +189,14 @@ export function ExamBuilderEditorPanel({
           >
             <Trash2 size={14} />
             {isDeleting ? "Deleting..." : "Delete Question"}
-          </button>
-          <div className="flex flex-wrap items-center gap-2">
-            <button
+          </button>}
+          <div className="ml-auto flex flex-wrap items-center gap-2">
+            {onDiscard && <button type="button"
               onClick={onDiscard}
               className={examSecondary}
             >
               Discard Changes
-            </button>
+            </button>}
           </div>
         </div>
         )}

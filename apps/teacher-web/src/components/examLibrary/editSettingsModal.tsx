@@ -23,7 +23,7 @@ const sections = [
 type Section = typeof sections[number]["id"];
 
 const inputClass = "box-border block min-w-0 w-full rounded-[7px] border border-[var(--color-base-300)] bg-[var(--color-base-100)] px-2.5 py-[9px] text-[13px] text-[var(--color-base-content)] tabular-nums max-[480px]:text-base";
-const buttonBaseClass = "rounded-lg border px-3.5 py-[9px] text-xs font-medium hover:brightness-[0.97] pointer-coarse:min-h-11";
+const buttonBaseClass = "inline-flex min-h-9 items-center justify-center rounded-lg border px-3.5 py-[9px] text-xs font-medium whitespace-nowrap hover:brightness-[0.97] pointer-coarse:min-h-11";
 const buttonClass = `${buttonBaseClass} border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)]`;
 const fieldClass = "flex min-w-0 flex-col gap-1.5 text-xs text-[var(--color-base-content)]/65";
 const gridClass = "my-4 grid grid-cols-2 gap-4";
@@ -32,7 +32,7 @@ const headerClass = "flex items-start justify-between gap-3.5 px-[25px] pt-[23px
 const headingClass = "text-[19px] leading-[1.3] font-medium tracking-[-0.35px]";
 const closeClass = "grid shrink-0 place-items-center rounded-[7px] border-0 bg-transparent p-1.5 text-[var(--color-base-content)]/65 hover:bg-[var(--color-base-200)] hover:text-[var(--color-base-content)] pointer-coarse:min-h-11 pointer-coarse:min-w-11";
 const footerClass = "flex flex-wrap items-center justify-end gap-3 border-t border-[var(--color-base-300)] bg-[var(--color-base-200)] px-[25px] py-4 max-[480px]:px-[17px] max-[480px]:py-3.5";
-const actionsClass = "flex flex-wrap items-center justify-end gap-2 max-[480px]:ml-auto";
+const actionsClass = "grid grid-cols-2 gap-2 [&>button]:min-w-28 max-[480px]:ml-auto";
 const statusClass = "min-w-0 flex-1 text-[11px] text-[var(--color-base-content)]/65 max-[480px]:basis-full";
 const codeClass = "max-w-[180px] font-mono tracking-[0.1em]";
 const errorClass = "text-xs text-[var(--color-error)]";
