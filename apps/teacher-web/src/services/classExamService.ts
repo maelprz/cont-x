@@ -61,6 +61,7 @@ export interface ClassExamSettingsData {
   startsAt: string | null;
   displayAt: string | null;
   endsAt: string | null;
+  endedAt: string | null;
   allowOvertime: boolean; // false (default): time-up submits the attempt automatically. true: students may keep going
   overtimeMinutes: number;
   overtimeDeduction: number;
@@ -112,6 +113,7 @@ export async function getClassExamSettings(
       starts_at,
       display_at,
       ends_at,
+      ended_at,
       allow_overtime,
       overtime_minutes,
       overtime_deduction,
@@ -144,6 +146,7 @@ export async function getClassExamSettings(
     startsAt: data.starts_at,
     displayAt: data.display_at,
     endsAt: data.ends_at,
+    endedAt: data.ended_at,
     allowOvertime: data.allow_overtime ?? false,
     overtimeMinutes: data.overtime_minutes,
     overtimeDeduction: Number(data.overtime_deduction),
@@ -231,6 +234,22 @@ export async function endClassExam(classExamId: string): Promise<void> {
     .update({ status: "ended", end_reason: "manual" })
     .eq("id", classExamId);
   if (error) throw error;
+}
+
+export async function reopenClassExam(
+  classExamId: string,
+  endedAt: string | null,
+  windowMinutes: number,
+  sessionCode: string | null,
+): Promise<{ endsAt: string; sessionCode: string }> {
+  const { data, error } = await supabase.rpc("reopen_class_exam", {
+    p_class_exam_id: classExamId,
+    p_expected_ended_at: endedAt,
+    p_window_minutes: windowMinutes,
+    p_session_code: sessionCode,
+  });
+  if (error) throw new Error(error.message);
+  return { endsAt: data.endsAt, sessionCode: data.sessionCode };
 }
 
 // edits settings on an existing attachment — verification code can only change

@@ -11,6 +11,7 @@ import { SetSessionCodeModal } from "../../components/examLibrary/setSessionCode
 import { EditSettingsModal } from "../../components/examLibrary/editSettingsModal";
 import { CreateExamModal } from "../../components/examLibrary/createExamModal";
 import { ManageClassesModal } from "../../components/examLibrary/manageClassesModal";
+import { ReopenClassExamModal } from "../../components/examLibrary/reopenClassExamModal";
 import { AttachClassModal } from "../../components/examLibrary/attachClassModal";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamLibrary } from "../../hooks/useExamLibrary";
@@ -67,7 +68,8 @@ export function ExamLibraryScreen() {
   const actionError = deleteError ?? classExamError;
 
   const [confirmAction, setConfirmAction] = useState<ConfirmAction | null>(null);
-  const [publishedCodes, setPublishedCodes] = useState<{ examCode: string; sessionCode: string } | null>(null);
+  const [publishedCodes, setPublishedCodes] = useState<{ examCode: string; sessionCode: string; reopenedUntil?: string } | null>(null);
+  const [reopenTarget, setReopenTarget] = useState<{ classExamId: string; examCode: string } | null>(null);
   const [settingsClassExamId, setSettingsClassExamId] = useState<string | null>(null);
   const [manageClassesExamId, setManageClassesExamId] = useState<string | null>(null);
   const [attachClassExamId, setAttachClassExamId] = useState<string | null>(null);
@@ -367,6 +369,9 @@ export function ExamLibraryScreen() {
           manageClassesExam && requestActivate(classExamId, manageClassesExam.code)
         }
         onEnd={requestEnd}
+        onReopen={(classExamId) => {
+          if (manageClassesExam) setReopenTarget({ classExamId, examCode: manageClassesExam.code });
+        }}
         onRemove={handleRemoveAttachment}
         onEditSettings={(classExamId) => setSettingsClassExamId(classExamId)}
         onNavigate={handleNavigateFromClassExam}
@@ -395,8 +400,22 @@ export function ExamLibraryScreen() {
         isOpen={publishedCodes !== null}
         examCode={publishedCodes?.examCode ?? ""}
         sessionCode={publishedCodes?.sessionCode ?? ""}
+        reopenedUntil={publishedCodes?.reopenedUntil}
         onClose={() => setPublishedCodes(null)}
       />
+
+      {reopenTarget && (
+        <ReopenClassExamModal
+          key={reopenTarget.classExamId}
+          classExamId={reopenTarget.classExamId}
+          onClose={() => setReopenTarget(null)}
+          onReopened={({ endsAt, sessionCode }) => {
+            setPublishedCodes({ examCode: reopenTarget.examCode, sessionCode, reopenedUntil: endsAt });
+            setReopenTarget(null);
+            refetch();
+          }}
+        />
+      )}
 
       <SetSessionCodeModal
         isOpen={activateTarget !== null}
