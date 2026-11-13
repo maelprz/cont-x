@@ -15,6 +15,7 @@ export function ManageClassesModal({
   onAttachNew,
   onActivate,
   onEnd,
+  onReopen,
   onRemove,
   onEditSettings,
   onNavigate,
@@ -27,6 +28,7 @@ export function ManageClassesModal({
   onAttachNew: () => void;
   onActivate: (classExamId: string) => void; // may prompt for a session code first — parent decides
   onEnd: (classExamId: string) => void;
+  onReopen: (classExamId: string) => void;
   onRemove: (classExamId: string) => void; // only ever enabled for 'scheduled' rows
   onEditSettings: (classExamId: string) => void;
   onNavigate: (classExamId: string, targetScreen: "violationMonitoring" | "examResults") => void;
@@ -65,7 +67,7 @@ export function ManageClassesModal({
     >
       <div
         onClick={(e) => e.stopPropagation()}
-        className="w-[520px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)] max-h-[85vh] overflow-y-auto"
+        className="w-[calc(100%-2rem)] max-w-[520px] p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)] max-h-[85vh] overflow-y-auto"
       >
         <h2 className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">Manage Classes</h2>
         <p className="text-[13px] mb-5 text-[var(--color-base-content)] opacity-60">{exam.title}</p>
@@ -85,7 +87,7 @@ export function ManageClassesModal({
             {exam.classAttachments.map((attachment) => (
               <div
                 key={attachment.classExamId}
-                className="flex items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[var(--color-base-300)]"
+                className="flex flex-wrap items-center justify-between gap-3 px-3 py-2.5 rounded-lg border border-[var(--color-base-300)]"
               >
                 <div className="flex flex-col gap-1 min-w-0">
                   <div className="flex items-center gap-2">
@@ -100,6 +102,16 @@ export function ManageClassesModal({
                 </div>
 
                 <div className="flex items-center gap-2 shrink-0">
+                  {attachment.status === "ended" && (
+                    <button
+                      type="button"
+                      onClick={() => onReopen(attachment.classExamId)}
+                      disabled={isProcessing}
+                      className="px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer bg-[var(--color-primary)] text-[var(--color-primary-content)] hover:opacity-90 disabled:opacity-50"
+                    >
+                      Reopen
+                    </button>
+                  )}
                   {attachment.status === "active" && (
                     <button
                       onClick={() => onEnd(attachment.classExamId)}

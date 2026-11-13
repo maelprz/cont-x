@@ -2,6 +2,7 @@ type PublishSuccessOverlayProps = {
   isOpen: boolean;
   examCode: string;
   sessionCode: string;
+  reopenedUntil?: string;
   onClose: () => void;
 };
 
@@ -10,6 +11,7 @@ export function PublishSuccessOverlay({
   isOpen,
   examCode,
   sessionCode,
+  reopenedUntil,
   onClose,
 }: PublishSuccessOverlayProps) {
   if (!isOpen) return null; // render nothing when closed
@@ -27,11 +29,16 @@ export function PublishSuccessOverlay({
         className="w-full max-w-[420px] rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-6"
       >
         <h2 id="publish-success-title" className="text-[18px] font-bold mb-1 text-[var(--color-base-content)]">
-          Exam Published
+          {reopenedUntil ? "Exam Reopened" : "Exam Published"}
         </h2>
         <p className="text-[13px] mb-3 text-[var(--color-base-content)] opacity-60">
           Students use the exam code to find the exam and the session code to start their attempt.
         </p>
+        {reopenedUntil && (
+          <p className="mb-3 text-[13px] text-[var(--color-base-content)]">
+            Entry closes {new Date(reopenedUntil).toLocaleString(undefined, { dateStyle: "medium", timeStyle: "short" })}.
+          </p>
+        )}
 
         <dl className="mb-5 grid gap-3 text-[var(--color-base-content)]">
           {[
