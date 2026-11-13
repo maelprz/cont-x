@@ -6,11 +6,12 @@ interface MultipleChoiceOptionsProps {
   selectedId?: string | null;
   onSelect?: (id: string) => void;
   onClear?: () => void;
+  className?: string;
 }
 
-export function MultipleChoiceOptions({ options, selectedId, onSelect, onClear }: MultipleChoiceOptionsProps) {
+export function MultipleChoiceOptions({ options, selectedId, onSelect, onClear, className = "mt-6" }: MultipleChoiceOptionsProps) {
   return (
-    <div className="flex flex-col gap-3 mt-6 w-full min-w-0">
+    <div className={`flex flex-col gap-3 w-full min-w-0 ${className}`}>
       {options.map(({ id, text, displayLetter, isCorrect }, index) => {
         const selected = selectedId === id;
         const correct = !onSelect && isCorrect === true;

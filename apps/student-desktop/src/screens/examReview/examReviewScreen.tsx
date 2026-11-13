@@ -112,9 +112,15 @@ export function ExamReviewScreen() {
 
       {items.length > 0 && (
         <footer className="h-16 shrink-0 flex items-center justify-between gap-3 px-6 border-t border-[var(--border-primary)]">
-          <button type="button" disabled={index === 0} onClick={() => setQuestionIndex(index - 1)} className={`${navigationButton} border-[var(--border-primary)]`}><ChevronLeft size={16} /> Previous</button>
+          {index < items.length - 1 ? (
+            <button type="button" disabled={index === 0} onClick={() => setQuestionIndex(index - 1)} className={`${navigationButton} border-[var(--border-primary)]`}><ChevronLeft size={16} /> Previous</button>
+          ) : <span aria-hidden="true" />}
           <span className="font-mono text-[10px] uppercase tracking-[0.15em] text-[var(--text-inverted-secondary)]" aria-live="polite">Question {index + 1} of {items.length}</span>
-          <button type="button" disabled={index === items.length - 1} onClick={() => setQuestionIndex(index + 1)} className={`${navigationButton} border-[var(--border-subtle)]`}>Next <ChevronRight size={16} /></button>
+          {index === items.length - 1 ? (
+            <button type="button" onClick={() => navigateTo("examResult")} className={`${navigationButton} border-[var(--border-subtle)]`}>View Result</button>
+          ) : (
+            <button type="button" onClick={() => setQuestionIndex(index + 1)} className={`${navigationButton} border-[var(--border-subtle)]`}>Next <ChevronRight size={16} /></button>
+          )}
         </footer>
       )}
     </div>
