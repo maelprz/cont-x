@@ -1,20 +1,22 @@
-import { Fragment, useState, useMemo, useEffect, useRef } from "react"; // added useMemo for reshaping fetched data
+import { Fragment, useState, useMemo, useEffect, useRef } from "react"; 
 import { useRouterLogic } from "../../router/routerLogic";
-import { useExamSessionStore } from "../../stores/useExamSessionStore"; // real examId/sessionId from Confirmation
-import { useExamQuestions } from "../../hooks/useExamQuestions"; // real question fetch
-import { useExamTimer } from "../../hooks/useExamTimer"; // real countdown, based on real start time + duration
-import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker"; // seconds spent on each question (WBS 6.7)
-import { useSessionRules } from "../../hooks/useSessionRules"; // the teacher's rules for this attempt (sequential order, ...)
-import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; // "are you sure?" step before submitting
-import { useCodeExecution } from "../../hooks/useCodeExecution"; // NEW — real Run Tests / Run Code wiring
+import { useExamSessionStore } from "../../stores/useExamSessionStore";
+import { useExamQuestions } from "../../hooks/useExamQuestions"; 
+import { useExamTimer } from "../../hooks/useExamTimer"; 
+import { useQuestionTimeTracker } from "../../hooks/useQuestionTimeTracker"; 
+import { useSessionRules } from "../../hooks/useSessionRules"; 
+import { SubmitConfirmationModal } from "../../components/modals/submitConfirmationModal"; 
+import { useCodeExecution } from "../../hooks/useCodeExecution"; 
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SubmittedAnswer } from "../../services/examService";
 import { countAnsweredQuestions, hasQuestionAnswer } from "../../lib/examProgress";
 import { AnswerChangeTracker } from "../../lib/answerChanges";
-import { useViolationLogger } from "../../hooks/useViolationLogger"; // NEW — logs violations to the database
-import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; // checks once a minute if the teacher removed this student
+import { useViolationLogger } from "../../hooks/useViolationLogger"; 
+import { useRemovalWatcher } from "../../hooks/useRemovalWatcher"; 
+import { useLiveStateReporter } from "../../hooks/useLiveStateReporter"; 
 import { checkIfRemoved, getSessionStatus } from "../../services/removalService";
+import { useMovementEvents } from "../../hooks/useMovementEvents"; 
 
 import type {
   ExamQuestionScreenProps,
@@ -177,8 +179,9 @@ export function ExamQuestionScreen({
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
+  const removed = useExamSessionStore((state) => state.removed); // stop reporting once the teacher removed this student
   const questionIdRef = useRef<string | null>(null);
-  useViolationLogger(sessionId, questionIdRef); // NEW — logs violations to the database
+  useViolationLogger(sessionId, questionIdRef); 
   useRemovalWatcher(sessionId);
   const {
     questions: fetchedQuestions,
@@ -258,6 +261,25 @@ export function ExamQuestionScreen({
     const current = fetchedQuestions.find((q) => q.id === id);
     return current !== undefined && hasQuestionAnswer(current, answers);
   };
+
+  const liveQuestion = fetchedQuestions[currentIndex]; 
+  const reportingEnabled = !isLoading && !removed && fetchedQuestions.length > 0; 
+  const reportedQuestionId = liveQuestion && !liveQuestion.poolDrawId ? liveQuestion.id : null; 
+  const reportedPosition = fetchedQuestions.length > 0 ? currentIndex + 1 : null; 
+  useLiveStateReporter({
+    sessionId, 
+    enabled: reportingEnabled,
+    questionId: reportedQuestionId, 
+    position: reportedPosition, 
+    total: fetchedQuestions.length > 0 ? fetchedQuestions.length : null, 
+    answeredCount: countAnsweredQuestions(fetchedQuestions, answers),
+  });
+  const { flushNow: flushMovementEvents } = useMovementEvents({
+    sessionId,
+    enabled: reportingEnabled, 
+    questionId: reportedQuestionId, 
+    position: reportedPosition, 
+  });
 
   // In-order exams: the first question with no answer yet. Nothing past it can be opened.
   const firstUnansweredIndex = (() => {
@@ -514,8 +536,9 @@ export function ExamQuestionScreen({
 
   const submitAndLeave = async () => {
     if (!sessionId || submissionInFlightRef.current) return;
-    submissionInFlightRef.current = true;
+    submissionInFlightRef.current = true; 
     try {
+      await flushMovementEvents(1500); 
       const result = await submitSession(
         sessionId,
         timedOutAnswersRef.current ? "timed_out" : "submitted",
