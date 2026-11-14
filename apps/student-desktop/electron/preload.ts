@@ -1,4 +1,5 @@
 import { ipcRenderer, contextBridge } from "electron";
+import type { ViolationEvent } from "../src/types/violationEvent";
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld("ipcRenderer", {
@@ -21,15 +22,17 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
     return ipcRenderer.invoke(channel, ...omit);
   },
   onViolation: (
-    callback: (payload: { violationType: string; occurredAt: string }) => void,
+    callback: (payload: ViolationEvent) => void,
   ) => {
     const listener = (
       _event: unknown,
-      payload: { violationType: string; occurredAt: string },
+      payload: ViolationEvent,
     ) => callback(payload);
     ipcRenderer.on("violation-detected", listener);
     return () => ipcRenderer.off("violation-detected", listener); // cleanup for React
   },
 
   exitApp: () => ipcRenderer.send("exit-app"),
+  setExamProcessMonitoring: (enabled: boolean) =>
+    ipcRenderer.send("set-exam-process-monitoring", enabled),
 });

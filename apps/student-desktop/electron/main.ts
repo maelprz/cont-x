@@ -2,6 +2,7 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { registerCompilerHandlers } from "./ipc/compilerHandlers";
+import { startExamProcessMonitor } from "./native/examProcessMonitor";
 import { muteSystemAudio, unmuteSystemAudio } from "./native/audioControl"; // audio mute/unmute, sits next to keyboard-hook folder
 import path from "node:path";
 
@@ -43,6 +44,29 @@ try {
 
 let win: BrowserWindow | null = null;
 let isExiting = false;
+let stopProcessMonitor: (() => void) | undefined;
+
+function stopExamProcessMonitoring() {
+  stopProcessMonitor?.();
+  stopProcessMonitor = undefined;
+}
+
+ipcMain.on("set-exam-process-monitoring", (event, enabled: unknown) => {
+  if (!win || event.senderFrame !== win.webContents.mainFrame || typeof enabled !== "boolean") return;
+  if (!enabled) {
+    stopExamProcessMonitoring();
+  } else if (process.platform === "win32" && !isExiting && !stopProcessMonitor) {
+    stopProcessMonitor = startExamProcessMonitor(({ appName, executableName }) => {
+      win?.webContents.send("violation-detected", {
+        violationType: "disallowed_process",
+        occurredAt: new Date().toISOString(),
+        process: { appName, executableName },
+      });
+    });
+  }
+});
+
+app.on("before-quit", stopExamProcessMonitoring);
 
 // clears any leftover restrictions from a crashed previous session
 // runs before createWindow so a clean state is guaranteed on startup
@@ -134,6 +158,11 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => {
     win?.webContents.send("main-process-message", new Date().toLocaleString());
   });
+  win.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
+    if (isMainFrame && !isInPlace) stopExamProcessMonitoring();
+  });
+  win.webContents.on("render-process-gone", stopExamProcessMonitoring);
+  win.on("closed", stopExamProcessMonitoring);
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);

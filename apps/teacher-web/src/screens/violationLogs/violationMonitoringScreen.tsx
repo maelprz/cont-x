@@ -20,6 +20,8 @@ function getViolationTypeLabel(
       return "Screenshot"; // took a screenshot
     case "copy_paste":
       return "Copy / Paste"; // used copy, cut, or paste
+    case "disallowed_process":
+      return "Disallowed app detected";
   }
 }
 
