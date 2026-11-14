@@ -139,6 +139,12 @@ export function ExamQuestionScreen({
 
   const liveQuestion = fetchedQuestions[currentIndex]; 
   const reportingEnabled = !isLoading && !removed && fetchedQuestions.length > 0; 
+  const processMonitoringEnabled = Boolean(sessionId && !removed && timer.timing?.sessionStatus === "in_progress");
+  useEffect(() => {
+    if (!processMonitoringEnabled) return;
+    window.ipcRenderer?.setExamProcessMonitoring(true);
+    return () => window.ipcRenderer?.setExamProcessMonitoring(false);
+  }, [sessionId, processMonitoringEnabled]);
   const reportedQuestionId = liveQuestion && !liveQuestion.poolDrawId ? liveQuestion.id : null; 
   const reportedPosition = fetchedQuestions.length > 0 ? currentIndex + 1 : null; 
   useLiveStateReporter({

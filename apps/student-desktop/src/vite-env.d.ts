@@ -6,5 +6,6 @@ interface Window {
     send: (...args: any[]) => any;
     invoke: (...args: any[]) => any;
     exitApp: () => void; // sends 'exit-app' to the main process on logout
+    setExamProcessMonitoring: (enabled: boolean) => void;
   };
 }
