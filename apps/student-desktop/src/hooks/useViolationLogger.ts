@@ -1,6 +1,7 @@
 import { useEffect, useRef } from "react";
-import { logViolation, type RawViolation } from "../services/violationService";
+import { logViolation } from "../services/violationService";
 import type { MutableRefObject } from "react";
+import type { ViolationEvent } from "../types/violationEvent";
 
 const DEBOUNCE_MS = 2000; // minimum time between logs of the same violation
 
@@ -13,13 +14,12 @@ export function useViolationLogger(
   useEffect(() => {
     if (!sessionId) return;
 
-    const handleViolation = (payload: {
-      violationType: string;
-      occurredAt: string;
-    }) => {
-      console.log("Hook received violation");
-      console.log("Current sessionId:", sessionId);
-      console.log(payload);
+    const handleViolation = (payload: ViolationEvent) => {
+      // The process monitor already suppresses repeats per app.
+      if (payload.violationType === "disallowed_process") {
+        void logViolation(sessionId, payload, questionIdRef.current);
+        return;
+      }
       const now = Date.now();
       const lastTime = lastLoggedAt.current[payload.violationType] ?? 0;
 
@@ -27,19 +27,13 @@ export function useViolationLogger(
       if (now - lastTime < DEBOUNCE_MS) return;
 
       lastLoggedAt.current[payload.violationType] = now;
-      logViolation(
-        sessionId,
-        payload.violationType as RawViolation,
-        questionIdRef.current,
-      );
+      void logViolation(sessionId, payload, questionIdRef.current);
     };
 
-    const unsubscribe = (window as any).ipcRenderer.onViolation(
-      handleViolation,
-    );
+    const unsubscribe = window.ipcRenderer?.onViolation(handleViolation);
 
     return () => {
-      unsubscribe();
+      unsubscribe?.();
       lastLoggedAt.current = {}; // reset on unmount to avoid stale state
     };
   }, [sessionId]);

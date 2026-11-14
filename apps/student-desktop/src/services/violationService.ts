@@ -1,25 +1,21 @@
 import { supabase } from "./supabaseClient";
-
-// the specific raw signal coming from the native keyboard hook
-export type RawViolation =
-  | "alt_tab"
-  | "win_key"
-  | "ctrl_esc"
-  | "print_screen"
-  | "win_shift_s"
-  | "ctrl_c"
-  | "ctrl_v"
-  | "ctrl_x";
+import type { ViolationEvent } from "../types/violationEvent";
 
 // only these values are allowed by the violation_logs CHECK constraint
-type ViolationType = "alt_tab" | "windows" | "screenshot" | "copy_paste";
+type ViolationType = "alt_tab" | "windows" | "screenshot" | "copy_paste" | "disallowed_process";
 
 // maps a raw key signal to the allowed enum value plus a readable detail
-function mapRawViolation(raw: RawViolation): {
+function mapViolation(event: ViolationEvent): {
   type: ViolationType;
   details: string | null;
 } | null {
-  switch (raw) {
+  switch (event.violationType) {
+    case "disallowed_process":
+      if (!event.process) return null;
+      return {
+        type: "disallowed_process",
+        details: `${event.process.appName} (${event.process.executableName}) was running`,
+      };
     case "alt_tab":
       return { type: "alt_tab", details: "Alt+Tab pressed" };
     case "win_key":
@@ -41,70 +37,27 @@ function mapRawViolation(raw: RawViolation): {
       return { type: "copy_paste", details: "Ctrl+X (cut) pressed" };
     default:
       // an unexpected value reached here — skip logging instead of crashing
-      console.warn("[violationService] unrecognized raw violation:", raw);
+      console.warn("[violationService] unrecognized violation:", event.violationType);
       return null;
   }
 }
 
-// writes one violation row, scoped to a specific exam attempt
+// Writes one violation row, scoped to the student's active attempt by RLS.
 export async function logViolation(
   sessionId: string,
-  raw: RawViolation,
+  event: ViolationEvent,
   questionId: string | null = null,
 ): Promise<void> {
-  console.log("========== VIOLATION ==========");
-  console.log("sessionId:", sessionId);
+  const mapped = mapViolation(event);
+  if (!mapped) return;
 
-  const {
-    data: { user },
-  } = await supabase.auth.getUser();
-
-  console.log("Logged in user:", user);
-
-  const mapped = mapRawViolation(raw);
-  if (!mapped) return; // unrecognized signal — nothing safe to log
-
-  const { type, details } = mapped;
-
-  console.log("sessionId:", sessionId);
-
-  console.log("Logged in user:", user?.id);
-
-  const { data: session } = await supabase
-    .from("exam_sessions")
-    .select("id, student_id, status")
-    .eq("id", sessionId)
-    .single();
-
-  console.log("Exam session from DB:", session);
-  console.log("Current auth uid:", user?.id);
-
-  const { data: sessionData, error: sessionError } = await supabase
-    .from("exam_sessions")
-    .select("*")
-    .eq("id", sessionId)
-    .single();
-
-  console.log("Exam Session:", sessionData);
-  console.log("Exam Session Error:", sessionError);
-
-  console.log(
-    "[violationService] current auth user:",
-    user?.id ?? "NOT AUTHENTICATED",
-  );
-
-  const payload = {
+  const { error } = await supabase.from("violation_logs").insert({
     session_id: sessionId,
-    violation_type: type,
-    details,
+    violation_type: mapped.type,
+    details: mapped.details,
     question_id: questionId,
-  };
-
-  console.log("Insert payload:", payload);
-
-  const { error } = await supabase.from("violation_logs").insert(payload);
-
-  console.log("Insert error:", error);
+    logged_at: event.occurredAt,
+  });
 
   if (error) {
     console.error("[violationService] failed to log violation:", error);

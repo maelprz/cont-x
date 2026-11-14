@@ -132,7 +132,7 @@ export async function getSessionsForClassExam(
 
 type ViolationLogRow = {
   id: string;
-  violation_type: "alt_tab" | "windows" | "screenshot" | "copy_paste";
+  violation_type: "alt_tab" | "windows" | "screenshot" | "copy_paste" | "disallowed_process";
   details: string | null;
   logged_at: string;
   questions: One<{ title: string }>;
@@ -180,7 +180,7 @@ export async function removeStudentFromExam(
 export type ClassViolationRow = {
   id: string; // violation row id
   sessionId: string; // which attempt it belongs to
-  violationType: "alt_tab" | "windows" | "screenshot" | "copy_paste"; // what the student did
+  violationType: "alt_tab" | "windows" | "screenshot" | "copy_paste" | "disallowed_process"; // what the student did
   details: string | null; // extra text logged with it
   loggedAt: string; // raw ISO time, used for sorting
   questionTitle: string | null; // question open at the time, if known

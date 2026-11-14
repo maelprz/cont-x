@@ -57,7 +57,11 @@ ipcMain.on("set-exam-process-monitoring", (event, enabled: unknown) => {
     stopExamProcessMonitoring();
   } else if (process.platform === "win32" && !isExiting && !stopProcessMonitor) {
     stopProcessMonitor = startExamProcessMonitor(({ appName, executableName }) => {
-      console.info("[exam process monitor] Disallowed app detected:", appName, executableName);
+      win?.webContents.send("violation-detected", {
+        violationType: "disallowed_process",
+        occurredAt: new Date().toISOString(),
+        process: { appName, executableName },
+      });
     });
   }
 });

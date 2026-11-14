@@ -12,7 +12,7 @@ export type ViolationSessionRow = {
 
 export type ViolationDetailRow = {
   id: string;
-  violationType: "alt_tab" | "windows" | "screenshot" | "copy_paste";
+  violationType: "alt_tab" | "windows" | "screenshot" | "copy_paste" | "disallowed_process";
   details: string | null;
   loggedAt: string;
   questionTitle: string | null;
