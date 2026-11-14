@@ -1,12 +1,12 @@
 // Confirmation step shown before a student's answers are sent for grading.
 export interface SubmitConfirmationModalProps {
-  isOpen: boolean; // whether the modal is visible
-  totalCount: number; // how many questions are in the exam
-  answeredCount: number; // how many have an answer
-  flaggedCount: number; // how many the student flagged for review
-  isSubmitting: boolean; // true while the submit call is running
-  onConfirm: () => void; // student confirmed, send the answers
-  onCancel: () => void; // student wants to keep reviewing
+  isOpen: boolean; 
+  totalCount: number; 
+  answeredCount: number; 
+  flaggedCount: number; 
+  isSubmitting: boolean; 
+  onConfirm: () => void;
+  onCancel: () => void; 
 }
 
 export function SubmitConfirmationModal({
@@ -18,9 +18,9 @@ export function SubmitConfirmationModal({
   onConfirm,
   onCancel,
 }: SubmitConfirmationModalProps) {
-  if (!isOpen) return null; // render nothing while closed
+  if (!isOpen) return null; 
 
-  const unansweredCount = Math.max(totalCount - answeredCount, 0); // never show a negative number
+  const unansweredCount = Math.max(totalCount - answeredCount, 0); 
 
   return (
     <div className="fixed inset-0 z-50 flex items-center justify-center p-6 backdrop-blur-[8px] bg-black/40">
