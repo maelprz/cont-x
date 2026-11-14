@@ -1,7 +1,7 @@
 import { TeacherHeader } from "../../components/layout/teacherHeader"; 
 import { TeacherSidebar } from "../../components/layout/teacherSidebar"; 
-import { useRouterLogic } from "../../router/routerLogic";
-import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; 
+import { useRouterLogic } from "../../router/routerLogic"; 
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore";
 import { useStudentMonitoring } from "../../hooks/useStudentMonitoring"; 
 import { useState } from "react"; 
 import { MovementHistoryModal } from "../../components/studentMonitoring/movementHistoryModal"; 
@@ -13,24 +13,22 @@ import type {
 const DASH = "\u2014"; // shown when a value does not apply
 
 const buttonClass =
-  "px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] disabled:opacity-50 disabled:cursor-not-allowed";
+  "px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] disabled:opacity-50 disabled:cursor-not-allowed"; 
 
 const violationsButtonClass =
   "px-3 py-2 rounded-lg border text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-80 border-transparent bg-[var(--color-error)] text-white";
 
-// label plus a soft background and a dark text color for each status badge, chosen so the text stays readable on white
 const STATUS_STYLE: Record<MonitoringStatus, { label: string; bg: string; text: string }> = {
-  not_joined: { label: "Not joined", bg: "#E5E7EB", text: "#374151" },
-  in_progress: { label: "In Progress", bg: "#DCFCE7", text: "#166534" }, 
+  not_joined: { label: "Not joined", bg: "#E5E7EB", text: "#374151" }, 
+  in_progress: { label: "In Progress", bg: "#DCFCE7", text: "#166534" },
   offline: { label: "Offline", bg: "#FEF3C7", text: "#92400E" }, 
-  submitted: { label: "Submitted", bg: "#DBEAFE", text: "#1E40AF" },
+  submitted: { label: "Submitted", bg: "#DBEAFE", text: "#1E40AF" }, 
   timed_out: { label: "Timed Out", bg: "#EDE9FE", text: "#5B21B6" }, 
-  removed: { label: "Removed", bg: "#FEE2E2", text: "#991B1B" }, 
+  removed: { label: "Removed", bg: "#FEE2E2", text: "#991B1B" },
 };
 
-// turns seconds into "12s ago", "3m ago", or "1h ago"
 function formatSeen(seconds: number | null): string {
-  if (seconds === null) return DASH; // never reported
+  if (seconds === null) return DASH; 
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   return `${Math.floor(seconds / 3600)}h ago`;
@@ -43,7 +41,7 @@ function StatusBadge({ row }: { row: StudentMonitoringRow }) {
     <div className="flex flex-col items-start gap-1">
       <span
         className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold" 
-        style={{ backgroundColor: style.bg, color: style.text }}
+        style={{ backgroundColor: style.bg, color: style.text }} 
       >
         {style.label}
       </span>
@@ -79,11 +77,11 @@ export function StudentMonitoringScreen() {
   const navigateTo = useRouterLogic((state) => state.navigateTo); 
   const classExamId = useViolationMonitoringStore((state) => state.currentClassExamId); 
   const { rows, header, isLoading, error, refetch, lastRefreshedAt, summary } = useStudentMonitoring(classExamId);
-  const [historyTarget, setHistoryTarget] = useState<{ sessionId: string; studentName: string } | null>(null); 
+  const [historyTarget, setHistoryTarget] = useState<{ studentId: string; studentName: string } | null>(null); 
 
   return (
     <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
-      {}
+      {/* full-screen shell */}
       <TeacherSidebar activeItem="examLibrary" /> {}
       <div className="flex-1 flex flex-col overflow-hidden">
         <TeacherHeader /> {}
@@ -94,7 +92,7 @@ export function StudentMonitoringScreen() {
               <h1 className="text-2xl font-bold mb-1">Student Monitoring</h1> {}
               <p className="text-sm opacity-70 max-w-md leading-relaxed">
                 {header
-                  ? `Live view of "${header.examTitle}" in ${header.className}.` 
+                  ? `Live view of "${header.examTitle}" in ${header.className}.`
                   : "Live view of the students in this class exam."}
               </p>
               {classExamId !== null && !error && rows.length > 0 && (
@@ -166,7 +164,7 @@ export function StudentMonitoringScreen() {
                 {classExamId !== null &&
                   rows.map((row) => {
                     const showPosition = row.status === "in_progress" || row.status === "offline"; 
-                    const sessionId = row.sessionId;
+                    const hasAttempt = row.sessionId !== null;
                     return (
                       <tr key={row.studentId} className="border-t border-[var(--color-base-300)]">
                         <td className="px-5 py-3">
@@ -193,9 +191,9 @@ export function StudentMonitoringScreen() {
                           {row.violationCount}
                         </td>
                         <td className="px-5 py-3">
-                          {sessionId !== null ? (
+                          {hasAttempt ? (
                             <button
-                              onClick={() => setHistoryTarget({ sessionId, studentName: row.studentName })} 
+                              onClick={() => setHistoryTarget({ studentId: row.studentId, studentName: row.studentName })} 
                               className="text-[13px] font-semibold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-secondary)]"
                             >
                               View
@@ -214,7 +212,9 @@ export function StudentMonitoringScreen() {
       </div>
 
       <MovementHistoryModal
-        sessionId={historyTarget?.sessionId ?? null} 
+        key={historyTarget?.studentId ?? "closed"} 
+        classExamId={classExamId} 
+        studentId={historyTarget?.studentId ?? null} 
         studentName={historyTarget?.studentName ?? ""} 
         onClose={() => setHistoryTarget(null)} 
       />
