@@ -26,3 +26,28 @@ export interface StudentMonitoringRow {
   secondsSinceSeen: number | null; 
   violationCount: number; 
 }
+
+// the kinds of entry in a student's movement history
+export type MovementHistoryKind =
+  | "joined" 
+  | "question_navigated"
+  | "focus_lost"
+  | "focus_gained"
+  | "submitted" 
+  | "timed_out" 
+  | "removed";
+// one line in the timeline
+export interface MovementHistoryEntry {
+  id: string; 
+  kind: MovementHistoryKind; 
+  happenedAt: string; 
+  label: string; 
+  detail: string | null; 
+}
+
+// the short summary shown above the timeline
+export interface MovementHistorySummary {
+  windowLeftCount: number; 
+  totalAwaySeconds: number; 
+  questionChanges: number; 
+}

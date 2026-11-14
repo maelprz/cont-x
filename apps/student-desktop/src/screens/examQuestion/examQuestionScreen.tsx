@@ -35,6 +35,9 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
+const footerButtonClass =
+  "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer shadow-[0_0_20px_rgba(173,198,255,0.25)] transition-all duration-150 hover:bg-[#c5d7ff] hover:border-[#c5d7ff] hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(173,198,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:scale-100 disabled:hover:bg-[#adc6ff] disabled:hover:border-[#adc6ff]";
+
 function formatTime(seconds: number): string {
   const h = Math.floor(seconds / 3600);
   const m = Math.floor((seconds % 3600) / 60);
@@ -90,7 +93,7 @@ export function ExamQuestionScreen({
   }); // real countdown, ticks every second
   const timeLeftSeconds = timer.secondsLeft;
 
-  // NEW — real Run Tests / Run Code state and actions
+  // NEW - real Run Tests / Run Code state and actions
   const {
     isRunning,
     testsResult,
@@ -258,7 +261,7 @@ export function ExamQuestionScreen({
         ? (codeByQuestion[currentQuestionId] ?? question.starterCode ?? "") // what the student already wrote, or the starter code the first time
         : "",
     );
-    clearResults(); // NEW — don't show the previous question's Run Tests/Run Code output
+    clearResults(); // NEW - don't show the previous question's Run Tests/Run Code output
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately keyed to the question id only (see above)
   }, [currentQuestionId, hasQuestion]);
 
@@ -309,7 +312,7 @@ export function ExamQuestionScreen({
     onCodeChange?.(question.number, code);
   };
 
-  // NEW — runs only the visible test cases, pure feedback, no writes.
+  // NEW - runs only the visible test cases, pure feedback, no writes.
   const handleRunTests = () => {
     if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
@@ -323,7 +326,7 @@ export function ExamQuestionScreen({
     );
   };
 
-  // NEW — runs every test case, writes logs, and updates the real running score.
+  // NEW - runs every test case, writes logs, and updates the real running score.
   const handleRunCode = () => {
     if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
@@ -777,7 +780,7 @@ export function ExamQuestionScreen({
           <button
             onClick={handlePrevious}
             disabled={question.number <= 1}
-            className="flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
+            className={footerButtonClass}
           >
             <svg
               width="14"
@@ -828,11 +831,7 @@ export function ExamQuestionScreen({
         <button
           onClick={isLastQuestion ? () => setShowSubmitConfirm(true) : handleNext}
           disabled={isSubmitting || (!isLastQuestion && nextBlocked)}
-          className={
-            isLastQuestion
-              ? "flex items-center gap-2 px-6 py-2.5 rounded-lg border-none text-[13px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] [background:var(--button-gradient)] text-[var(--button-gradient-text)] shadow-[0_0_20px_rgba(173,198,255,0.25)]"
-              : "flex items-center gap-2 px-5 py-2.5 rounded-lg border border-[var(--border-subtle)] bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed"
-          }
+          className={footerButtonClass}
         >
           {isLastQuestion ? (
             "Submit"
