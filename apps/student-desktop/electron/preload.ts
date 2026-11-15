@@ -35,4 +35,7 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
   exitApp: () => ipcRenderer.send("exit-app"),
   setExamProcessMonitoring: (enabled: boolean) =>
     ipcRenderer.send("set-exam-process-monitoring", enabled),
+  checkExamApps: (closeApps: boolean): Promise<string[]> =>
+    ipcRenderer.invoke("check-exam-apps", closeApps),
+  endExamAppCheck: () => ipcRenderer.send("end-exam-app-check"),
 });

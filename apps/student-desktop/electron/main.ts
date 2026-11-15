@@ -3,6 +3,7 @@ import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { registerCompilerHandlers } from "./ipc/compilerHandlers";
 import { startExamProcessMonitor } from "./native/examProcessMonitor";
+import { checkExamApps } from "./native/disallowedProcesses";
 import { muteSystemAudio, unmuteSystemAudio } from "./native/audioControl"; // audio mute/unmute, sits next to keyboard-hook folder
 import path from "node:path";
 
@@ -45,6 +46,9 @@ try {
 let win: BrowserWindow | null = null;
 let isExiting = false;
 let stopProcessMonitor: (() => void) | undefined;
+let preflightScan: AbortController | undefined;
+let detectedApps: string[] = [];
+let restorePreflightLockdown: (() => void) | undefined;
 
 function stopExamProcessMonitoring() {
   stopProcessMonitor?.();
@@ -56,6 +60,7 @@ ipcMain.on("set-exam-process-monitoring", (event, enabled: unknown) => {
   if (!enabled) {
     stopExamProcessMonitoring();
   } else if (process.platform === "win32" && !isExiting && !stopProcessMonitor) {
+    endExamAppCheck();
     stopProcessMonitor = startExamProcessMonitor(({ appName, executableName }) => {
       win?.webContents.send("violation-detected", {
         violationType: "disallowed_process",
@@ -122,6 +127,55 @@ function unregisterLockdown() {
   }
 }
 
+function endExamAppCheck() {
+  preflightScan?.abort();
+  preflightScan = undefined;
+  detectedApps = [];
+  restorePreflightLockdown?.();
+  restorePreflightLockdown = undefined;
+}
+
+ipcMain.handle("check-exam-apps", async (event, closeApps: unknown) => {
+  const examWindow = win;
+  if (!examWindow || event.senderFrame !== examWindow.webContents.mainFrame ||
+      isExiting || stopProcessMonitor || preflightScan || typeof closeApps !== "boolean") {
+    throw new Error("The exam app check is unavailable.");
+  }
+
+  const scan = new AbortController();
+  preflightScan = scan;
+  try {
+    const remaining = await checkExamApps(scan.signal, closeApps ? detectedApps : []);
+    if (scan.signal.aborted || examWindow.isDestroyed()) {
+      throw new Error("The exam app check ended.");
+    }
+    if (remaining.length > 0 && !restorePreflightLockdown) {
+      // Let the student switch to save prompts and quit apps from the tray.
+      const wasKiosk = examWindow.isKiosk();
+      const wasOnTop = examWindow.isAlwaysOnTop();
+      restorePreflightLockdown = () => {
+        if (examWindow.isDestroyed() || isExiting) return;
+        examWindow.setKiosk(wasKiosk);
+        examWindow.setAlwaysOnTop(wasOnTop, "screen-saver");
+        registerLockdown();
+      };
+      unregisterLockdown();
+      examWindow.setKiosk(false);
+      examWindow.setAlwaysOnTop(false);
+    }
+
+    if (remaining.length === 0) endExamAppCheck();
+    else detectedApps = remaining;
+    return remaining;
+  } finally {
+    if (preflightScan === scan) preflightScan = undefined;
+  }
+});
+
+ipcMain.on("end-exam-app-check", (event) => {
+  if (win && event.senderFrame === win.webContents.mainFrame) endExamAppCheck();
+});
+
 function createWindow() {
   win = new BrowserWindow({
     title: "Cont/x",
@@ -159,10 +213,15 @@ function createWindow() {
     win?.webContents.send("main-process-message", new Date().toLocaleString());
   });
   win.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) stopExamProcessMonitoring();
+    if (isMainFrame && !isInPlace) {
+      stopExamProcessMonitoring();
+      endExamAppCheck();
+    }
   });
   win.webContents.on("render-process-gone", stopExamProcessMonitoring);
+  win.webContents.on("render-process-gone", endExamAppCheck);
   win.on("closed", stopExamProcessMonitoring);
+  win.on("closed", endExamAppCheck);
 
   if (VITE_DEV_SERVER_URL) {
     win.loadURL(VITE_DEV_SERVER_URL);
@@ -174,6 +233,7 @@ function createWindow() {
 // called when the student clicks logout — the only valid exit path
 ipcMain.on("exit-app", () => {
   isExiting = true; // tell the close handler to allow the next close
+  endExamAppCheck();
   unregisterLockdown(); // restore taskbar, remove hooks, re-enable task manager, unmute audio
   if (win) {
     win.setAlwaysOnTop(false); // release always-on-top before quitting

@@ -7,6 +7,8 @@ interface Window {
     invoke: (...args: any[]) => any;
     exitApp: () => void; // sends 'exit-app' to the main process on logout
     setExamProcessMonitoring: (enabled: boolean) => void;
+    checkExamApps: (closeApps: boolean) => Promise<string[]>;
+    endExamAppCheck: () => void;
     onViolation: (callback: (payload: import("./types/violationEvent").ViolationEvent) => void) => () => void;
   };
 }
