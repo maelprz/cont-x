@@ -1,4 +1,4 @@
-export type VerificationStatus = 'idle' | 'verifying' | 'error';
+export type VerificationStatus = 'idle' | 'checking_apps' | 'verifying' | 'error';
 
 export interface SessionVerificationModalProps {
   isOpen: boolean;

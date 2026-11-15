@@ -69,3 +69,79 @@ export async function scanDisallowedProcesses(signal?: AbortSignal): Promise<Dis
   }
   return [...matches.values()];
 }
+
+// Preflight needs Windows process handles so it can ask windows to close
+// normally and distinguish products that share the ChatGPT.exe filename.
+export async function checkExamApps(
+  signal: AbortSignal,
+  approvedApps: readonly string[] = [],
+): Promise<string[]> {
+  if (process.platform !== "win32") return [];
+
+  const systemRoot = process.env.SystemRoot;
+  if (!systemRoot) throw new Error("Windows system directory is unavailable.");
+
+  const executableNames = [...disallowedExecutables.keys()];
+  const approvedExecutables = [...disallowedExecutables]
+    .filter(([, appName]) => approvedApps.includes(appName))
+    .map(([name]) => name);
+  // Both lists contain only literals from the executable map.
+  const quoteNames = (names: string[]) => names.map((name) => `'${name}'`).join(", ");
+  const script = `
+    $ErrorActionPreference = 'Stop'
+    $session = (Get-Process -Id ${process.pid}).SessionId
+    $disallowed = @(${quoteNames(executableNames)})
+    $approved = @(${quoteNames(approvedExecutables)})
+
+    function Get-ExamProcesses {
+      foreach ($candidate in (Get-Process)) {
+        try {
+          $name = $candidate.ProcessName + '.exe'
+          if ($disallowed -notcontains $name) { continue }
+          if ($candidate.Id -eq ${process.pid} -or $candidate.SessionId -ne $session) { continue }
+        } catch [System.InvalidOperationException] {
+          continue
+        }
+        if ($name -eq 'chatgpt.exe') {
+          try {
+            $productName = $candidate.MainModule.FileVersionInfo.ProductName
+            if ($productName -eq 'Codex') { continue }
+          } catch {
+            $productName = $null
+          }
+          # Keep the match visible when we can't verify the shared executable name.
+          [pscustomobject]@{ Name = $name; CanClose = ($productName -eq 'ChatGPT'); Process = $candidate }
+          continue
+        }
+        [pscustomobject]@{ Name = $name; CanClose = $true; Process = $candidate }
+      }
+    }
+
+    if ($approved.Count -gt 0) {
+      foreach ($match in (Get-ExamProcesses)) {
+        if ($match.CanClose -and $approved -contains $match.Name) {
+          try {
+            if (-not $match.Process.HasExited) { $null = $match.Process.CloseMainWindow() }
+          } catch {
+            # A vanished or inaccessible process is handled by the fresh scan.
+          }
+        }
+      }
+      Start-Sleep -Milliseconds 800
+    }
+
+    $remaining = @(Get-ExamProcesses | ForEach-Object { $_.Name } | Sort-Object -Unique)
+    ConvertTo-Json -InputObject $remaining -Compress
+  `;
+  const { stdout } = await execFileAsync(
+    join(systemRoot, "System32", "WindowsPowerShell", "v1.0", "powershell.exe"),
+    ["-NoProfile", "-NonInteractive", "-EncodedCommand", Buffer.from(script, "utf16le").toString("base64")],
+    { windowsHide: true, timeout: 8_000, signal },
+  );
+  const apps = new Set<string>();
+  for (const name of JSON.parse(stdout) as string[]) {
+    const appName = matchDisallowedExecutable(name);
+    if (appName) apps.add(appName);
+  }
+  return [...apps].sort();
+}
