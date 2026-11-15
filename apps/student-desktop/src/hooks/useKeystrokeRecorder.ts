@@ -1,97 +1,99 @@
-import { useCallback, useEffect, useRef } from "react";
+import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { createKeystrokeRecorder } from "../lib/keystrokeRecorder";
-import { logKeystrokeBatch } from "../services/keystrokeService";
+import { logKeystrokeBatch, type KeystrokeQuestion } from "../services/keystrokeService";
 
-const FLUSH_MS = 30000; //flush every 30 seconds
-const JITTER_MS = 5000; //add 5 seconds to flush time, so students  dont all send together
+const FLUSH_MS = 30_000;
+const JITTER_MS = 5_000;
+const FINAL_FLUSH_MS = 5_000;
 
-type PendingBatch = {
-  questionId: string;
-  batch: string;
-};
+function createAttempt(sessionId: string) {
+  const recorder = createKeystrokeRecorder(performance.now());
+  const pending: { id: string; question: KeystrokeQuestion; batch: string }[] = [];
+  let sending: Promise<void> | null = null;
+
+  return {
+    record: recorder.record,
+    queue(question: KeystrokeQuestion) {
+      const batch = recorder.drain();
+      if (batch) pending.push({ id: crypto.randomUUID(), question, batch });
+    },
+    send(): Promise<void> {
+      if (!sending) {
+        sending = (async () => {
+          while (pending.length > 0) {
+            const { id, question, batch } = pending[0];
+            if (!(await logKeystrokeBatch(sessionId, id, question, batch))) return;
+            pending.shift();
+          }
+        })().catch((error: unknown) => {
+          console.warn("[keystrokeRecorder] Could not send queued batches.", error);
+        }).finally(() => {
+          sending = null;
+        });
+      }
+      return sending;
+    },
+  };
+}
 
 export function useKeystrokeRecorder(
   sessionId: string | null,
-  questionId: string | null, //which question is showing on the screen, null if loading
+  questionId: string | null,
+  poolDrawId: string | null,
+  isAnswerLocked: () => boolean,
 ) {
-  const recorderRef = useRef<ReturnType<typeof createKeystrokeRecorder> | null>(
-    null,
-  ); //the recorder for this attempt
-  const pendingRef = useRef<PendingBatch[]>([]); //batches waiting to be sent
-  const chainRef = useRef<Promise<void>>(Promise.resolve()); //makes sure sends run one after another
-  const questionIdRef = useRef<string | null>(questionId);
-  questionIdRef.current = questionId; //update the current question id
+  const attempt = useMemo(() => sessionId ? createAttempt(sessionId) : null, [sessionId]);
+  const drainCurrent = useRef<(() => void) | null>(null);
+  const answerLocked = useRef(isAnswerLocked);
 
-  const queueBatch = useCallback((forQuestionId: string) => {
-    const batch = recorderRef.current?.drain();
-    if (batch) {
-      pendingRef.current.push({ questionId: forQuestionId, batch });
-    }
-  }, []);
+  useLayoutEffect(() => {
+    answerLocked.current = isAnswerLocked;
+  }, [isAnswerLocked]);
 
-  const sendPending = useCallback((): Promise<void> => {
-    if (!sessionId) return Promise.resolve(); //no session, nothing to send
-    chainRef.current = chainRef.current.then(async () => {
-      //wait for any earlier send to finish first
-      while (pendingRef.current.length > 0) {
-        //make sure list is empty
-        const next = pendingRef.current[0]; //the oldest waiting batch
-        let ok = false; //assume it failed until proven otherwise
-        try {
-          ok = await logKeystrokeBatch(sessionId, next.questionId, next.batch); //send it to the server
-        } catch {
-          ok = false; //network error, treat as failure
-        }
-        if (!ok) break; //stop if it failed, will try again later
-        pendingRef.current.shift(); //saved already, remove from list
-      }
-    });
-    return chainRef.current; //return the promise for this send
-  }, [sessionId]);
+  useLayoutEffect(() => {
+    const question = poolDrawId ? { poolDrawId } : questionId ? { questionId } : null;
+    if (!attempt || !question) return;
 
-  //useEffect 1: start a fresh recorder whenever a new exam attempt begins
-  useEffect(() => {
-    recorderRef.current = sessionId
-      ? createKeystrokeRecorder(performance.now())
-      : null; //start a new recorder
-    pendingRef.current = []; //clear any pending batches
-  }, [sessionId]);
+    const queueCurrent = () => attempt.queue(question);
+    drainCurrent.current = queueCurrent;
+    const onKey = (event: KeyboardEvent) => {
+      if (answerLocked.current() || !event.code) return;
+      if (event.target instanceof HTMLInputElement && event.target.type === "password") return;
+      attempt.record(event.code, event.type === "keydown", event.repeat);
+    };
 
-  //useEffect 2: listen to keys and flush on a timer, once per (session, question)
-  useEffect(() => {
-    const recorder = recorderRef.current;
-    if (!sessionId || !questionId || !recorder) return; //record only when exam screen shows
-
-    const onDown = (e: KeyboardEvent) =>
-      recorder.record(e.code, true, e.repeat); //key pressed
-    const onUp = (e: KeyboardEvent) => recorder.record(e.code, false, e.repeat); //key released
-    window.addEventListener("keydown", onDown);
-    window.addEventListener("keyup", onUp);
-
-    const intervalMs = FLUSH_MS + Math.floor(Math.random() * JITTER_MS); //flush every 30-35 seconds
-    const timerId = setInterval(() => {
-      queueBatch(questionId);
-      void sendPending(); //send any waiting batches, but don't wait for it to finish
-    }, intervalMs);
+    // Capture keys before controls such as Monaco handle them.
+    window.addEventListener("keydown", onKey, true);
+    window.addEventListener("keyup", onKey, true);
+    const interval = setInterval(() => {
+      queueCurrent();
+      void attempt.send();
+    }, FLUSH_MS + Math.floor(Math.random() * JITTER_MS));
 
     return () => {
-      window.removeEventListener("keydown", onDown, true);
-      window.removeEventListener("keyup", onUp, true);
-      clearInterval(timerId);
-      queueBatch(questionId); //flush any remaining events for this question
-      void sendPending(); //send any waiting batches, but don't wait for it to finish
+      window.removeEventListener("keydown", onKey, true);
+      window.removeEventListener("keyup", onKey, true);
+      clearInterval(interval);
+      drainCurrent.current = null;
+      queueCurrent();
+      void attempt.send();
     };
-  }, [sessionId, questionId, queueBatch, sendPending]);
-
-  const FLUSH_TIMEOUT_MS = 5000;
+  }, [attempt, questionId, poolDrawId]);
 
   const flush = useCallback(async () => {
-    if (questionIdRef.current) queueBatch(questionIdRef.current); // move the last keys into the pending list
-    await Promise.race([
-      sendPending(), // try to save everything pending
-      new Promise<void>((resolve) => setTimeout(resolve, FLUSH_TIMEOUT_MS)), // or give up after 5 seconds
-    ]);
-  }, [queueBatch, sendPending]);
+    if (!attempt) return;
 
-  return { flush }; //return the flush function to the caller
+    drainCurrent.current?.();
+    let timer: ReturnType<typeof setTimeout> | undefined;
+    try {
+      await Promise.race([
+        attempt.send(),
+        new Promise<void>((resolve) => { timer = setTimeout(resolve, FINAL_FLUSH_MS); }),
+      ]);
+    } finally {
+      clearTimeout(timer);
+    }
+  }, [attempt]);
+
+  return { flush };
 }
