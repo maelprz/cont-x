@@ -10,7 +10,9 @@ export interface ClassExamSummary {
   classId: string;
   className: string;
   status: ClassExamStatus;
-  studentCount: number; // exam_sessions count for this class attachment
+  startsAt: string | null;
+  endedAt: string | null;
+  studentCount: number; // students enrolled in the attached class
 }
 
 // one subject tile on the top level of the Exam Library — exams live under these
@@ -29,6 +31,7 @@ export interface SubjectCard {
 export interface ExamCard {
   id: string;
   subjectId: string; // which subject this exam lives under
+  subjectName: string | null;
   code: string; // exam_code in db - one per exam, shared across every class it's attached to
   title: string;
   description: string;

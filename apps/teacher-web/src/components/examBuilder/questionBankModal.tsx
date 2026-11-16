@@ -318,9 +318,7 @@ export function QuestionBankModal({
           </div>
           {pageCount > 1 && (
             <nav aria-label="Question bank pages" className="mt-3 flex flex-wrap items-center justify-between gap-2">
-              <p role="status" className="text-sm text-stone-600">
-                {pageStart + 1}–{Math.min(pageStart + PAGE_SIZE, filteredQuestions.length)} of {filteredQuestions.length} questions
-              </p>
+              <p role="status" className="text-sm text-stone-600 tabular-nums">Page {page} of {pageCount}</p>
               <div className="flex gap-2">
                 <button type="button" className={examSecondary} disabled={page === 1} onClick={() => changePage(page - 1)}>Previous</button>
                 <button type="button" className={examSecondary} disabled={page === pageCount} onClick={() => changePage(page + 1)}>Next</button>

@@ -1,250 +1,199 @@
-import type {
-  DashboardScreenProps,
-  ExamSummaryCard,
-} from "./dashboardScreen.types";
+import { useId, useState } from "react";
+import { ArrowRight, ChevronLeft, ChevronRight, Radio, ClipboardList, type LucideIcon, Clock } from "lucide-react";
+import { examPrimary, examSecondary } from "../../components/examLibrary/examDialog";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
+import { useExamLibrary } from "../../hooks/useExamLibrary";
+import { getClassExamNavigation } from "../../router/examCardNavigation";
 import { useRouterLogic } from "../../router/routerLogic";
-import { useAuthStore } from "../../store/useAuthStore";
-import { useTeacherDashboard } from "../../hooks/useTeacherDashboard";
 import { useExamBuilderStore } from "../../store/useExamBuilderStore";
 import { useExamLibraryStore } from "../../store/useExamLibraryStore";
-import {
-  StatusBadge,
-  ClassExamStatusBadge,
-} from "../../components/examLibrary/statusBadge";
+import { useExamResultsStore } from "../../store/useExamResultsStore";
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore";
+import type { ClassExamSummary, ExamCard } from "../examLibrary/examLibraryScreen.types";
 
-function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
+type ClassExam = { exam: ExamCard; attachment: ClassExamSummary };
+
+const classExamDate = new Intl.DateTimeFormat(undefined, {
+  month: "short",
+  day: "numeric",
+  hour: "numeric",
+  minute: "2-digit",
+});
+
+const panel = "min-w-0 rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)]";
+
+function ClassExamRow({ entry, managingDisabled, onOpen }: {
+  entry: ClassExam;
+  managingDisabled: boolean;
+  onOpen: (entry: ClassExam) => void;
+}) {
+  const { exam, attachment } = entry;
+  const isLive = attachment.status === "active";
+  const isScheduled = attachment.status === "scheduled";
+  const date = isLive ? null : isScheduled ? attachment.startsAt : attachment.endedAt;
+  const label = getClassExamNavigation(attachment.status)?.ctaLabel ?? "Manage classes";
+
   return (
-    <div
-      className="rounded-2xl p-5 border"
-      style={{
-        backgroundColor: "var(--color-base-100)",
-        borderColor: "var(--color-base-300)",
-      }}
-    >
-      <p
-        className="text-xs uppercase tracking-wide font-mono mb-2"
-        style={{ color: "var(--color-base-content)", opacity: 0.6 }}
-      >
-        {label}
-      </p>
-      <p
-        className="text-3xl font-bold mb-1"
-        style={{ color: "var(--color-base-content)" }}
-      >
-        {value}
-      </p>
-      <p
-        className="text-xs"
-        style={{ color: "var(--color-base-content)", opacity: 0.6 }}
-      >
-        {subtext}
-      </p>
-    </div>
+    <li className="grid min-w-0 items-center gap-2 px-4 py-2.5 @min-[25rem]:grid-cols-[minmax(0,1fr)_auto] @min-[25rem]:gap-3">
+      <div className="min-w-0">
+        <h3 className={isLive ? "text-base font-semibold wrap-anywhere" : "text-sm font-semibold wrap-anywhere"}>
+          {exam.title}
+          {isLive && attachment.classId && (
+            <span className="ms-2 inline-block whitespace-nowrap text-xs font-normal text-stone-600 tabular-nums">
+              {" "}{attachment.studentCount} enrolled
+            </span>
+          )}
+        </h3>
+        <p className="mt-1 text-sm text-stone-600 wrap-anywhere">
+          {attachment.className}{exam.subjectName && <> · {exam.subjectName}</>}
+        </p>
+        {date && (
+          <p className="mt-1 text-xs text-stone-600">
+            {isScheduled ? "Starts " : "Ended "}<time dateTime={date}>{classExamDate.format(new Date(date))}</time>
+          </p>
+        )}
+      </div>
+      <div className="flex flex-wrap items-center gap-2 @min-[25rem]:justify-end">
+        <button
+          type="button"
+          className={isLive ? examPrimary : examSecondary}
+          aria-label={label + " for " + exam.title + ", " + attachment.className}
+          disabled={isScheduled && managingDisabled}
+          onClick={() => onOpen(entry)}
+        >
+          {label}
+          <ArrowRight size={14} aria-hidden="true" />
+        </button>
+      </div>
+    </li>
   );
 }
 
-export function DashboardScreen({}: DashboardScreenProps) {
-  const navigateTo = useRouterLogic((state) => state.navigateTo);
-  const hasBackgroundSave = useExamBuilderStore((state) => state.backgroundSave !== null);
-  const setCurrentExamId = useExamBuilderStore(
-    (state) => state.setCurrentExamId,
-  );
-  const setOpenedFromEditExam = useExamBuilderStore(
-    (state) => state.setOpenedFromEditExam,
-  );
-  const setSelectedSubjectId = useExamLibraryStore(
-    (state) => state.setSelectedSubjectId,
-  );
-  const openExam = (
-    examId: string,
-    status: "draft" | "saved",
-    subjectId: string,
-  ) => {
-    if (status === "draft") {
-      setCurrentExamId(examId);
-      setOpenedFromEditExam(false); // still being authored, not a live-exam edit
-      navigateTo("examBuilder");
-    } else {
-      setSelectedSubjectId(subjectId); // open the library straight inside this exam's subject
-      navigateTo("examLibrary");
-    }
-  };
-
-  // pulls the logged in user's name directly from the auth store
-  const user = useAuthStore((state) => state.user);
-  const firstName = user?.fullName?.split(" ")[0] ?? "Teacher";
-
-  const { data, isLoading } = useTeacherDashboard(user?.id);
-
-  const summaryCards: ExamSummaryCard[] = [
-    {
-      label: "Total Exams",
-      value: isLoading ? "—" : String(data?.totalExams ?? 0), // count of all exams this teacher created
-      subtext: "All statuses",
-    },
-    {
-      label: "Total Students",
-      value: isLoading ? "—" : String(data?.totalStudents ?? 0), // summed session count across all exams
-      subtext: "Verified session starts",
-    },
-  ];
-
-  const recentExams = data?.recentExams.slice(0, 5) ?? [];
+function ClassExamPanel({ icon, title, emptyMessage, entries, pageSize, pendingExamId, onOpen, isLive = false }: {
+  icon: LucideIcon;
+  title: string;
+  emptyMessage: string;
+  entries: ClassExam[];
+  pageSize: number;
+  pendingExamId: string | undefined;
+  onOpen: (entry: ClassExam) => void;
+  isLive?: boolean;
+}) {
+  
+  const Icon = icon;
+  const id = useId();
+  const [requestedPage, setRequestedPage] = useState(1);
+  const pageCount = Math.max(1, Math.ceil(entries.length / pageSize));
+  const page = Math.min(requestedPage, pageCount);
+  const start = (page - 1) * pageSize;
+  const end = Math.min(start + pageSize, entries.length);
 
   return (
-    <div
-      className="flex h-screen overflow-hidden"
-      style={{ backgroundColor: "var(--color-base-200)" }}
+    <section
+      className={panel + " @container w-full"}
+      style={isLive && entries.length ? { borderColor: "#c5d5bd" } : undefined}
+      aria-labelledby={id}
     >
-      <TeacherSidebar activeItem="dashboard" />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        {/* no props needed, TeacherHeader reads from auth store itself */}
-        <TeacherHeader />
-
-        <main
-          className="flex-1 overflow-y-auto px-8 py-6"
-          style={{ color: "var(--color-base-content)" }}
-        >
-          <p className="text-xs opacity-60 mb-2">
-            Teacher Portal &gt; Dashboard
-          </p>
-
-          {/* heading row */}
-          <div className="flex items-start justify-between gap-4 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold mb-1">
-                Welcome back, {firstName}
-              </h1>
-              <p className="text-sm opacity-70 max-w-xl">
-                Manage your exams, monitor live sessions, and review student
-                activity from one place.
-              </p>
-            </div>
-          </div>
-
-          {/* summary stat cards */}
-          <div className="grid grid-cols-4 gap-4 mb-8">
-            {summaryCards.map((card) => (
-              <SummaryCard key={card.label} {...card} />
-            ))}
-          </div>
-
-          {/* recent exams table shell -- data wired in later */}
-          <div className="mb-2 flex items-center justify-between">
-            <h2 className="text-base font-semibold">Recent Exams</h2>
-            <button
-              onClick={() => navigateTo("examLibrary")}
-              className="text-xs bg-transparent border-none cursor-pointer opacity-60 hover:opacity-100"
-              style={{ color: "var(--color-base-content)" }}
-            >
-              View All
+      <h2 id={id} className="flex items-center gap-2 border-b border-[var(--color-base-300)] px-4 py-3 text-sm font-semibold">
+        <Icon size={16} aria-hidden="true" />
+        {title}
+      </h2>
+      {entries.length > 0 ? (
+        <ul id={id + "-list"}
+          className="grid divide-y divide-[var(--color-base-300)] [--exam-row-min:6rem] @min-[25rem]:[--exam-row-min:4.75rem]"
+          style={{ gridTemplateRows: `repeat(${pageSize}, minmax(var(--exam-row-min), auto))` }}>
+          {entries.slice(start, end).map((entry) => (
+            <ClassExamRow
+              key={entry.attachment.classExamId}
+              entry={entry}
+              managingDisabled={entry.exam.id === pendingExamId}
+              onOpen={onOpen}
+            />
+          ))}
+        </ul>
+      ) : <p className="px-4 py-4 text-sm text-stone-600">{emptyMessage}</p>}
+      {pageCount > 1 && (
+        <nav aria-label={title + " pages"} className="flex min-h-[53px] flex-wrap items-center justify-between gap-2 border-t border-[var(--color-base-300)] px-4 py-2">
+          <p role="status" className="text-xs text-stone-600 tabular-nums">Page {page} of {pageCount}</p>
+          <div className="flex gap-1.5">
+            <button className={examSecondary} type="button" aria-label="Previous page" aria-controls={id + "-list"} disabled={page <= 1} onClick={() => setRequestedPage(page - 1)}>
+              <ChevronLeft size={14} aria-hidden="true" />
+            </button>
+            <button className={examSecondary} type="button" aria-label="Next page" aria-controls={id + "-list"} disabled={page >= pageCount} onClick={() => setRequestedPage(page + 1)}>
+              <ChevronRight size={14} aria-hidden="true" />
             </button>
           </div>
+        </nav>
+      )}
+    </section>
+  );
+}
 
-          <div
-            className="rounded-2xl overflow-hidden border"
-            style={{
-              backgroundColor: "var(--color-base-100)",
-              borderColor: "var(--color-base-300)",
-            }}
-          >
-            <table className="w-full border-collapse">
-              <thead>
-                <tr
-                  className="text-xs uppercase tracking-wide"
-                  style={{
-                    backgroundColor: "var(--color-base-200)",
-                    color: "var(--color-base-content)",
-                  }}
-                >
-                  <th className="text-left py-3 px-5 font-medium opacity-60">
-                    Exam Title
-                  </th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">
-                    Code
-                  </th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">
-                    Status
-                  </th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">
-                    Students
-                  </th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">
-                    Created
-                  </th>
-                  <th className="text-left py-3 px-5 font-medium opacity-60">
-                    Actions
-                  </th>
-                </tr>
-              </thead>
-              <tbody>
-                {recentExams.map((exam, index) => {
-                  const studentCount = exam.classAttachments.reduce(
-                    (sum, attachment) => sum + attachment.studentCount,
-                    0,
-                  );
-                  const hasActiveAttachment = exam.classAttachments.some(
-                    (attachment) => attachment.status === "active",
-                  );
+export function DashboardScreen() {
+  const { exams, isLoading, error, refetch } = useExamLibrary();
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const setLibrarySubject = useExamLibraryStore((state) => state.setSelectedSubjectId);
+  const requestClassManagement = useExamLibraryStore((state) => state.requestClassManagement);
+  const setProgressClass = useViolationMonitoringStore((state) => state.setCurrentClassExamId);
+  const setResultsClass = useExamResultsStore((state) => state.setCurrentClassExamId);
+  const pendingExamId = useExamBuilderStore((state) => state.backgroundSave?.examId);
 
-                  return (
-                    <tr
-                      key={exam.id}
-                      className={`hover:opacity-80 ${
-                        index < recentExams.length - 1 ? "border-b" : ""
-                      }`}
-                      style={{ borderColor: "var(--color-base-300)" }}
-                    >
-                      <td className="py-3.5 px-5 text-sm font-medium">
-                        {exam.title}
-                      </td>
-                      <td className="py-3.5 px-5 text-sm font-mono opacity-70">
-                        {exam.code}
-                      </td>
-                      <td className="py-3.5 px-5">
-                        <div className="flex items-center gap-1.5">
-                          <StatusBadge status={exam.status} />
-                          {hasActiveAttachment && (
-                            <ClassExamStatusBadge status="active" />
-                          )}
-                        </div>
-                      </td>
-                      <td className="py-3.5 px-5 text-sm opacity-70">
-                        {studentCount}
-                      </td>
-                      <td className="py-3.5 px-5 text-sm opacity-70">
-                        {exam.createdAt}
-                      </td>
-                      <td className="py-3.5 px-5">
-                        <button
-                          disabled={exam.status === "draft" && hasBackgroundSave}
-                          onClick={() =>
-                            openExam(exam.id, exam.status, exam.subjectId)
-                          }
-                          className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
-                          style={{
-                            borderColor: "var(--color-base-300)",
-                            color: "var(--color-base-content)",
-                            backgroundColor: "transparent",
-                          }}
-                        >
-                          {exam.ctaLabel ?? "Open"}
-                        </button>
-                      </td>
-                    </tr>
-                  );
-                })}
-              </tbody>
-            </table>
+  const deliveries = exams.flatMap((exam) => exam.classAttachments.map((attachment) => ({ exam, attachment })));
+  const live = deliveries.filter(({ attachment }) => attachment.status === "active");
+  const scheduled = deliveries.filter(({ attachment }) => attachment.status === "scheduled")
+    .sort((a, b) => (a.attachment.startsAt ? Date.parse(a.attachment.startsAt) : Number.MAX_SAFE_INTEGER) -
+      (b.attachment.startsAt ? Date.parse(b.attachment.startsAt) : Number.MAX_SAFE_INTEGER));
+  const ended = deliveries.filter(({ attachment }) => attachment.status === "ended")
+    .sort((a, b) => (b.attachment.endedAt ? Date.parse(b.attachment.endedAt) : Number.MIN_SAFE_INTEGER) -
+      (a.attachment.endedAt ? Date.parse(a.attachment.endedAt) : Number.MIN_SAFE_INTEGER));
+
+  function openClassExam({ exam, attachment }: ClassExam) {
+    const navigation = getClassExamNavigation(attachment.status);
+    if (navigation?.targetScreen === "studentMonitoring") {
+      setProgressClass(attachment.classExamId);
+      navigateTo(navigation.targetScreen);
+    } else if (navigation?.targetScreen === "examResults") {
+      setResultsClass(attachment.classExamId);
+      navigateTo(navigation.targetScreen);
+    } else if (pendingExamId !== exam.id) {
+      setLibrarySubject(exam.subjectId);
+      requestClassManagement(exam.id);
+      navigateTo("examLibrary");
+    }
+  }
+
+  return (
+    <div className="flex h-dvh overflow-hidden bg-[var(--color-base-200)] text-[var(--color-base-content)]">
+      <TeacherSidebar activeItem="dashboard" />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TeacherHeader title="Dashboard" />
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex max-w-6xl flex-col gap-5 px-4 py-5 sm:px-8 sm:py-6">
+            <div className="flex flex-wrap items-center justify-between gap-3">
+              <h2 className="text-lg font-semibold">Exam sessions</h2>
+            </div>
+
+            {isLoading && <p role="status" className="text-sm text-stone-600">Loading exam sessions…</p>}
+            {error && (
+              <div className={panel + " flex flex-wrap items-center gap-3 p-4"}>
+                <p role="alert" className="text-sm text-red-700">Could not load exam sessions.</p>
+                <button type="button" className={examSecondary} onClick={refetch}>Retry</button>
+              </div>
+            )}
+            {!isLoading && !error && (
+              <>
+                <div className="grid items-start gap-4 xl:grid-cols-2">
+                  <ClassExamPanel icon={Radio} title="Live now" emptyMessage="No live class exams." entries={live} pageSize={2}
+                    pendingExamId={pendingExamId} onOpen={openClassExam} isLive />
+                  <ClassExamPanel icon={ClipboardList} title="Scheduled" emptyMessage="No scheduled class exams." entries={scheduled} pageSize={2}
+                    pendingExamId={pendingExamId} onOpen={openClassExam} />
+                </div>
+                <ClassExamPanel icon={Clock} title="Recently ended" emptyMessage="No ended class exams." entries={ended} pageSize={3}
+                  pendingExamId={pendingExamId} onOpen={openClassExam} />
+              </>
+            )}
           </div>
-
-          <p className="text-xs opacity-50 mt-3">
-            Showing {recentExams.length} of{" "}
-            {isLoading ? "…" : (data?.totalExams ?? 0)} exams
-          </p>
         </main>
       </div>
     </div>
