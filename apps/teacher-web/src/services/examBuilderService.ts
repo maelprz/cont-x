@@ -48,6 +48,7 @@ type QuestionRow = {
   order_index: number;
   max_points: number;
   section_id: string | null;
+  source_bank_question_id?: string | null;
   mcq_question: { mc_options: MCOptionRow[] } | null;
   fitb_question: {
     case_sensitive: boolean;
@@ -70,7 +71,6 @@ type PoolRow = {
   title: string | null;
   pick_count: number;
   order_index: number;
-  points_per_question: number | null;
   section_id: string | null;
   exam_question_pool_items: {
     id: string;
@@ -221,7 +221,7 @@ function mapQuestionRow(row: QuestionRow): BuilderQuestion | null {
           ? mapFitbRow(row)
           : null;
   if (!mapped) return null; // unsupported or broken row
-  return { ...mapped, sectionId: row.section_id ?? null }; // which section it sits in, if any
+  return { ...mapped, sectionId: row.section_id ?? null, sourceBankQuestionId: row.source_bank_question_id ?? undefined };
 }
 
 // fetches one exam and all of its questions, ready for the builder screen
@@ -245,16 +245,19 @@ export async function getExamById(examId: string): Promise<ExamBuilderData> {
   const bankIds = [...new Set(row.exam_question_pools.flatMap((pool) =>
     pool.exam_question_pool_items.filter((item) => item.question_bank !== null).map((item) => item.question_bank_id)))];
   const poolTopics = new Map<string, { id: string; name: string }[]>();
-  if (bankIds.length > 0) {
-    const { data: links, error: poolTopicError } = await supabase.from("bank_question_topics")
-      .select("bank_question_id,subject_topics(id,name)").in("bank_question_id", bankIds);
+  const topicBatchSize = 100;
+  for (let offset = 0; offset < bankIds.length; offset += topicBatchSize) {
+    const { data: bankRows, error: poolTopicError } = await supabase.from("question_bank")
+      .select("id,bank_question_topics(subject_topics(id,name))")
+      .in("id", bankIds.slice(offset, offset + topicBatchSize));
     if (poolTopicError) throw poolTopicError;
-    for (const link of links ?? []) {
-      const topic = link.subject_topics as unknown as { id: string; name: string } | null;
-      if (!topic) throw new Error("Topic details could not be loaded for a pool question. Try again.");
-      const topics = poolTopics.get(link.bank_question_id) ?? [];
-      topics.push(topic);
-      poolTopics.set(link.bank_question_id, topics);
+    for (const bankRow of bankRows ?? []) {
+      const links = bankRow.bank_question_topics as unknown as { subject_topics: { id: string; name: string } | null }[];
+      const topics = links.map(({ subject_topics }) => {
+        if (!subject_topics) throw new Error("Topic details could not be loaded for a pool question. Try again.");
+        return subject_topics;
+      });
+      poolTopics.set(bankRow.id, topics);
     }
   }
 
@@ -280,7 +283,6 @@ function mapPoolRow(row: PoolRow, topics: Map<string, { id: string; name: string
     id: row.id,
     title: row.title ?? "",
     pickCount: row.pick_count,
-    pointsPerQuestion: row.points_per_question,
     sectionId: row.section_id ?? null,
     items: row.exam_question_pool_items.map((item) => ({
       bankQuestionId: item.question_bank_id,
@@ -346,13 +348,14 @@ export async function savePools(
   examId: string,
   pools: BuilderPool[],
   questionCount: number,
+  preserveLivePoolPoints = false,
 ): Promise<void> {
   pools.forEach((pool) => {
     const name = pool.title.trim() || "Untitled pool";
     if (pool.items.length === 0) {
       throw new Error(`"${name}" has no questions. Add some, or delete the pool.`);
     }
-    if (pool.pickCount < 1 || pool.pickCount > pool.items.length) {
+    if (!Number.isInteger(pool.pickCount) || pool.pickCount < 1 || pool.pickCount > pool.items.length) {
       throw new Error(`"${name}" picks ${pool.pickCount} but only has ${pool.items.length} questions.`);
     }
   });
@@ -390,18 +393,27 @@ export async function savePools(
       title: pool.title.trim() || null,
       pick_count: pool.pickCount,
       order_index: questionCount + index,
-      points_per_question: pool.pointsPerQuestion,
+      // A live exam's existing point values are part of its delivery settings.
+      ...(!preserveLivePoolPoints ? { points_per_question: null } : {}),
       // only written when the builder knows the section, so other callers can't wipe it
       ...(pool.sectionId !== undefined ? { section_id: pool.sectionId } : {}),
     })),
   );
   if (upsertError) throw upsertError;
 
-  const { data: existingItems, error: itemsError } = await supabase
-    .from("exam_question_pool_items")
-    .select("id, pool_id, question_bank_id")
-    .in("pool_id", pools.map((p) => p.id));
-  if (itemsError) throw itemsError;
+  const poolIds = pools.map((pool) => pool.id);
+  const existingItems: { id: string; pool_id: string; question_bank_id: string }[] = [];
+  const itemBatchSize = 200;
+  for (let offset = 0; ; offset += itemBatchSize) {
+    const { data, error } = await supabase.from("exam_question_pool_items")
+      .select("id, pool_id, question_bank_id")
+      .in("pool_id", poolIds)
+      .order("id")
+      .range(offset, offset + itemBatchSize - 1);
+    if (error) throw error;
+    existingItems.push(...data);
+    if (data.length < itemBatchSize) break;
+  }
 
   const idsToDelete: string[] = [];
   const rowsToInsert: { pool_id: string; question_bank_id: string }[] = [];
@@ -409,7 +421,7 @@ export async function savePools(
   pools.forEach((pool) => {
     const wanted = new Set(pool.items.map((i) => i.bankQuestionId));
     const have = new Set<string>();
-    (existingItems ?? [])
+    existingItems
       .filter((row) => row.pool_id === pool.id)
       .forEach((row) => {
         if (wanted.has(row.question_bank_id)) have.add(row.question_bank_id);
@@ -420,8 +432,9 @@ export async function savePools(
       .forEach((item) => rowsToInsert.push({ pool_id: pool.id, question_bank_id: item.bankQuestionId }));
   });
 
-  if (idsToDelete.length > 0) {
-    const { error } = await supabase.from("exam_question_pool_items").delete().in("id", idsToDelete);
+  for (let offset = 0; offset < idsToDelete.length; offset += itemBatchSize) {
+    const { error } = await supabase.from("exam_question_pool_items").delete()
+      .in("id", idsToDelete.slice(offset, offset + itemBatchSize));
     if (error) throw error;
   }
   if (rowsToInsert.length > 0) {

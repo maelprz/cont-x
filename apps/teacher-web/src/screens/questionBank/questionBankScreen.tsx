@@ -95,11 +95,10 @@ export function QuestionBankScreen() {
 
   useEffect(() => () => { openRequest.current += 1; }, []);
 
-  const visibleQuestions = questions.filter((question) => question.isOwn ? question.subjectId === selectedSubject?.id : includeShared);
-  const topicOptions = [...new Map(visibleQuestions.flatMap((question) => question.topics).map((topic) => [topic.id, topic])).values()]
+  const topicOptions = [...new Map(questions.flatMap((question) => question.topics).map((topic) => [topic.id, topic])).values()]
     .sort((a, b) => a.name.localeCompare(b.name));
   const query = search.trim().toLowerCase();
-  const filteredQuestions = visibleQuestions.filter((question) =>
+  const filteredQuestions = questions.filter((question) =>
     question.title.toLowerCase().includes(query) &&
     (typeFilter === "all" || question.type === typeFilter) &&
     (!topicId || question.topics.some((topic) => topic.id === topicId)),

@@ -47,6 +47,7 @@ function SummaryCard({ label, value, subtext }: ExamSummaryCard) {
 
 export function DashboardScreen({}: DashboardScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const hasBackgroundSave = useExamBuilderStore((state) => state.backgroundSave !== null);
   const setCurrentExamId = useExamBuilderStore(
     (state) => state.setCurrentExamId,
   );
@@ -219,10 +220,11 @@ export function DashboardScreen({}: DashboardScreenProps) {
                       </td>
                       <td className="py-3.5 px-5">
                         <button
+                          disabled={exam.status === "draft" && hasBackgroundSave}
                           onClick={() =>
                             openExam(exam.id, exam.status, exam.subjectId)
                           }
-                          className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80"
+                          className="text-xs px-3 py-1 rounded-lg border cursor-pointer hover:opacity-80 disabled:cursor-not-allowed disabled:opacity-50"
                           style={{
                             borderColor: "var(--color-base-300)",
                             color: "var(--color-base-content)",

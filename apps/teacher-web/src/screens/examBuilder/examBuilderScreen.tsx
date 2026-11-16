@@ -47,6 +47,7 @@ import { ExamConfirmDialog, examPrimary, examSecondary } from "../../components/
 import { useExamLibraryStore } from "../../store/useExamLibraryStore";
 
 export function ExamBuilderScreen({
+  visible = true,
   questions: externalQuestions,
   activeQuestionId: externalActiveId,
   onSelectQuestion,
@@ -163,6 +164,7 @@ export function ExamBuilderScreen({
 
   // guard against leaving the screen with unsaved changes, both via in-app navigation and browser refresh/close
   useEffect(() => {
+    if (!visible) return;
     if (!hasUnsavedChanges && !saveAction) {
       setNavigationGuard(null); // nothing to protect, let navigation happen freely
       return;
@@ -175,7 +177,7 @@ export function ExamBuilderScreen({
     });
 
     return () => setNavigationGuard(null); // always clear on unmount or before the next effect run
-  }, [hasUnsavedChanges, saveAction, setNavigationGuard]);
+  }, [visible, hasUnsavedChanges, saveAction, setNavigationGuard]);
 
   useEffect(() => {
     const handler = (e: BeforeUnloadEvent) => {
@@ -393,7 +395,6 @@ export function ExamBuilderScreen({
         id: crypto.randomUUID(),
         title: `Pool ${pools.length + 1}`,
         pickCount: target.pickCount,
-        pointsPerQuestion: null,
         sectionId,
         items,
       };
@@ -563,27 +564,34 @@ export function ExamBuilderScreen({
         throw new Error("This exam now has student attempts. Reopen the Builder to keep the section and its questions.");
       }
       await saveSections(examData.id, sections); // before questions and pools, which point at them
+      const persistedQuestions: BuilderQuestion[] = [];
       for (const q of questions) {
+        let question = q;
         if (pendingBankSaveIds.has(q.id) && teacherId && examData.subjectId) {
           // Retries use the same bank ID so they can update the copy without duplicating it.
-          await saveBankQuestion(teacherId, examData.subjectId, { ...q, id: bankIdFor(q.id) });
+          const bankId = bankIdFor(q.id);
+          await saveBankQuestion(teacherId, examData.subjectId, { ...q, id: bankId });
+          question = { ...q, sourceBankQuestionId: bankId };
         }
-        await persistExamQuestion(examData.id, q); // upserts this question into the exam
-        setSavedQuestions((prev) => prev.some((saved) => saved.id === q.id)
-          ? prev.map((saved) => saved.id === q.id ? q : saved)
-          : [...prev, q]);
+        await persistExamQuestion(examData.id, question);
+        persistedQuestions.push(question);
+        setSavedQuestions((prev) => prev.some((saved) => saved.id === question.id)
+          ? prev.map((saved) => saved.id === question.id ? question : saved)
+          : [...prev, question]);
       }
-      await savePools(examData.id, pools, questions.length); // random pools sit after the questions
+      await savePools(examData.id, pools, questions.length, openedFromEditExam);
       if (removedSectionContents) await deleteSectionQuestions(examData.id, removedSectionContents.questionIds);
       await deleteRemovedSections(examData.id, sections); // after everything has moved out of them
-      setSavedQuestions(questions);
+      setQuestions(persistedQuestions);
+      setSavedQuestions(persistedQuestions);
       setSavedPools(pools);
       setSavedSections(sections);
       setRemovedSectionContents(null);
       setPendingBankSaveIds((prev) => new Set([...prev].filter((id) => !questions.some((question) => question.id === id))));
       return null;
     } catch (err) {
-      const message = err instanceof Error ? err.message : "Could not save all questions.";
+      const message = err && typeof err === "object" && "message" in err
+        ? String(err.message) : "Could not save all questions.";
       setSaveAllError(message);
       return message;
     }
@@ -592,7 +600,7 @@ export function ExamBuilderScreen({
   const { saveDraft, saveExam } = useUpdateExamStatus();
 
   const handleSave = async (action: "draft" | "exam" | "leave") => {
-    if (saving.current || isDeleting || !examData?.id) return;
+    if (saving.current || isDeleting || !examData?.id || !teacherId) return;
     const destination = action === "leave" ? pendingLeaveScreen : "examLibrary";
     if (!destination) return;
 
@@ -601,26 +609,45 @@ export function ExamBuilderScreen({
     setLeaveSaveError(null);
     setStatusError(null);
     setSaveAllError(null);
+    const saveAsExam = action === "exam" || (action === "leave" && isAlreadySaved);
+    const { setBackgroundSave } = useExamBuilderStore.getState();
+    const save = {
+      examId: examData.id,
+      teacherId,
+      status: "saving" as const,
+      message: saveAsExam ? "Saving exam…" : "Saving draft…",
+    };
     try {
       if (!(await confirmRescaleIfNeeded(questions))) return;
+      if (useAuthStore.getState().user?.id !== teacherId) return;
+      if (destination === "examLibrary") setLibrarySubject(examData.subjectId);
+      setPendingLeaveScreen(null);
+      setBackgroundSave(save);
+      setNavigationGuard(null);
+      forceNavigateTo(destination);
+
       const saveProblem = await persistAllQuestions();
       if (saveProblem) throw new Error(saveProblem);
+      if (useExamBuilderStore.getState().backgroundSave !== save) return;
 
-      const saveAsExam = action === "exam" || (action === "leave" && isAlreadySaved);
       const statusProblem = await (saveAsExam ? saveExam(examData.id) : saveDraft(examData.id));
       if (statusProblem) {
         setStatusError(statusProblem);
         throw new Error(statusProblem);
       }
 
-      showToast(saveAsExam ? (openedFromEditExam ? "Exam updated." : "Exam saved.") : "Draft saved.", "success");
-      if (destination === "examLibrary") setLibrarySubject(examData.subjectId);
-      setNavigationGuard(null);
-      forceNavigateTo(destination);
+      if (useExamBuilderStore.getState().backgroundSave === save) {
+        setBackgroundSave(null);
+        showToast(saveAsExam ? (openedFromEditExam ? "Exam updated." : "Exam saved.") : "Draft saved.", "success");
+      }
     } catch (error) {
       const message = error instanceof Error ? error.message : "Could not save the exam. Try again.";
-      if (action === "leave") setLeaveSaveError(message);
-      showToast(message, "error");
+      if (useExamBuilderStore.getState().backgroundSave === save) {
+        setBackgroundSave({ ...save, status: "error", message: `${saveAsExam ? "Exam" : "Draft"} could not be saved. ${message}` });
+      } else if (useAuthStore.getState().user?.id === teacherId) {
+        if (action === "leave") setLeaveSaveError(message);
+        showToast(message, "error");
+      }
     } finally {
       saving.current = false;
       setSaveAction(null);
@@ -715,20 +742,22 @@ export function ExamBuilderScreen({
       </div>
 
       {/* Overlays */}
-      <QuestionBankModal
-        isOpen={showQuestionBankModal}
-        subjectId={examData?.subjectId ?? null}
-        startingNumber={questions.length}
-        pools={pools}
-        defaultPoolId={poolModalTargetId}
-        onClose={() => {
-          setShowQuestionBankModal(false);
-          setPoolModalTargetId(null);
-        }}
-        onQuestionsAdded={handleQuestionsAddedFromBank}
-        onPoolItemsAdded={handlePoolItemsAdded}
-        onCreateNewQuestion={handleCreateNewQuestionFromModal}
-      />
+      {showQuestionBankModal && (
+        <QuestionBankModal
+          subjectId={examData?.subjectId ?? null}
+          startingNumber={questions.length}
+          examQuestions={questions}
+          pools={pools}
+          defaultPoolId={poolModalTargetId}
+          onClose={() => {
+            setShowQuestionBankModal(false);
+            setPoolModalTargetId(null);
+          }}
+          onQuestionsAdded={handleQuestionsAddedFromBank}
+          onPoolItemsAdded={handlePoolItemsAdded}
+          onCreateNewQuestion={handleCreateNewQuestionFromModal}
+        />
+      )}
       
       <ExamConfirmDialog
         isOpen={Boolean(sectionPendingRemoval)}

@@ -1,9 +1,7 @@
 import { Trash2, Plus, CircleDot, Code2, TextCursorInput, X } from "lucide-react";
 import type { BuilderPool } from "../../screens/examBuilder/examBuilderScreen.types";
 
-// Edits one random pool: how many questions students get, optional fixed
-// points, and which bank questions are in the running. The questions
-// themselves aren't edited here — they stay in the question bank.
+// Edits how many questions students draw and which bank questions they can draw.
 export function PoolEditorPanel({
   pool,
   readOnly,
@@ -19,7 +17,6 @@ export function PoolEditorPanel({
 }) {
   const itemCount = pool.items.length;
   const pointValues = new Set(pool.items.map((item) => item.points));
-  const hasMixedPoints = pool.pointsPerQuestion === null && pointValues.size > 1;
 
   const inputClass =
     "px-3 py-2 rounded-lg border text-[13px] outline-none bg-[var(--color-base-200)] border-[var(--color-base-300)] text-[var(--color-base-content)] disabled:opacity-60";
@@ -44,55 +41,30 @@ export function PoolEditorPanel({
         />
       </div>
 
-      <div className="flex items-end gap-6 flex-wrap">
-        <div>
-          <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
-            Questions each student gets
-          </label>
-          <div className="flex items-center gap-2">
-            <input
-              type="number"
-              min={1}
-              max={Math.max(itemCount, 1)}
-              value={pool.pickCount}
-              disabled={readOnly}
-              onChange={(e) =>
-                onChange({
-                  ...pool,
-                  pickCount: Math.min(Math.max(1, Number(e.target.value) || 1), Math.max(itemCount, 1)),
-                })
-              }
-              className={`w-20 ${inputClass}`}
-            />
-            <span className="text-[13px] opacity-70 text-[var(--color-base-content)]">of {itemCount}</span>
-          </div>
-        </div>
-
-        <div>
-          <label className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
-            Points per question <span style={{ opacity: 0.5, fontWeight: 400 }}>(optional)</span>
-          </label>
+      <label className="w-fit text-[13px] font-medium text-[var(--color-base-content)]">
+        Questions each student gets
+        <span className="mt-2 flex items-center gap-2">
           <input
             type="number"
-            min={0}
-            value={pool.pointsPerQuestion ?? ""}
+            min={1}
+            max={Math.max(itemCount, 1)}
+            value={pool.pickCount}
             disabled={readOnly}
             onChange={(e) =>
               onChange({
                 ...pool,
-                pointsPerQuestion: e.target.value === "" ? null : Math.max(0, Number(e.target.value)),
+                pickCount: Math.min(Math.max(1, Math.trunc(Number(e.target.value)) || 1), Math.max(itemCount, 1)),
               })
             }
-            placeholder="Keep each question's own"
-            className={`w-52 ${inputClass}`}
+            className={`w-20 ${inputClass}`}
           />
-        </div>
-      </div>
+          <span className="font-normal opacity-70">of {itemCount}</span>
+        </span>
+      </label>
 
-      {hasMixedPoints && (
+      {!readOnly && pool.pickCount < itemCount && pointValues.size > 1 && (
         <p className="text-[12px] px-3 py-2 rounded-lg border border-[var(--color-base-300)] text-[var(--color-base-content)]">
-          These questions are worth different points, so students' totals will vary depending on which
-          ones they get. Set points per question to keep totals equal.
+          This pool has questions worth different points. The total can vary depending on which questions a student draws.
         </p>
       )}
 
@@ -107,7 +79,7 @@ export function PoolEditorPanel({
               className="flex items-center gap-1.5 px-3 py-1.5 rounded-lg text-[12px] font-semibold cursor-pointer border-none transition-opacity hover:opacity-90 bg-[var(--color-primary)] text-[var(--color-primary-content)]"
             >
               <Plus size={13} />
-              Add from bank
+              Add by type and topic
             </button>
           )}
         </div>

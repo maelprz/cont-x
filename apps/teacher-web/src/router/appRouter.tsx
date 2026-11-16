@@ -19,6 +19,7 @@ import { StudentMonitoringScreen } from "../screens/studentMonitoring/studentMon
 
 import { Toast } from "../components/shared/toast";
 import { useToastStore } from "../store/useToastStore";
+import { useExamBuilderStore } from "../store/useExamBuilderStore";
 import { ExamResultsScreen } from "../screens/examResult/examResultsScreen";
 import { ExamResultsListScreen } from "../screens/examResult/examResultListScreen";
 
@@ -47,6 +48,15 @@ export function AppRouter() {
 
   const toast = useToastStore((state) => state.toast);
   const dismissToast = useToastStore((state) => state.dismissToast);
+  const backgroundSave = useExamBuilderStore((state) => state.backgroundSave);
+  const isBuilderVisible = currentScreen === "examBuilder";
+  const activeSave = backgroundSave?.teacherId === user?.id ? backgroundSave : null;
+
+  useEffect(() => {
+    if (isBuilderVisible && activeSave?.status === "error") {
+      useExamBuilderStore.getState().setBackgroundSave(null);
+    }
+  }, [isBuilderVisible, activeSave]);
 
   useEffect(() => {
     async function checkSession() { // changed: restores the saved session instead of ending it
@@ -124,8 +134,18 @@ export function AppRouter() {
 
   return (
     <>
-      <ScreenComponent />
-      <Toast toast={toast} onDismiss={dismissToast} />
+      {!isBuilderVisible && <ScreenComponent />}
+      {user && (isBuilderVisible || activeSave) && (
+        <div hidden={!isBuilderVisible}>
+          <ExamBuilderScreen visible={isBuilderVisible} />
+        </div>
+      )}
+      <Toast toast={activeSave?.status === "saving" ? { type: "loading", message: activeSave.message }
+        : activeSave?.status === "error" && !isBuilderVisible ? {
+          type: "error",
+          message: activeSave.message,
+          action: { label: "Return to editor", run: () => navigateTo("examBuilder") },
+        } : toast} onDismiss={dismissToast} />
     </>
   );
 }

@@ -60,6 +60,8 @@ type QuestionBankRow = {
   bank_question_topics: { topic_id: string; subject_topics: TopicSummary | null }[];
 };
 
+type BankSummaryRow = Omit<QuestionBankRow, "mcq_bank_question" | "fitb_bank_question" | "coding_bank_question">;
+
 // the lightweight shape the table row needs, not the full editable question
 export interface BankQuestionSummary {
   id: string;
@@ -135,7 +137,7 @@ function mapBankRowToBuilderQuestion(row: QuestionBankRow): BuilderQuestion | nu
 }
 
 // turns a raw bank row into the summary shape the table needs
-function getBankTopics(row: QuestionBankRow): TopicSummary[] {
+function getBankTopics(row: BankSummaryRow): TopicSummary[] {
   const links = row.bank_question_topics ?? [];
   if (links.some((link) => !link.subject_topics)) {
     throw new Error("Topic details could not be loaded. Refresh the question bank and try again.");
@@ -143,7 +145,7 @@ function getBankTopics(row: QuestionBankRow): TopicSummary[] {
   return links.map((link) => link.subject_topics!);
 }
 
-function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuestionSummary {
+function mapBankRowToSummary(row: BankSummaryRow, viewerId: string): BankQuestionSummary {
   return {
     id: row.id,
     subjectId: row.subject_id,
@@ -166,8 +168,7 @@ function mapBankRowToSummary(row: QuestionBankRow, viewerId: string): BankQuesti
   };
 }
 
-// shared select string, reused by both the list and single-question fetch
-const BANK_SELECT = `
+const BANK_SUMMARY_SELECT = `
   id,
   teacher_id,
   subject_id,
@@ -176,6 +177,11 @@ const BANK_SELECT = `
   prompt,
   max_points,
   created_at,
+  bank_question_topics (topic_id, subject_topics(id, name))
+`;
+
+const BANK_SELECT = `
+  ${BANK_SUMMARY_SELECT},
   mcq_bank_question (
     mcq_bank_option ( id, option_text, is_correct )
   ),
@@ -191,24 +197,38 @@ const BANK_SELECT = `
     check_penalty_per_attempt,
     reference_solution,
     test_case_bank ( id, input, expected_output, is_hidden )
-  ),
-  bank_question_topics (topic_id, subject_topics(id, name))
+  )
 `;
 
-// fetches all bank questions a teacher can see for one subject, newest first
+// Both bank views show the teacher's questions for the selected subject and,
+// when requested, shared questions from colleagues that RLS allows them to read.
 export async function getQuestionBank(
   teacherId: string,
   subjectId: string,
   includeShared = false,
 ): Promise<BankQuestionSummary[]> {
-  let query = supabase.from("question_bank").select(BANK_SELECT);
-  if (!includeShared) query = query.eq("subject_id", subjectId);
+  const batchSize = 500;
+  const questions: BankQuestionSummary[] = [];
 
-  const { data, error } = await query.order("created_at", { ascending: false }); // newest first
+  for (let offset = 0; ; offset += batchSize) {
+    const query = supabase.from("question_bank").select(BANK_SUMMARY_SELECT);
+    if (includeShared) {
+      query.or(`and(teacher_id.eq.${teacherId},subject_id.eq.${subjectId}),teacher_id.neq.${teacherId}`);
+    } else {
+      query.eq("teacher_id", teacherId).eq("subject_id", subjectId);
+    }
 
-  if (error) throw error; // let the hook decide how to show this error
+    const { data, error } = await query
+      .order("created_at", { ascending: false })
+      .order("id")
+      .range(offset, offset + batchSize - 1);
+    if (error) throw error;
 
-  return (data as unknown as QuestionBankRow[]).map((row) => mapBankRowToSummary(row, teacherId));
+    for (const row of data as unknown as BankSummaryRow[]) {
+      questions.push(mapBankRowToSummary(row, teacherId));
+    }
+    if (data.length < batchSize) return questions;
+  }
 }
 
 // question counts per subject for the sub-bank tiles: everything the teacher
