@@ -53,6 +53,7 @@ export function ExamLibraryScreen() {
   const { createExam, isCreating, error: createError } = useCreateExam();
   const setCurrentExamId = useExamBuilderStore((state) => state.setCurrentExamId);
   const setOpenedFromEditExam = useExamBuilderStore((state) => state.setOpenedFromEditExam);
+  const backgroundSave = useExamBuilderStore((state) => state.backgroundSave);
   const setCurrentClassExamIdResult = useExamResultsStore((state) => state.setCurrentClassExamId);
   const setCurrentClassExamIdViolation = useViolationMonitoringStore((state) => state.setCurrentClassExamId);
 
@@ -174,6 +175,7 @@ export function ExamLibraryScreen() {
     (exam.title.toLowerCase().includes(query) || exam.code.toLowerCase().includes(query)),
   );
   const selectedExam = filtered.find((exam) => exam.id === selectedExamId) ?? filtered[0];
+  const selectedExamIsSaving = !!backgroundSave && selectedExam?.id === backgroundSave.examId;
   const selectedExamSubject = subjects.find((subject) => subject.id === selectedExam?.subjectId);
   const canCreate = selectedSubject ? selectedSubject.isAssigned : subjects.some((subject) => subject.isAssigned);
   const isLoading = isLoadingSubjects || isLoadingExams;
@@ -192,7 +194,7 @@ export function ExamLibraryScreen() {
               <input aria-label="Search exams" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title or code" className={`${examField} pl-9`} />
             </label>
             {canCreate && (
-              <button type="button" className={`${examPrimary} ml-auto shrink-0`} onClick={() => setIsCreateModalOpen(true)}>
+              <button type="button" className={`${examPrimary} ml-auto shrink-0`} disabled={!!backgroundSave} onClick={() => setIsCreateModalOpen(true)}>
                 <Plus size={16} aria-hidden="true" /> New exam
               </button>
             )}
@@ -275,17 +277,17 @@ export function ExamLibraryScreen() {
                     </div>
                   )}
                   <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-base-300)] pt-4">
-                    <button type="button" className={examPrimary} disabled={isProcessing} onClick={() => handleCardCta(selectedExam.id, selectedExam.status, selectedExam.classAttachments.length > 0)}>
+                    <button type="button" className={examPrimary} disabled={isProcessing || selectedExamIsSaving || (selectedExam.status === "draft" && !!backgroundSave)} onClick={() => handleCardCta(selectedExam.id, selectedExam.status, selectedExam.classAttachments.length > 0)}>
                       {selectedExam.status === "draft" ? "Continue Building" : selectedExam.classAttachments.length ? "Manage Classes" : "Add to a class"}
                       <ArrowRight size={16} aria-hidden="true" />
                     </button>
-                    {selectedExam.status === "saved" && <button type="button" className={examSecondary} disabled={isProcessing} onClick={() => {
+                    {selectedExam.status === "saved" && <button type="button" className={examSecondary} disabled={isProcessing || !!backgroundSave} onClick={() => {
                       setCurrentExamId(selectedExam.id);
                       setOpenedFromEditExam(selectedExam.classAttachments.some((item) => item.status === "active"));
                       navigateTo("examBuilder");
                     }}>Edit Exam</button>}
                     {selectedExam.classAttachments.length === 0 && (
-                      <button type="button" className={`${examSecondary} text-red-700 hover:bg-red-50`} disabled={isProcessing} onClick={() => requestDelete(selectedExam.id)}>
+                      <button type="button" className={`${examSecondary} text-red-700 hover:bg-red-50`} disabled={isProcessing || selectedExamIsSaving} onClick={() => requestDelete(selectedExam.id)}>
                         <Trash2 size={15} aria-hidden="true" /> Delete Exam
                       </button>
                     )}

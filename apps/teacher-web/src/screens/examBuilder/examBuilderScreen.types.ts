@@ -23,7 +23,7 @@ interface BaseBuilderQuestion {
   description: string; // markdown
   sectionId?: string | null; // the exam section this question sits in; null/absent = no sections used
   topicIds?: string[]; // legacy questions may need classification before their next save/publish
-  sourceBankQuestionId?: string; // authorizes the original topics on a new independent exam copy
+  sourceBankQuestionId?: string; // identifies the bank original and authorizes its topics on a new copy
 }
 
 export interface MCQBuilderQuestion extends BaseBuilderQuestion {
@@ -75,8 +75,6 @@ export interface BuilderPool {
   id: string;
   title: string;
   pickCount: number;
-  // null = every question keeps its own points; a number forces them all to that value
-  pointsPerQuestion: number | null;
   items: PoolItem[];
   sectionId?: string | null; // the exam section this pool sits in; null/absent = no sections used
 }
@@ -88,6 +86,7 @@ export interface BuilderSection {
 }
 
 export interface ExamBuilderScreenProps {
+  visible?: boolean;
   examCode?: string;
   questions?: BuilderQuestion[];
   activeQuestionId?: string;
