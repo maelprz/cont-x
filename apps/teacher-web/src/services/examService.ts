@@ -14,11 +14,14 @@ type ExamRow = {
   description: string | null;
   status: ExamStatus; // 'draft' | 'saved'
   created_at: string;
+  subjects: { name: string } | null;
   questions: { count: number }[]; // count from questions table
   exam_question_pools: { pick_count: number }[]; // each pool adds pick_count questions to a student's exam
   class_exams: {
     id: string;
     status: ClassExamStatus;
+    starts_at: string | null;
+    ended_at: string | null;
     classes: { id: string; name: string; class_students: { count: number }[] } | null;
   }[];
 };
@@ -37,12 +40,15 @@ function mapExamRowToCard(row: ExamRow): ExamCard {
     classId: ce.classes?.id ?? "",
     className: ce.classes?.name ?? "Unknown class",
     status: ce.status,
+    startsAt: ce.starts_at,
+    endedAt: ce.ended_at,
     studentCount: ce.classes?.class_students[0]?.count ?? 0, // students enrolled in the class
   }));
 
   return {
     id: row.id,
     subjectId: row.subject_id,
+    subjectName: row.subjects?.name ?? null,
     code: row.exam_code,
     title: row.title,
     description: row.description ?? "", // fallback if description is empty
@@ -77,11 +83,14 @@ export async function getExamsByTeacherId(
       description,
       status,
       created_at,
+      subjects(name),
       questions(count),
       exam_question_pools(pick_count),
       class_exams(
         id,
         status,
+        starts_at,
+        ended_at,
         classes(id, name, class_students(count))
       )
     `,
@@ -92,17 +101,6 @@ export async function getExamsByTeacherId(
   if (error) throw error; // let the hook decide how to show this error
 
   return (data as unknown as ExamRow[]).map(mapExamRowToCard);
-}
-
-// how many different students are enrolled in this teacher's active classes
-export async function getTeacherStudentCount(teacherId: string): Promise<number> {
-  const { data, error } = await supabase
-    .from("class_students")
-    .select("student_id, classes!inner(teacher_id, archived_at)")
-    .eq("classes.teacher_id", teacherId)
-    .is("classes.archived_at", null);
-  if (error) throw error;
-  return new Set((data ?? []).map((row) => row.student_id)).size; // a student in two classes counts once
 }
 
 // don't let a teacher delete an exam that's attached to any class

@@ -4,6 +4,8 @@ import { persist, createJSONStorage } from "zustand/middleware"; // browser stor
 interface ExamLibraryState {
   selectedSubjectId: string | null;
   setSelectedSubjectId: (id: string | null) => void;
+  requestedManagementExamId: string | null;
+  requestClassManagement: (examId: string | null) => void;
 }
 
 export const useExamLibraryStore = create<ExamLibraryState>()(
@@ -11,6 +13,8 @@ export const useExamLibraryStore = create<ExamLibraryState>()(
     (set) => ({
       selectedSubjectId: null, // null means the subject list is showing
       setSelectedSubjectId: (id: string | null) => set({ selectedSubjectId: id }), // open or close a subject
+      requestedManagementExamId: null,
+      requestClassManagement: (requestedManagementExamId) => set({ requestedManagementExamId }),
     }),
     {
       name: "contx-exam-library", // sessionStorage key

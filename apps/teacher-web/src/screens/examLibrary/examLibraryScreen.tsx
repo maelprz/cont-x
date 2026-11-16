@@ -1,8 +1,9 @@
-import { useRef, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowRight, FileText, Plus, Search, Trash2, Users } from "lucide-react";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { ExamSubjectFilter } from "../../components/examLibrary/examSubjectFilter";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
+import { ExamStatusFilter, type ExamStatusFilters } from "../../components/examLibrary/examStatusFilter";
 import { ClassExamStatusBadge, StatusBadge } from "../../components/examLibrary/statusBadge";
 import { ExamConfirmDialog, examField, examPrimary, examSecondary } from "../../components/examLibrary/examDialog";
 import { PublishSuccessOverlay } from "../../components/examLibrary/publishSuccessOverlay";
@@ -23,14 +24,18 @@ import { useExamLibraryStore } from "../../store/useExamLibraryStore";
 import type { NewExamSettings } from "../../services/examBuilderService";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // sets which class exam Violation Monitoring shows
+import type { ClassExamStatus } from "./examLibraryScreen.types";
 
 type ConfirmAction =
   | { type: "endClassExam"; classExamId: string }
   | { type: "deleteExam"; examId: string };
 
 export function ExamLibraryScreen() {
+  const requestedExamId = useExamLibraryStore((state) => state.requestedManagementExamId);
+  const requestClassManagement = useExamLibraryStore((state) => state.requestClassManagement);
   const [search, setSearch] = useState("");
-  const [selectedExamId, setSelectedExamId] = useState<string | null>(null);
+  const [statusFilters, setStatusFilters] = useState<ExamStatusFilters>({ authoring: [], delivery: [] });
+  const [selectedExamId, setSelectedExamId] = useState(requestedExamId);
   const detailsRef = useRef<HTMLElement>(null);
 
   const navigateTo = useRouterLogic((state) => state.navigateTo);
@@ -73,13 +78,17 @@ export function ExamLibraryScreen() {
   const [publishedCodes, setPublishedCodes] = useState<{ examCode: string; sessionCode: string; reopenedUntil?: string } | null>(null);
   const [reopenTarget, setReopenTarget] = useState<{ classExamId: string; examCode: string } | null>(null);
   const [settingsClassExamId, setSettingsClassExamId] = useState<string | null>(null);
-  const [manageClassesExamId, setManageClassesExamId] = useState<string | null>(null);
+  const [manageClassesExamId, setManageClassesExamId] = useState(requestedExamId);
   const [attachClassExamId, setAttachClassExamId] = useState<string | null>(null);
 
   // exam awaiting a session code before its class attachment can go active
   const [activateTarget, setActivateTarget] = useState<{ classExamId: string; examCode: string } | null>(null);
 
   const manageClassesExam = exams.find((e) => e.id === manageClassesExamId) ?? null;
+
+  useEffect(() => {
+    if (requestedExamId) requestClassManagement(null);
+  }, [requestedExamId, requestClassManagement]);
 
   const handleCreateExam = async (settings: NewExamSettings) => {
     const newExamId = await createExam(settings);
@@ -170,8 +179,12 @@ export function ExamLibraryScreen() {
   };
 
   const query = search.trim().toLowerCase();
+  const hasStatusFilters = statusFilters.authoring.length > 0 || statusFilters.delivery.length > 0;
+  const visibleDeliveryStatuses: ClassExamStatus[] = statusFilters.delivery.length ? statusFilters.delivery : ["active"];
   const filtered = exams.filter((exam) =>
     (!selectedSubjectId || exam.subjectId === selectedSubjectId) &&
+    (statusFilters.authoring.length === 0 || statusFilters.authoring.includes(exam.status)) &&
+    (statusFilters.delivery.length === 0 || exam.classAttachments.some((attachment) => statusFilters.delivery.includes(attachment.status))) &&
     (exam.title.toLowerCase().includes(query) || exam.code.toLowerCase().includes(query)),
   );
   const selectedExam = filtered.find((exam) => exam.id === selectedExamId) ?? filtered[0];
@@ -193,6 +206,7 @@ export function ExamLibraryScreen() {
               <Search size={15} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-500" />
               <input aria-label="Search exams" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title or code" className={`${examField} pl-9`} />
             </label>
+            <ExamStatusFilter value={statusFilters} onChange={setStatusFilters} />
             {canCreate && (
               <button type="button" className={`${examPrimary} ml-auto shrink-0`} disabled={!!backgroundSave} onClick={() => setIsCreateModalOpen(true)}>
                 <Plus size={16} aria-hidden="true" /> New exam
@@ -209,7 +223,7 @@ export function ExamLibraryScreen() {
                     <ul className="divide-y divide-stone-200">
                       {filtered.map((exam) => {
                         const subject = subjects.find((item) => item.id === exam.subjectId);
-                        const live = exam.classAttachments.some((item) => item.status === "active");
+                        const deliveryStatuses = visibleDeliveryStatuses.filter((status) => exam.classAttachments.some((item) => item.status === status));
                         const selected = selectedExam?.id === exam.id;
                         return (
                           <li key={exam.id} className="py-1">
@@ -223,9 +237,9 @@ export function ExamLibraryScreen() {
                                 <span className="block break-words text-sm font-semibold">{exam.title}</span>
                                 {subject && <span className="mt-1 block text-xs text-stone-600">{subject.name}</span>}
                               </span>
-                              <span className="flex shrink-0 flex-wrap justify-end gap-1">
+                              <span className="flex max-w-[55%] shrink-0 flex-wrap justify-end gap-1">
                                 <StatusBadge status={exam.status} subtle />
-                                {live && <ClassExamStatusBadge status="active" subtle />}
+                                {deliveryStatuses.map((status) => <ClassExamStatusBadge key={status} status={status} subtle />)}
                               </span>
                             </button>
                           </li>
@@ -234,7 +248,7 @@ export function ExamLibraryScreen() {
                     </ul>
                   ) : (
                     <p className="p-3 text-sm text-stone-600">
-                      {query ? `No exams match “${search.trim()}”.` : selectedSubject ? "No exams in this subject yet." : "No exams yet."}
+                      {hasStatusFilters ? "No exams match your filters." : query ? `No exams match “${search.trim()}”.` : selectedSubject ? "No exams in this subject yet." : "No exams yet."}
                     </p>
                   )}
               </div>
