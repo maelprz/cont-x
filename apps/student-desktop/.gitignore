@@ -27,3 +27,5 @@ dist-ssr
 
 electron/native/keyboard-hook/build/
 electron/native/mingw/
+/release/
+/dist-electron/

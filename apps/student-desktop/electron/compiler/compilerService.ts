@@ -1,112 +1,207 @@
+import { app } from 'electron';
 import { spawn, spawnSync } from 'child_process';
-import { writeFileSync, mkdtempSync, rmSync, existsSync, cpSync } from 'fs';
-import { join } from 'path';
+import { writeFileSync, mkdtempSync, rmSync } from 'fs';
+import { join, dirname, delimiter } from 'path';
 import { tmpdir } from 'os';
+import { getRuntimePaths } from '../setup/runtimePaths';
 
-// Result of compiling source code
 export interface CompileResult {
-  success: boolean;        // true if compiled with no errors
-  binaryPath?: string;     // path to compiled exe, only if success
-  stderr: string;          // compiler warnings or errors
+  success: boolean;
+  binaryPath?: string;
+  stderr: string;
 }
 
-// Result of running a compiled binary once
 export interface RunResult {
-  stdout: string;          // what the program printed
-  stderr: string;          // any runtime errors
-  timedOut: boolean;       // true if the program was killed for running too long
-  exitCode: number | null; // process exit code
+  stdout: string;
+  stderr: string;
+  timedOut: boolean;
+  exitCode: number | null;
 }
 
-// Where we keep a space-free copy of the whole mingw folder, once made.
-// os.tmpdir() (e.g. C:\Users\Mel\AppData\Local\Temp) has no spaces in it
-// on a normal Windows install, unlike the project folder itself.
-const MINGW_COPY_DIR = join(tmpdir(), 'contx-mingw-copy');
+const COMPILE_TIMEOUT_MS = 15_000;
+const MAX_OUTPUT_BYTES = 1024 * 1024;
 
-// Makes sure a space-free copy of the mingw folder exists, copying it
-// from the real (possibly space-containing) project path only once.
-// ld.exe internally recomputes its own install prefix from how it was
-// invoked, and chokes on spaces in that path — this sidesteps the
-// problem entirely instead of trying to shorten the original path.
-function ensureMingwCopy(): string {
-  const gccInCopy = join(MINGW_COPY_DIR, 'bin', 'gcc.exe');
-
-  if (existsSync(gccInCopy)) {
-    return gccInCopy; // already copied in a previous run, reuse it
-  }
-
-  const realMingwDir = join(
-    process.env.APP_ROOT ?? '',
-    'electron',
-    'native',
-    'mingw'
+// Find the bundled compiler and expose its DLLs to child processes only.
+function compilerEnvironment() {
+  const { gcc } = getRuntimePaths(
+    app.isPackaged,
+    process.resourcesPath,
+    process.env.APP_ROOT ?? app.getAppPath(),
   );
 
-  cpSync(realMingwDir, MINGW_COPY_DIR, { recursive: true }); // one-time copy
-  return gccInCopy;
+  return {
+    gcc,
+    env: {
+      ...process.env,
+      PATH: [dirname(gcc), process.env.PATH ?? ''].join(delimiter),
+    },
+  };
 }
 
-// Compiles a single C source string into a binary
-// Enforces C11 with all warnings treated as errors
+// Compile in a unique temporary directory without copying MinGW.
 export function compileSource(sourceCode: string): CompileResult {
-  const workDir = mkdtempSync(join(tmpdir(), 'contx-'));
+  const workDir = mkdtempSync(join(tmpdir(), 'contx-submission-'));
   const sourcePath = join(workDir, 'submission.c');
   const binaryPath = join(workDir, 'submission.exe');
 
-  writeFileSync(sourcePath, sourceCode, 'utf-8');
+  try {
+    writeFileSync(sourcePath, sourceCode, 'utf-8');
 
-  const gccPath = ensureMingwCopy(); // space-free path, guaranteed
+    const { gcc, env } = compilerEnvironment();
 
-  const proc = spawnSync(
-    gccPath,
-    ['-std=c11', '-Wall', '-Werror', sourcePath, '-o', binaryPath],
-    { encoding: 'utf-8' }
-  );
+    const proc = spawnSync(
+      gcc,
+      [
+        '-std=c11',
+        '-Wall',
+        '-Werror',
+        'submission.c',
+        '-o',
+        'submission.exe',
+      ],
+      {
+        cwd: workDir,
+        env,
+        encoding: 'utf-8',
+        windowsHide: true,
+        timeout: COMPILE_TIMEOUT_MS,
+        maxBuffer: MAX_OUTPUT_BYTES,
+      },
+    );
 
-  if (proc.status !== 0) {
+    if (proc.error || proc.status !== 0) {
+      const diagnostics = [
+        proc.error?.message,
+        proc.stderr,
+      ].filter(Boolean).join('\n');
+
+      cleanupDir(workDir);
+
+      return {
+        success: false,
+        stderr: diagnostics || 'Compilation failed.',
+      };
+    }
+
+    // The caller cleans this directory after running its test cases.
+    return {
+      success: true,
+      binaryPath,
+      stderr: proc.stderr ?? '',
+    };
+  } catch (error) {
     cleanupDir(workDir);
-    return { success: false, stderr: proc.stderr ?? proc.error?.message ?? '' };
-  }
 
-  return { success: true, binaryPath, stderr: proc.stderr ?? '' };
+    return {
+      success: false,
+      stderr: error instanceof Error ? error.message : String(error),
+    };
+  }
 }
 
-// Runs a compiled binary, feeding it stdin, with a hard timeout
+// Execute a compiled program with bounded output and a time limit.
 export function runBinary(
   binaryPath: string,
   stdinInput: string,
-  timeoutMs: number
+  timeoutMs: number,
 ): Promise<RunResult> {
   return new Promise((resolve) => {
-    const child = spawn(binaryPath);
+    const { env } = compilerEnvironment();
+
+    const child = spawn(binaryPath, [], {
+      cwd: dirname(binaryPath),
+      env,
+      windowsHide: true,
+    });
+
     let stdout = '';
     let stderr = '';
+    let outputBytes = 0;
     let timedOut = false;
+    let outputLimited = false;
+    let finished = false;
+
+    // Use the supplied limit, or five seconds if it is invalid.
+    const executionLimit =
+      Number.isFinite(timeoutMs) &&
+      timeoutMs > 0 &&
+      timeoutMs <= 2_147_483_647
+        ? Math.ceil(timeoutMs)
+        : 5_000;
 
     const timer = setTimeout(() => {
       timedOut = true;
       child.kill();
-    }, timeoutMs);
+    }, executionLimit);
 
-    child.stdout.on('data', (chunk) => {
-      stdout += chunk.toString();
-    });
+    const finish = (exitCode: number | null) => {
+      if (finished) return;
 
-    child.stderr.on('data', (chunk) => {
-      stderr += chunk.toString();
-    });
-
-    child.stdin.write(stdinInput);
-    child.stdin.end();
-
-    child.on('close', (exitCode) => {
+      finished = true;
       clearTimeout(timer);
-      resolve({ stdout, stderr, timedOut, exitCode });
+
+      resolve({
+        stdout,
+        stderr,
+        timedOut,
+        exitCode,
+      });
+    };
+
+    const collectOutput = (chunk: Buffer, isError: boolean) => {
+      if (outputLimited) return;
+
+      outputBytes += chunk.length;
+
+      if (outputBytes > MAX_OUTPUT_BYTES) {
+        outputLimited = true;
+        stderr += '\nProgram output exceeded the 1 MiB limit.';
+        child.kill();
+        return;
+      }
+
+      if (isError) {
+        stderr += chunk.toString();
+      } else {
+        stdout += chunk.toString();
+      }
+    };
+
+    child.stdout.on('data', (chunk: Buffer) => {
+      collectOutput(chunk, false);
     });
+
+    child.stderr.on('data', (chunk: Buffer) => {
+      collectOutput(chunk, true);
+    });
+
+    // Missing executables or DLL-related launch failures must not crash Electron.
+    child.once('error', (error) => {
+      stderr += `\n${error.message}`;
+      finish(null);
+    });
+
+    // A program may exit before it finishes reading its input.
+    child.stdin.on('error', (error: NodeJS.ErrnoException) => {
+      if (error.code !== 'EPIPE') {
+        stderr += `\n${error.message}`;
+      }
+    });
+
+    child.once('close', (exitCode) => {
+      finish(outputLimited ? null : exitCode);
+    });
+
+    child.stdin.end(stdinInput);
   });
 }
 
-// Deletes the temp folder for a finished compile or run
-export function cleanupDir(workDir: string) {
-  rmSync(workDir, { recursive: true, force: true });
+// Remove a completed submission's temporary directory.
+export function cleanupDir(workDir: string): void {
+  rmSync(workDir, {
+    recursive: true,
+    force: true,
+    maxRetries: 3,
+    retryDelay: 100,
+  });
 }

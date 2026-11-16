@@ -1,43 +1,51 @@
-// @see - https://www.electron.build/configuration/configuration
 {
-  "$schema": "https://raw.githubusercontent.com/electron-userland/electron-builder/master/packages/app-builder-lib/scheme.json",
-  "appId": "YourAppID",
+  "appId": "org.contx.student",
+  "productName": "Contx Desktop",
+  "executableName": "ContxDesktop",
   "asar": true,
-  "productName": "YourAppName",
   "directories": {
     "output": "release/${version}"
   },
   "files": [
-    "dist",
-    "dist-electron"
+    "dist/**/*",
+    "dist-electron/**/*",
+    "package.json",
+    "!**/.env*"
   ],
-  "mac": {
-    "target": [
-      "dmg"
-    ],
-    "artifactName": "${productName}-Mac-${version}-Installer.${ext}"
-  },
+  "extraResources": [
+    {
+      "from": "electron/native/mingw",
+      "to": "mingw",
+      "filter": ["**/*"]
+    },
+    {
+      "from": "electron/native/keyboard-hook/build/Release/keyboard_hook.node",
+      "to": "native/keyboard_hook.node"
+    }
+  ],
+  "asarUnpack": [
+    "**/*.node",
+    "**/*.dll"
+  ],
   "win": {
     "target": [
       {
         "target": "nsis",
-        "arch": [
-          "x64"
-        ]
+        "arch": ["x64"]
       }
     ],
-    "artifactName": "${productName}-Windows-${version}-Setup.${ext}"
+    "artifactName": "Contx-Desktop-${version}-Windows-x64-Setup.${ext}",
+    "requestedExecutionLevel": "asInvoker"
   },
   "nsis": {
     "oneClick": false,
     "perMachine": false,
-    "allowToChangeInstallationDirectory": true,
-    "deleteAppDataOnUninstall": false
-  },
-  "linux": {
-    "target": [
-      "AppImage"
-    ],
-    "artifactName": "${productName}-Linux-${version}.${ext}"
+    "allowElevation": false,
+    "allowToChangeInstallationDirectory": false,
+    "deleteAppDataOnUninstall": false,
+    "runAfterFinish": false,
+    "createDesktopShortcut": true,
+    "createStartMenuShortcut": true,
+    "shortcutName": "Contx Desktop"
   }
 }
