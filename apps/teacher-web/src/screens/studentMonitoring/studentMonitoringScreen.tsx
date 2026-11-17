@@ -1,6 +1,6 @@
 import { useState, type ReactNode } from "react";
 import { ArrowLeft, RefreshCw, ShieldAlert } from "lucide-react";
-import { examSecondary } from "../../components/examLibrary/examDialog";
+import { examButton, examSecondary } from "../../components/examLibrary/examDialog";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { MovementHistoryModal } from "../../components/studentMonitoring/movementHistoryModal";
@@ -87,7 +87,7 @@ export function StudentMonitoringScreen() {
                   <RefreshCw size={15} aria-hidden="true" className={isLoading && classExamId !== null ? "motion-safe:animate-spin" : undefined} />
                   {isLoading && hasRoster ? "Refreshing…" : "Refresh"}
                 </button>
-                <button type="button" className={examSecondary} disabled={classExamId === null}
+                <button type="button" className={`${examButton} border-red-200 bg-red-50 text-red-800 hover:bg-red-100`} disabled={classExamId === null}
                   onClick={() => navigateTo("violationMonitoring")}>
                   <ShieldAlert size={15} aria-hidden="true" /> Violations
                 </button>

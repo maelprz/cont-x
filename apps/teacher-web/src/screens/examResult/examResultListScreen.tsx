@@ -26,7 +26,7 @@ function ResultsGroup({ exam, attachments, initiallyOpen, onOpen }: {
 
   return (
     <details open={initiallyOpen} className="group min-w-0 rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)]">
-      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-lg px-4 py-3 hover:bg-stone-100 focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#465a3b] [&::-webkit-details-marker]:hidden">
+      <summary className="flex cursor-pointer list-none items-center justify-between gap-3 rounded-xl bg-[#e9eee3] px-4 py-3 group-open:rounded-b-none hover:bg-[#dfe8d8] focus-visible:outline-2 focus-visible:-outline-offset-2 focus-visible:outline-[#465a3b] [&::-webkit-details-marker]:hidden">
         <span className="min-w-0">
           <span className="block text-sm font-semibold wrap-anywhere">{exam.title}</span>
           <span className="mt-0.5 block text-xs text-stone-600 wrap-anywhere">
