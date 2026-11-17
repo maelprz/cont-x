@@ -1,5 +1,12 @@
 import type { LocalRubric } from '../src/types/localGrading';
 
+export function validateCodingRubric(rubric: LocalRubric): void {
+  if (rubric.type !== 'coding') return;
+  if (!rubric.programType || !Array.isArray(rubric.tests) || rubric.tests.length === 0) {
+    throw new Error('This coding question has no complete grading tests. Ask your teacher to save its test cases and download the exam again.');
+  }
+}
+
 export function gradeTextAnswer(rubric: LocalRubric, answer: string): number {
   if (rubric.type === 'mcq') return rubric.correctOptionIds?.includes(answer) ? rubric.maxPoints : 0;
   if (rubric.type !== 'fitb') throw new Error('Coding answers require execution.');

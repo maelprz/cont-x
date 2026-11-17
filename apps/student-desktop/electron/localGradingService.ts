@@ -1,7 +1,7 @@
 import type { OfflineAttemptKey, OfflineExamSnapshot } from '../src/types/offlineExam';
 import type { SubmittedAnswer } from '../src/services/examService';
-import type { LocalGradingState, LocalRubric, LocalSubmission } from '../src/types/localGrading';
-import { gradeTextAnswer, codingScore } from '../shared/localGrading';
+import type { CodingReview, LocalGradingState, LocalRubric, LocalSubmission } from '../src/types/localGrading';
+import { gradeTextAnswer, codingScore, validateCodingRubric } from '../shared/localGrading';
 import { executeTestCases } from './ipc/compilerHandlers';
 import { loadOfflineExam, saveLocalGradingState } from './storage/offlineExamStorage';
 
@@ -23,6 +23,7 @@ async function readAttempt(key: OfflineAttemptKey) {
 
 function run(rubric: LocalRubric, code: string, visibleOnly = false) {
   if (rubric.type !== 'coding' || !rubric.tests || !rubric.programType) throw new Error('Coding grading materials are incomplete.');
+  validateCodingRubric(rubric);
   return executeTestCases({ code, programType: rubric.programType, mainCode: rubric.mainCode ?? undefined,
     testCases: rubric.tests.filter((test) => !visibleOnly || !test.is_hidden).map((test) => ({
       id: test.id, input: test.input, expectedOutput: test.expected_output, timeLimitMs: test.time_limit_ms,
@@ -76,18 +77,33 @@ export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmis
     const overtimeSeconds = exam.timing.allowOvertime ? Math.max(0, Math.ceil((Math.min(now, Date.parse(exam.timing.hardDeadline)) - Date.parse(exam.timing.normalDeadline)) / 1000)) : 0;
     const graded: LocalSubmission['answers'] = [];
     const executionLogs = [...(state.executionLogs ?? [])];
+    const codingReview: Record<string, CodingReview> = {};
     for (const question of exam.questions) {
       const rubric = exam.gradingMaterial![question.id];
       if (!rubric) throw new Error('Grading materials are incomplete.');
+      validateCodingRubric(rubric);
       const answer = byId.get(question.id) ?? { question_id: question.poolDrawId ? null : question.id, pool_draw_id: question.poolDrawId, answer_text: '' };
       const changes = Math.min(1000, Math.max(0, Math.round(answer.change_count ?? 0)));
       let score = 0;
       const previous = state.runs[question.id];
       const deduction = previous?.pointDeduction ?? rubric.pointDeduction;
+      if (rubric.type === 'coding') {
+        codingReview[question.id] = { status: 'unanswered', tests: rubric.tests!
+          .filter((test) => test.is_hidden === false)
+          .map((test) => ({ id: test.id, input: test.input, expectedOutput: test.expected_output,
+            actualOutput: null, passed: null, timedOut: false })) };
+      }
       if (rubric.type === 'coding' && answer.answer_text.trim()) {
         // Final compilation checks the submitted code, including code edited after Run Code.
         // It adds no extra check attempt or penalty.
         const result = previous?.code === answer.answer_text ? previous.outcome : await run(rubric, answer.answer_text);
+        const review = codingReview[question.id];
+        review.status = result.compileError ? 'compile_error' : 'graded';
+        review.tests = review.tests.map((test) => {
+          const outcome = result.results.find((outcome) => outcome.testCaseId === test.id);
+          return { ...test, actualOutput: outcome?.actualOutput ?? null,
+            passed: outcome?.passed ?? null, timedOut: outcome?.timedOut ?? false };
+        });
         if (previous?.code !== answer.answer_text && !result.compileError) {
           executionLogs.push({ questionId: question.id, executedAt: new Date(now).toISOString(), outcome: result });
         }
@@ -104,7 +120,7 @@ export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmis
     state.submission = { version: 1, status: now >= Date.parse(exam.timing.hardDeadline) ? 'timed_out' : status,
       submittedAt: new Date(now).toISOString(), answers: graded, overtimeSeconds, overtimeDeduction,
       totalScore: Math.max(0, graded.reduce((sum, answer) => sum + answer.score, 0) - overtimeDeduction),
-      executionLogs };
+      executionLogs, codingReview };
     await saveLocalGradingState(key, state);
     return state.submission;
   });

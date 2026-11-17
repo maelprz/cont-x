@@ -618,6 +618,10 @@ export function ExamBuilderScreen({
       message: saveAsExam ? "Saving exam…" : "Saving draft…",
     };
     try {
+      if (saveAsExam) {
+        const missingTests = questions.find((question) => question.type === "coding" && question.testCases.length === 0);
+        if (missingTests) throw new Error(`Add at least one test case to "${missingTests.title || "Untitled coding question"}" before saving the exam.`);
+      }
       if (!(await confirmRescaleIfNeeded(questions))) return;
       if (useAuthStore.getState().user?.id !== teacherId) return;
       if (destination === "examLibrary") setLibrarySubject(examData.subjectId);

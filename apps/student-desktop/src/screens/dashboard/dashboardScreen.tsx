@@ -145,8 +145,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                 {!historyLoading && !historyError && examHistory.map((entry, index) => (
                   <tr
                     key={entry.id}
-                    onClick={() => handleViewResult(entry.id)}
-                    className="hover:bg-stone-50 cursor-pointer"
+                    className="hover:bg-stone-50"
                   >
                     <td
                       className={`py-4 px-5 text-[var(--text-primary)] text-sm ${

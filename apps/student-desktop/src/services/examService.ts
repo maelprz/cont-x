@@ -518,6 +518,7 @@ export interface ReviewOption {
 
 // One reviewed question with the student's own answer.
 export interface ReviewItem {
+  codingReview?: import('../types/localGrading').CodingReview;
   key: string; // questions.id, or the draw id for a pooled question
   poolDrawId: string | null; // set only for pooled questions
   title: string; // question heading
@@ -560,6 +561,7 @@ export async function getSessionReview(
     correctAnswers: string[];
     score: number;
     maxPoints: number;
+    codingReview?: import('../types/localGrading').CodingReview;
   }[];
   return {
     keysRevealed: true,
@@ -578,6 +580,7 @@ export async function getSessionReview(
       pointDeduction: 0,
       acceptedAnswers: row.type === "fitb" ? row.correctAnswers : null,
       correctAnswers: row.correctAnswers,
+      codingReview: row.type === 'coding' ? row.codingReview : undefined,
     })),
   };
 }

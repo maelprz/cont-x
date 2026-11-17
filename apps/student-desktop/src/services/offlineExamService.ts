@@ -1,6 +1,7 @@
 import { getSessionQuestions, getSessionRules, getSessionTiming } from "./examService";
 import { supabase } from './supabaseClient';
 import type { LocalRubric } from '../types/localGrading';
+import { validateCodingRubric } from '../../shared/localGrading';
 import type { AuthUser } from "./authService";
 import type { OfflineExamSnapshot, OfflineAttemptKey } from "../types/offlineExam";
 
@@ -55,6 +56,9 @@ export async function prepareOfflineExam(
   const { data: gradingMaterial, error: gradingError } = await supabase.rpc('download_local_grading_material', { p_session_id: sessionId });
   if (gradingError || !gradingMaterial || questions.some((question) => !gradingMaterial[question.id])) {
     throw new Error('Could not download the complete grading materials. Reconnect and retry.');
+  }
+  for (const question of questions) {
+    validateCodingRubric((gradingMaterial as Record<string, LocalRubric>)[question.id]);
   }
   const visibleTests = Object.fromEntries(await Promise.all(
     questions.filter((question) => question.type === "coding").map(async (question) => [

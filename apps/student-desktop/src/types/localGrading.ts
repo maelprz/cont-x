@@ -39,6 +39,19 @@ export interface LocalSubmission {
   overtimeSeconds: number;
   overtimeDeduction: number;
   executionLogs: LocalExecutionLog[];
+  codingReview?: Record<string, CodingReview>;
+}
+
+export interface CodingReview {
+  status: 'graded' | 'compile_error' | 'unanswered' | 'not_recorded';
+  tests: {
+    id: string;
+    input: string;
+    expectedOutput: string;
+    actualOutput: string | null;
+    passed: boolean | null;
+    timedOut: boolean;
+  }[];
 }
 
 export interface LocalExecutionLog {
