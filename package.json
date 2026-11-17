@@ -5,7 +5,9 @@
   "description": "",
   "main": "index.js",
   "overrides": {
-    "dompurify": "^3.4.17"
+    "dompurify": "^3.4.17",
+    "minimatch@>=7 <11.0.1": "^11.0.9",
+    "glob@>=9 <=14.0.1": "^14.0.6"
   },
   "scripts": {
     "test": "echo \"Error: no test specified\" && exit 1"
@@ -36,7 +38,6 @@
     "vite-plugin-electron-renderer": "^1.0.0"
   },
   "allowScripts": {
-    "better-sqlite3@12.11.1": true,
     "electron-winstaller@5.4.0": true,
     "esbuild@0.28.1": true,
     "win-audio@3.0.5": true

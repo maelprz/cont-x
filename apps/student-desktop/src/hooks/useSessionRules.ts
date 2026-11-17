@@ -12,13 +12,14 @@ const STRICT_WHILE_LOADING: SessionRules = {
 };
 
 // Loads the teacher's rules for this attempt (sequential order, etc.) once.
-export function useSessionRules(sessionId: string | null) {
+export function useSessionRules(sessionId: string | null, savedRules?: SessionRules) {
   const [rules, setRules] = useState<SessionRules>(STRICT_WHILE_LOADING);
   const [isLoaded, setIsLoaded] = useState(false);
   const [error, setError] = useState<string | null>(null);
   const [loadAttempt, setLoadAttempt] = useState(0);
 
   useEffect(() => {
+    if (savedRules) return;
     setIsLoaded(false);
     setError(null);
     setRules(STRICT_WHILE_LOADING);
@@ -40,7 +41,12 @@ export function useSessionRules(sessionId: string | null) {
     return () => {
       isActive = false;
     };
-  }, [sessionId, loadAttempt]);
+  }, [sessionId, savedRules, loadAttempt]);
 
-  return { rules, isLoaded, error, retry: () => setLoadAttempt((attempt) => attempt + 1) };
+  return {
+    rules: savedRules ?? rules,
+    isLoaded: Boolean(savedRules) || isLoaded,
+    error: savedRules ? null : error,
+    retry: () => setLoadAttempt((attempt) => attempt + 1),
+  };
 }

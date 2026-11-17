@@ -47,19 +47,23 @@ export async function logViolation(
   sessionId: string,
   event: ViolationEvent,
   questionId: string | null = null,
-): Promise<void> {
+  operationId?: string,
+): Promise<boolean> {
   const mapped = mapViolation(event);
-  if (!mapped) return;
+  if (!mapped) return true;
 
   const { error } = await supabase.from("violation_logs").insert({
+    ...(operationId ? { id: operationId } : {}),
     session_id: sessionId,
     violation_type: mapped.type,
     details: mapped.details,
     question_id: questionId,
     logged_at: event.occurredAt,
-  });
+  }).abortSignal(AbortSignal.timeout(8_000));
 
-  if (error) {
+  if (error && !(operationId && error.code === "23505")) {
     console.error("[violationService] failed to log violation:", error);
+    return false;
   }
+  return true;
 }

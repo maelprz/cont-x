@@ -3,8 +3,8 @@ import { useCallback, useEffect, useRef } from "react"; // refs keep the running
 // Tracks how many seconds the student spends on each question (WBS 6.7).
 // Time only counts while that question is on screen AND the window is focused and visible.
 // Going back to a question adds to the same total. Nothing re-renders: the totals live in refs.
-export function useQuestionTimeTracker(currentQuestionId: string | null) {
-  const totalsMsRef = useRef<Record<string, number>>({}); // finished time per question id, in milliseconds
+export function useQuestionTimeTracker(currentQuestionId: string | null, initialTimesMs?: Record<string, number>) {
+  const totalsMsRef = useRef<Record<string, number>>({ ...initialTimesMs });
   const activeIdRef = useRef<string | null>(null); // the question currently being timed
   const segmentStartRef = useRef<number | null>(null); // when the running stretch began, null while paused
 
@@ -49,19 +49,22 @@ export function useQuestionTimeTracker(currentQuestionId: string | null) {
     };
   }, [pause, resume]);
 
-  // Returns whole seconds per question id, including the stretch that is running right now.
-  const getTimes = useCallback((): Record<string, number> => {
+  const getTimesMs = useCallback((asOf = Date.now()): Record<string, number> => {
     const result: Record<string, number> = { ...totalsMsRef.current }; // start from the banked totals
     const id = activeIdRef.current;
     const start = segmentStartRef.current;
     if (id && start !== null) {
-      result[id] = (result[id] ?? 0) + (Date.now() - start); // include the running stretch
+      result[id] = (result[id] ?? 0) + Math.max(0, asOf - start);
     }
+    return result;
+  }, []);
+  const getTimes = useCallback((asOf?: number): Record<string, number> => {
+    const result = getTimesMs(asOf);
     for (const key of Object.keys(result)) {
       result[key] = Math.round(result[key] / 1000); // milliseconds to whole seconds
     }
     return result;
-  }, []);
+  }, [getTimesMs]);
 
-  return { getTimes };
+  return { getTimes, getTimesMs };
 }

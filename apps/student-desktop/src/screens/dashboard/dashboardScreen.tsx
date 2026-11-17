@@ -15,9 +15,10 @@ export function DashboardScreen(_props: DashboardScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const user = useAuthStore((state) => state.user);
 
-  const { examHistory} = useExamHistory(); // fetch exam history using the custom hook
+  const { examHistory, isLoading: historyLoading, error: historyError } = useExamHistory(); // fetch exam history using the custom hook
   const {
     verifyExamCode,
+    isVerifying,
     error: verifyError,
   } = useVerifyExamCode();
 
@@ -45,50 +46,54 @@ export function DashboardScreen(_props: DashboardScreenProps) {
 
   return (
     <div className="flex flex-col h-screen overflow-y-auto bg-[var(--bg-app)] text-[var(--text-primary)]">
-      <AppHeader />
+      <AppHeader title="Dashboard" />
       {/* "Welcome back" hero — converted to Tailwind */}
-      <div className="flex items-start justify-between gap-4 px-8 pt-8">
+      <div className="flex items-start justify-between gap-4 px-4 sm:px-8 pt-8">
         <div>
-          <h1 className="font-[var(--font-headline)] text-[var(--text-primary)] text-2xl mb-2">
+          <h2 className="font-[var(--font-headline)] text-[var(--text-primary)] text-xl font-semibold mb-2">
             Welcome back, {user?.firstName ?? "Student"}!
-          </h1>
+          </h2>
           <p className="text-sm text-[var(--text-secondary)] max-w-[420px]">
-            Ready to continue your certification journey? Your dashboard keeps
-            track of upcoming and completed exams.
+            Enter an exam code to get started, or revisit your recent results.
           </p>
         </div>
       </div>
 
-      <main className="flex flex-col gap-10 px-8 pb-12 pt-6">
+      <main className="flex flex-col gap-7 px-4 sm:px-8 pb-12 pt-6">
         {/* Card where the student enters their exam code */}
-        <section className="bg-gradient-to-br from-[var(--bg-card)] to-[var(--bg-app)] border border-[var(--accent-blue)]/40 shadow-[0_8px_32px_rgba(0,0,0,0.35)] rounded-2xl p-7 flex items-center justify-between gap-6 flex-wrap">
+        <section className="border border-stone-200 bg-[#f8f8f8] rounded-xl p-5 sm:p-6 flex items-center justify-between gap-5 flex-wrap">
           <div>
             <h2 className="font-[var(--font-headline)] text-[var(--text-primary)] text-lg mb-2">
-              Ready for your assessment?
+              Join an exam
             </h2>
             <p className="text-sm text-[var(--text-secondary)] max-w-[420px]">
               Enter the exam code your instructor gave you to verify and
               continue.
             </p>
           </div>
-          <div className="flex gap-3 shrink-0">
+          <form className="flex w-full flex-wrap items-end gap-2 xl:w-auto" onSubmit={(event) => { event.preventDefault(); if (!isVerifying) void handleVerifyExamCode(); }}>
+            <div className="min-w-0 flex-1 xl:w-56"><label htmlFor="exam-code" className="mb-1.5 block text-xs font-medium text-stone-600">Exam code</label>
             <input
+              id="exam-code"
+              aria-invalid={Boolean(verifyError)}
+              aria-describedby={verifyError ? "exam-code-error" : undefined}
               type="text"
               placeholder="Exam Code (e.g. CS101-42)"
               value={examCodeInput}
               onChange={handleExamCodeChange}
-              className="bg-[var(--bg-app)] border border-[var(--border-primary)] rounded-lg px-2.5 py-2.5 text-sm text-[var(--text-primary)] placeholder:text-[var(--text-secondary)] min-w-[200px]"
+              className="w-full rounded-lg border border-stone-300 bg-white px-3 py-2.5 text-sm text-stone-900 placeholder:text-stone-400 focus:outline-2 focus:outline-offset-2 focus:outline-[#465a3b]"
             />
+            </div>
             <button
-              type="button"
-              onClick={handleVerifyExamCode}
-              className="inline-flex items-center gap-2.5 px-7 py-3 rounded-lg border-none text-[14px] font-bold cursor-pointer transition-transform duration-150 hover:scale-[1.02] bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)] font-[var(--font-body)] shadow-[var(--shadow)]"
+              type="submit"
+              disabled={isVerifying}
+              className="inline-flex items-center justify-center gap-2 rounded-lg border border-[#465a3b] bg-[#465a3b] px-4 py-2.5 text-sm font-semibold text-white hover:bg-[#394a30] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#465a3b] disabled:cursor-wait disabled:opacity-60"
             >
-              Verify Exam Code <ArrowRight size={16} />
+              {isVerifying ? "Verifying..." : "Verify code"} <ArrowRight size={16} aria-hidden="true" />
             </button>
-          </div>
+          </form>
           {verifyError && (
-            <p className="text-xs text-[#ef4444] mt-2 basis-full">
+            <p id="exam-code-error" role="alert" className="text-xs text-red-700 mt-2 basis-full">
               {verifyError}
             </p>
           )}
@@ -105,12 +110,12 @@ export function DashboardScreen(_props: DashboardScreenProps) {
               onClick={() => navigateTo("archive")} // navigateTo is already destructured at the top of this file
               className="text-[var(--accent-blue)] text-xs bg-transparent cursor-pointer"
             >
-              View Full Archive
+              View archive
             </button>
           </div>
           {/* Card wrapper — gives the table its background/border/shadow instead of floating bare */}
-          <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-x-auto">
-            <table className="w-full table-fixed border-collapse">
+          <div className="bg-[var(--bg-card)] border border-stone-200 rounded-xl overflow-x-auto">
+            <table className="min-w-[640px] w-full table-fixed border-collapse">
               <colgroup>
                 <col className="w-1/4" />
                 <col className="w-1/4" />
@@ -118,46 +123,48 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                 <col className="w-1/4" />
               </colgroup>
               <thead>
-                <tr className="bg-white/[0.02]">
-                  <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
-                    Module
+                <tr className="bg-stone-100/70">
+                  <th className="text-left font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
+                    Exam
                   </th>
-                  <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                  <th className="text-left font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
                     Date
                   </th>
-                  <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                  <th className="text-left font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
                     Result
                   </th>
-                  <th className="text-center font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                  <th className="text-center font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
                     Actions
                   </th>
                 </tr>
               </thead>
               <tbody>
-                {examHistory.map((entry, index) => (
+                {historyLoading && <tr><td colSpan={4} role="status" className="px-5 py-8 text-center text-sm text-stone-500">Loading recent exams...</td></tr>}
+                {!historyLoading && historyError && <tr><td colSpan={4} role="alert" className="px-5 py-8 text-center text-sm text-red-700">{historyError}</td></tr>}
+                {!historyLoading && !historyError && examHistory.length === 0 && <tr><td colSpan={4} className="px-5 py-10 text-center text-sm text-stone-500">Your completed exams will appear here.</td></tr>}
+                {!historyLoading && !historyError && examHistory.map((entry, index) => (
                   <tr
                     key={entry.id}
-                    onClick={() => handleViewResult(entry.id)}
-                    className="hover:bg-white/[0.02] cursor-pointer"
+                    className="hover:bg-stone-50"
                   >
                     <td
                       className={`py-4 px-5 text-[var(--text-primary)] text-sm ${
                         index < examHistory.length - 1
-                          ? "border-b border-[var(--border-subtle)]"
+                          ? "border-b border-stone-200"
                           : ""
                       }`}
                     >
                       <span className="block wrap-break-word font-medium">
                         {entry.examTitle}
                       </span>
-                      <span className="block wrap-break-word font-[var(--font-label)] text-xs text-[var(--text-secondary)] mt-0.5">
-                        Module {entry.examCode}
+                      <span className="block wrap-break-word text-xs text-[var(--text-secondary)] mt-0.5">
+                        {entry.examCode}
                       </span>
                     </td>
                     <td
                       className={`py-4 px-5 text-[var(--text-primary)] text-sm ${
                         index < examHistory.length - 1
-                          ? "border-b border-[var(--border-subtle)]"
+                          ? "border-b border-stone-200"
                           : ""
                       }`}
                     >
@@ -166,12 +173,12 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                     <td
                       className={`py-4 px-5 text-sm ${
                         index < examHistory.length - 1
-                          ? "border-b border-[var(--border-subtle)]"
+                          ? "border-b border-stone-200"
                           : ""
                       }`}
                     >
                       <span
-                        className={`font-[var(--font-label)] text-xs px-2.5 py-1 rounded-full ${
+                        className={`text-xs px-2.5 py-1 rounded-full ${
                           entry.passed
                             ? "bg-[var(--accent-green)]/15 text-[var(--accent-green)]"
                             : "bg-[rgba(239,68,68,0.15)] text-[#ef4444]"
@@ -183,7 +190,7 @@ export function DashboardScreen(_props: DashboardScreenProps) {
                     <td
                       className={`py-4 px-5 ${
                         index < examHistory.length - 1
-                          ? "border-b border-[var(--border-subtle)]"
+                          ? "border-b border-stone-200"
                           : ""
                       }`}
                     >

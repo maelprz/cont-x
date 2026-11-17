@@ -9,6 +9,8 @@ import { useAuthStore } from "../../stores/useAuthStore";
 import { useRouterLogic } from "../../router/routerLogic";
 import { AppHeader } from "../../components/layout/appHeader";
 import { SessionVerificationModal } from "../../components/modals/sessionVerificationModal";
+import type { OfflineExamSnapshot } from "../../types/offlineExam";
+import { rememberOfflineAttempt } from "../../services/offlineExamService";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -107,9 +109,9 @@ export function ExamConfirmationScreen({
     setIsVerificationOpen(true); // opens the modal, unchanged
   };
 
-  // Called by the modal only after the server confirms the code is correct.
-  const handleVerificationConfirm = (sessionId: string) => {
-    setSessionId(sessionId); // save the real session id for the next screen
+  const handleVerificationConfirm = (sessionId: string, snapshot: OfflineExamSnapshot | null) => {
+    if (snapshot && user) rememberOfflineAttempt(user, sessionId);
+    setSessionId(sessionId, snapshot);
     onStartExam?.();
     setIsVerificationOpen(false);
     navigateTo("examQuestion");

@@ -5,12 +5,13 @@ import {
 } from "../services/examService"; // the real Supabase call
 
 // Fetches this attempt's questions (in this student's own order), once, when the session id is available.
-export function useExamQuestions(sessionId: string | null) {
+export function useExamQuestions(sessionId: string | null, savedQuestions?: FetchedQuestion[]) {
   const [questions, setQuestions] = useState<FetchedQuestion[]>([]); // holds the fetched question list
   const [isLoading, setIsLoading] = useState(true); // true while the fetch is in flight
   const [error, setError] = useState<string | null>(null); // holds a message to show, if any
 
   useEffect(() => {
+    if (savedQuestions) return;
     if (!sessionId) {
       setIsLoading(false); // nothing to fetch yet, don't spin forever
       return;
@@ -40,7 +41,8 @@ export function useExamQuestions(sessionId: string | null) {
     return () => {
       isMounted = false; // cleanup if the screen unmounts mid-fetch
     };
-  }, [sessionId]);
+  }, [sessionId, savedQuestions]);
 
+  if (savedQuestions) return { questions: savedQuestions, isLoading: false, error: null };
   return { questions, isLoading, error };
 }

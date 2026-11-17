@@ -1,5 +1,5 @@
 import { useState } from "react";
-import { ChevronLeft, ChevronRight } from "lucide-react";
+import { Check, X, ChevronLeft, ChevronRight } from "lucide-react";
 import { MultipleChoiceOptions } from "../../components/examQuestion/multipleChoiceOptions";
 import { QuestionMapGrid } from "../../components/examQuestion/questionMapGrid";
 import { useExamResultDetails } from "../../hooks/useExamResultDetails";
@@ -12,21 +12,64 @@ import type { QuestionMapItem } from "../examQuestion/examQuestionScreen.types";
 const navigationButton = "flex items-center gap-2 px-5 py-2.5 rounded-lg border bg-transparent text-[var(--text-inverted)] text-[13px] font-semibold cursor-pointer hover:text-[var(--text-inverted-secondary)] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed";
 
 function WrittenAnswers({ item }: { item: ReviewItem }) {
-  const answerStyle = "rounded-lg border border-[var(--border-primary)] bg-white p-4 min-w-0";
+  const answerStyle = "rounded-lg border p-4 min-w-0";
   const textStyle = "mt-2 whitespace-pre-wrap wrap-break-word text-sm";
+  const isFitb = item.type === "fitb";
+  const correct = item.score > 0;
   return (
     <div className={`mt-6 grid gap-3 ${item.type === "coding" ? "lg:grid-cols-2" : ""}`}>
-      <section className={answerStyle}>
-        <h3 className="text-sm font-semibold">Your answer</h3>
+      <section className={`${answerStyle} ${isFitb ? correct ? "border-green-600 bg-green-50" : "border-red-500 bg-red-50" : "border-[var(--border-primary)] bg-white"}`}>
+        <div className="flex items-center justify-between gap-3">
+          <h3 className="text-sm font-semibold">Your answer</h3>
+          {isFitb && <span className={`flex items-center gap-1 text-sm font-semibold ${correct ? "text-green-700" : "text-red-700"}`}>{correct ? <Check size={16} /> : <X size={16} />}{correct ? "Correct" : "Wrong"}</span>}
+        </div>
         <pre className={textStyle}>{item.answerText?.trim() ? item.answerText : "No answer provided"}</pre>
       </section>
-      <section className={answerStyle}>
+      <section className={`${answerStyle} border-[var(--border-primary)] bg-white`}>
         <h3 className="text-sm font-semibold">{item.type === "coding" ? "Reference solution" : "Accepted answers"}</h3>
         {item.correctAnswers.length > 0
           ? item.correctAnswers.map((answer, index) => <pre key={index} className={textStyle}>{answer}</pre>)
           : <p className="mt-2 text-sm">No reference answer provided.</p>}
       </section>
     </div>
+  );
+}
+
+function VisibleCodingTests({ item }: { item: ReviewItem }) {
+  const review = item.codingReview;
+  const tests = review?.tests ?? [];
+  const recorded = tests.filter((test) => test.passed !== null);
+  const passed = recorded.filter((test) => test.passed).length;
+  return (
+    <section className="mt-6" aria-label="Visible test case results">
+      <div className="flex flex-wrap items-center justify-between gap-2">
+        <h3 className="font-semibold">Visible test cases</h3>
+        {recorded.length > 0 && <p className="text-sm">{passed} / {recorded.length} passed</p>}
+      </div>
+      <p className="mt-1 text-sm text-[var(--text-secondary)]">Results for your final submitted code. Hidden test cases are excluded from this breakdown.</p>
+      {review?.status === 'compile_error' && <p className="mt-3 text-sm text-red-700">Your submitted code did not compile. Test cases could not run.</p>}
+      {review?.status === 'unanswered' && <p className="mt-3 text-sm">No code was submitted.</p>}
+      {(!review || review.status === 'not_recorded') && <p className="mt-3 text-sm">Final test results were not recorded for this submission.</p>}
+      {review && tests.length === 0 && <p className="mt-3 text-sm">No visible test cases are available.</p>}
+      <div className="mt-3 grid gap-3">
+        {tests.map((test, index) => (
+          <article key={test.id} className={`rounded-lg border p-4 ${test.passed === true ? 'border-green-600 bg-green-50' : test.passed === false ? 'border-red-500 bg-red-50' : 'border-stone-200 bg-white'}`}>
+            <div className="flex items-center justify-between gap-3 text-sm font-semibold">
+              <h4>Test case {index + 1}</h4>
+              <span className={`flex items-center gap-1 ${test.passed === true ? 'text-green-700' : test.passed === false ? 'text-red-700' : 'text-stone-600'}`}>
+                {test.passed === true ? <Check size={16} /> : test.passed === false ? <X size={16} /> : null}
+                {test.passed === true ? 'Passed' : test.passed === false ? test.timedOut ? 'Failed · Time limit exceeded' : 'Failed' : review?.status === 'compile_error' || review?.status === 'unanswered' ? 'Not run' : 'Not recorded'}
+              </span>
+            </div>
+            <dl className="mt-4 grid gap-4 md:grid-cols-3 text-sm">
+              {([['Input', test.input], ['Expected output', test.expectedOutput], ['Your output', test.actualOutput]] as const).map(([label, value]) => (
+                <div key={label} className="min-w-0"><dt className="font-semibold">{label}</dt><dd className="mt-1 whitespace-pre-wrap break-words font-mono">{value === null ? 'Not recorded' : value === '' ? '(empty)' : value}</dd></div>
+              ))}
+            </dl>
+          </article>
+        ))}
+      </div>
+    </section>
   );
 }
 
@@ -94,6 +137,7 @@ export function ExamReviewScreen() {
                   )}
                 </>
               ) : <WrittenAnswers item={item} />}
+              {item.type === 'coding' && <VisibleCodingTests item={item} />}
             </>
           ) : (
             <div role={detailsError || reviewError ? "alert" : "status"} className="text-sm text-[var(--text-secondary)]">

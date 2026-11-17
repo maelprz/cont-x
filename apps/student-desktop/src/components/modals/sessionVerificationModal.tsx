@@ -1,6 +1,10 @@
 import { useEffect, useRef, useState } from 'react';
 import type { SessionVerificationModalProps, VerificationStatus } from './sessionVerificationModal.types';
 import { verifySessionCode } from '../../services/examService';
+import { prepareOfflineExam } from '../../services/offlineExamService';
+import { useAuthStore } from '../../stores/useAuthStore';
+import { useExamSessionStore } from '../../stores/useExamSessionStore';
+import { autoCloseDisallowedApps } from '../../../shared/examAppPolicy';
 
 export function SessionVerificationModal({
   isOpen,
@@ -13,8 +17,11 @@ export function SessionVerificationModal({
   const [digits, setDigits] = useState<string[]>(Array(codeLength).fill(''));
   const [status, setStatus] = useState<VerificationStatus>('idle');
   const [openApps, setOpenApps] = useState<string[]>([]);
+  const [appsCleared, setAppsCleared] = useState(false);
   const [errorMessage, setErrorMessage] = useState(''); // real message from the server, if any
   const inputRefs = useRef<(HTMLInputElement | null)[]>([]);
+  const verifiedSessionId = useRef<string | null>(null);
+  const studentId = useAuthStore((state) => state.user?.id);
 
   useEffect(() => {
     if (!isOpen) return;
@@ -22,10 +29,12 @@ export function SessionVerificationModal({
     setDigits(Array(codeLength).fill(''));
     setStatus('idle');
     setOpenApps([]);
+    setAppsCleared(false);
     setErrorMessage('');
+    verifiedSessionId.current = null;
     inputRefs.current[0]?.focus();
     return () => window.ipcRenderer?.endExamAppCheck();
-  }, [isOpen, codeLength]);
+  }, [isOpen, examId, studentId, codeLength]);
 
   if (!isOpen) return null;
 
@@ -47,7 +56,12 @@ export function SessionVerificationModal({
     }
   };
 
-  const busy = status === 'checking_apps' || status === 'verifying';
+  const busy = status === 'checking_apps' || status === 'verifying' || status === 'saving_exam';
+  const busyLabel = status === 'checking_apps' ? 'Checking apps…'
+    : status === 'saving_exam' ? 'Downloading exam…' : 'Verifying…';
+  const hasOpenApps = openApps.length > 0;
+  const confirmLabel = verifiedSessionId.current ? 'Retry Exam Download'
+    : autoCloseDisallowedApps && !appsCleared ? 'Check Running Apps' : 'Confirm and Enter Exam';
 
   const handleConfirm = async (closeApps = false) => {
     const code = digits.join(''); // combine the digit boxes into one string
@@ -57,26 +71,55 @@ export function SessionVerificationModal({
       return;
     }
 
-    setStatus('checking_apps');
     setErrorMessage('');
-    try {
-      const remaining = await window.ipcRenderer.checkExamApps(closeApps);
-      setOpenApps(remaining);
-      if (remaining.length > 0) {
-        setStatus('idle');
+    if (autoCloseDisallowedApps) {
+      setStatus('checking_apps');
+      try {
+        const remaining = await window.ipcRenderer.checkExamApps(closeApps);
+        setOpenApps(remaining);
+        if (remaining.length > 0) {
+          setAppsCleared(false);
+          setStatus('idle');
+          return;
+        }
+        if (hasOpenApps) {
+          setAppsCleared(true);
+          setStatus('idle');
+          return;
+        }
+      } catch (error) {
+        console.error('[exam app check]', error);
+        setOpenApps([]);
+        setAppsCleared(false);
+        setErrorMessage('Could not check running apps. Try again before starting the exam.');
+        setStatus('error');
         return;
       }
-    } catch (error) {
-      console.error('[exam app check]', error);
-      setErrorMessage('Could not check running apps. Try again before starting the exam.');
+    }
+
+    setStatus('verifying'); // show the spinner while the server checks the code
+    let offlineStorageAvailable: boolean;
+    try {
+      offlineStorageAvailable = await window.ipcRenderer.checkOfflineExamStorage();
+    } catch {
+      setErrorMessage('Local MySQL storage is unavailable. Ask your exam administrator for help.');
       setStatus('error');
       return;
     }
 
-    setStatus('verifying'); // show the spinner while the server checks the code
     try {
-      const result = await verifySessionCode(examId, code); // real server-side check + session start
-      onConfirm?.(result.sessionId); // hand the new session id up to the screen
+      if (!offlineStorageAvailable) throw new Error('Configure local MySQL storage before starting a locally graded exam.');
+      if (!studentId) throw new Error('Sign in again before starting the exam.');
+
+      const sessionId = verifiedSessionId.current ?? (await verifySessionCode(examId, code)).sessionId;
+      verifiedSessionId.current = sessionId;
+      let snapshot = null;
+      if (offlineStorageAvailable && studentId) {
+        setStatus('saving_exam');
+        const { examId: id, examTitle: title } = useExamSessionStore.getState();
+        snapshot = await prepareOfflineExam(studentId, sessionId, examId, { id, title });
+      }
+      onConfirm?.(sessionId, snapshot);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Verification failed.';
       setErrorMessage(message); // show the server's real reason (wrong code, exam not active, etc.)
@@ -116,7 +159,7 @@ export function SessionVerificationModal({
                     inputMode="numeric"
                     maxLength={1}
                     value={digit}
-                    disabled={busy}
+                    disabled={busy || verifiedSessionId.current !== null}
                     autoFocus={i === 0}
                     onChange={(e) => handleChange(i, e.target.value)}
                     onKeyDown={(e) => handleKeyDown(i, e)}
@@ -156,20 +199,24 @@ export function SessionVerificationModal({
             </div>
           </div>
 
-          {openApps.length > 0 && (
-            <section className="flex flex-col gap-2 rounded-lg border border-[var(--border-primary)] p-4 text-sm text-[var(--text-inverted)]" aria-live="polite">
-              <h3 className="font-semibold">Close these apps before starting</h3>
-              <ul className="list-disc pl-5">{openApps.map((app) => <li key={app}>{app}</li>)}</ul>
-              <p className="text-[var(--text-inverted-secondary)]">
-                Save your work before continuing. If an app stays open, quit it from the Windows tray or switch to it to respond to its save prompt, then choose Check Again.
-              </p>
-            </section>
-          )}
-
           {/* ── Actions ───────────────────────────────────────────── */}
           <div className="flex flex-col gap-3">
+            {hasOpenApps && (
+              <section className="flex flex-col gap-2 rounded-lg border border-[var(--border-primary)] p-4 text-sm text-[var(--text-inverted)]" aria-live="polite">
+                <h3 className="font-semibold">Disallowed apps currently running</h3>
+                <ul className="list-disc pl-5">{openApps.map((app) => <li key={app}>{app}</li>)}</ul>
+                <p className="text-[var(--text-inverted-secondary)]">
+                  Close Apps and Continue may force-quit these apps and discard unsaved work. To save your work or close the apps yourself, cancel this request and log out of Cont/x first.
+                </p>
+              </section>
+            )}
+            {appsCleared && (
+              <p role="status" className="text-sm font-semibold text-[var(--text-inverted)]">
+                All disallowed apps are closed. You can continue to the exam.
+              </p>
+            )}
             <button
-              onClick={() => void handleConfirm(openApps.length > 0)}
+              onClick={() => void handleConfirm(hasOpenApps)}
               disabled={busy}
               className="w-full py-3.5 rounded-lg font-bold text-[15px] transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)] font-[var(--font-body)] border border-[var(--border-subtle)]"
             >
@@ -179,13 +226,13 @@ export function SessionVerificationModal({
                     <circle cx="12" cy="12" r="10" stroke="currentColor" strokeWidth="4" opacity="0.25" />
                     <path fill="currentColor" opacity="0.75" d="M4 12a8 8 0 018-8V0C5.373 0 0 5.373 0 12h4zm2 5.291A7.962 7.962 0 014 12H0c0 3.042 1.135 5.824 3 7.938l3-2.647z" />
                   </svg>
-                  {status === 'checking_apps' ? 'Checking apps…' : 'Verifying…'}
+                  {busyLabel}
                 </span>
               ) : (
-                openApps.length > 0 ? 'Close Apps and Continue' : 'Confirm and Enter Exam'
+                hasOpenApps ? 'Close Apps and Continue' : confirmLabel
               )}
             </button>
-            {openApps.length > 0 && (
+            {hasOpenApps && (
               <button type="button" disabled={busy} onClick={() => void handleConfirm()} className="rounded-lg border border-[var(--border-primary)] bg-transparent px-6 py-2.5 text-[var(--text-inverted)] disabled:opacity-70">
                 Check Again
               </button>
@@ -206,7 +253,7 @@ export function SessionVerificationModal({
               style={{ animation: 'svm-pulse 2s infinite' }}
             />
             <span className="font-mono text-[11px] uppercase tracking-widest text-[var(--text-fine-print)]">
-              {status === 'checking_apps' ? 'Checking Running Apps' : status === 'verifying' ? 'Verifying Identity' : 'Awaiting Identity Verification'}
+              {busy ? busyLabel : verifiedSessionId.current ? 'Session Verified' : 'Awaiting Identity Verification'}
             </span>
           </div>
         </div>

@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient"; // shared Supabase client, never create a new one
+import { useExamSessionStore } from '../stores/useExamSessionStore';
 
 // Shape of the exam row we get back after a successful lookup.
 export interface ExamLookupResult {
@@ -157,10 +158,10 @@ export interface SessionTiming {
 
 export async function getSessionTiming(
   sessionId: string,
+  signal?: AbortSignal,
 ): Promise<SessionTiming> {
-  const { data, error } = await supabase.rpc("get_session_timing", {
-    p_session_id: sessionId,
-  });
+  const request = supabase.rpc("get_session_timing", { p_session_id: sessionId });
+  const { data, error } = await (signal ? request.abortSignal(signal) : request);
   if (error || !data)
     throw new Error(error?.message ?? "Exam timing not found.");
   return data as SessionTiming;
@@ -239,7 +240,7 @@ export interface FetchedQuestion {
   id: string; // questions.id, the real database id (for a pooled question: its draw id, session_pool_questions.id)
   poolDrawId: string | null; // set when this question was drawn from a random pool for this attempt
   orderIndex: number; // questions.order_index, the teacher's own order (the list itself is already in the student's order)
-  title: string; // questions.title, shown as the question heading
+  title?: string;
   prompt: string; // questions.prompt, shown as the question body text
   type: "mcq" | "coding" | "fitb"; // questions.type, tells the UI which shape to expect
   maxPoints: number; // questions.max_points, kept for future scoring use
@@ -285,7 +286,7 @@ export async function getSessionQuestions(
       id: row.id, // real question id (or the draw id for a pooled question)
       poolDrawId: row.pool_draw_id ?? null, // null for questions placed directly in the exam
       orderIndex: row.order_index, // the teacher's own order number
-      title: row.title, // question heading
+      title: row.title,
       prompt: row.prompt, // question body text
       type: row.type, // "mcq", "coding" or "fitb"
       maxPoints: row.max_points, // kept for later scoring
@@ -329,12 +330,27 @@ export async function submitExamSession(
   sessionId: string, // which session to close out
   status: "submitted" | "timed_out", // how it ended
   answers: SubmittedAnswer[], // the student's answers to all questions
+  onLocallyGraded?: () => void,
 ): Promise<SubmitExamSessionResult> {
-  const { data, error } = await supabase.rpc("submit_exam_session", {
+  const exam = useExamSessionStore.getState().offlineExam;
+  if (!exam?.gradingMaterial || exam.sessionId !== sessionId) throw new Error('Local grading materials are unavailable.');
+  const submission = await window.ipcRenderer.gradeLocalSubmission(
+    { studentId: exam.studentId, sessionId }, status, answers,
+  );
+  onLocallyGraded?.();
+  return syncLocalExamSubmission(sessionId, submission);
+}
+
+export async function syncLocalExamSubmission(
+  sessionId: string,
+  submission: import("../types/localGrading").LocalSubmission,
+  signal?: AbortSignal,
+): Promise<SubmitExamSessionResult> {
+  const request = supabase.rpc("sync_local_exam_submission", {
     p_session_id: sessionId, // matches the SQL function's first parameter
-    p_status: status, // matches the second parameter
-    p_answers: answers, // matches the third parameter, sent as JSON
+    p_submission: submission,
   });
+  const { data, error } = await (signal ? request.abortSignal(signal) : request);
 
   if (error) throw new Error(error.message);
 
@@ -355,6 +371,14 @@ export interface SessionRules {
   allowOvertime: boolean; // class_exams.allow_overtime: false = time-up auto-submits; true = the student may keep going
   overtimePolicy: "accept" | "zero"; // class_exams.overtime_policy
   answerChangeDeduction: number; // class_exams.answer_change_deduction, points lost per changed answer (0 = none)
+  delivery?: {
+    displayAt: string | null;
+    startsAt: string | null;
+    endsAt: string | null;
+    maxAttempts: number;
+    passMark: number;
+    shuffle: boolean;
+  };
 }
 
 // Fetches the rules for one attempt. The student can read their own session and their own class exam.
@@ -364,7 +388,7 @@ export async function getSessionRules(
   const { data, error } = await supabase
     .from("exam_sessions")
     .select(
-      "class_exams ( sequential, allow_review, allow_overtime, overtime_policy, answer_change_deduction )",
+      "class_exams ( sequential, allow_review, allow_overtime, overtime_policy, answer_change_deduction, display_at, starts_at, ends_at, max_attempts, pass_mark, randomize_order )",
     )
     .eq("id", sessionId)
     .single();
@@ -379,6 +403,14 @@ export async function getSessionRules(
     allowOvertime: rules?.allow_overtime ?? false,
     overtimePolicy: rules?.overtime_policy === "zero" ? "zero" : "accept",
     answerChangeDeduction: Number(rules?.answer_change_deduction ?? 0),
+    delivery: {
+      displayAt: rules.display_at,
+      startsAt: rules.starts_at,
+      endsAt: rules.ends_at,
+      maxAttempts: rules.max_attempts,
+      passMark: rules.pass_mark,
+      shuffle: rules.randomize_order,
+    },
   };
 }
 
@@ -486,6 +518,7 @@ export interface ReviewOption {
 
 // One reviewed question with the student's own answer.
 export interface ReviewItem {
+  codingReview?: import('../types/localGrading').CodingReview;
   key: string; // questions.id, or the draw id for a pooled question
   poolDrawId: string | null; // set only for pooled questions
   title: string; // question heading
@@ -528,6 +561,7 @@ export async function getSessionReview(
     correctAnswers: string[];
     score: number;
     maxPoints: number;
+    codingReview?: import('../types/localGrading').CodingReview;
   }[];
   return {
     keysRevealed: true,
@@ -546,6 +580,7 @@ export async function getSessionReview(
       pointDeduction: 0,
       acceptedAnswers: row.type === "fitb" ? row.correctAnswers : null,
       correctAnswers: row.correctAnswers,
+      codingReview: row.type === 'coding' ? row.codingReview : undefined,
     })),
   };
 }

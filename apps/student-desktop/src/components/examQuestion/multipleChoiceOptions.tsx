@@ -18,11 +18,11 @@ export function MultipleChoiceOptions({ options, selectedId, onSelect, onClear, 
         const wrong = !onSelect && selected && isCorrect === false;
         const border = wrong ? "border-red-700 inset-ring-1 inset-ring-red-700"
           : selected || correct ? "border-green-700 inset-ring-1 inset-ring-green-700"
-          : "border-black";
-        const classes = `flex items-center gap-4 w-full text-left px-5 py-4 rounded-lg border bg-white text-[#101828] ${border}`;
+          : "border-stone-200";
+        const classes = `flex items-center gap-3 w-full text-left px-4 py-3 rounded-lg border text-[#101828] ${wrong ? "bg-red-50" : correct ? "bg-green-50" : "bg-white"} ${border}`;
         const content = (
           <>
-            <span className="shrink-0 w-8 h-8 rounded-lg grid place-items-center bg-[#101828] text-white font-mono text-[13px] font-bold">
+            <span className={`shrink-0 w-7 h-7 rounded-md border grid place-items-center text-xs font-semibold ${wrong ? "border-red-700 bg-red-700 text-white" : selected || correct ? "border-green-700 bg-green-700 text-white" : "border-stone-200 bg-stone-50 text-stone-500"}`}>
               {displayLetter ?? String.fromCharCode(65 + index)}
             </span>
             <span className="text-sm leading-relaxed min-w-0 flex-1 wrap-break-word whitespace-pre-wrap">{text}</span>
@@ -41,7 +41,7 @@ export function MultipleChoiceOptions({ options, selectedId, onSelect, onClear, 
             type="button"
             aria-pressed={selected}
             onClick={() => onSelect(id)}
-            className={`${classes} cursor-pointer transition-none outline-none ${selected ? "" : "focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#00285d]"}`}
+            className={`${classes} cursor-pointer transition-colors hover:border-green-700 focus:outline-none focus-visible:outline-solid focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-green-700`}
           >
             {content}
           </button>

@@ -3,6 +3,7 @@ import {
   insertMovementEvents,
   type BufferedMovementEvent,
 } from "../services/movementEventService"; // does the actual database write
+import type { OfflineEnqueue } from "../types/offlineExam";
 
 const MAX_BUFFER = 200; // never hold more than this many events in memory
 const BATCH_SIZE = 50; // events sent per request
@@ -14,6 +15,7 @@ interface Options {
   enabled: boolean; // false while loading, after removal, or when there is nothing to report
   questionId: string | null; // real question id, null for pooled questions
   position: number | null; // 1-based place in this student's own order
+  queueOffline?: OfflineEnqueue;
 }
 
 // true when the exam window is in front of everything else
@@ -24,7 +26,7 @@ function isWindowFocused(): boolean {
 // Records what the student does (WBS 7.7): moving between questions, and the window losing or regaining focus.
 // Events wait in a small in-memory buffer and are sent in batches. If the network drops they stay in the buffer
 // and are sent when it returns, so the history has no holes. The exam itself is never blocked by any of this.
-export function useMovementEvents({ sessionId, enabled, questionId, position }: Options) {
+export function useMovementEvents({ sessionId, enabled, questionId, position, queueOffline }: Options) {
   const bufferRef = useRef<BufferedMovementEvent[]>([]); // events waiting to be sent, oldest first
   const flushPromiseRef = useRef<Promise<void> | null>(null); // the send that is running right now, if any
   const flushTimerRef = useRef<ReturnType<typeof setTimeout> | undefined>(undefined); // pending "send soon" timer
@@ -58,12 +60,18 @@ export function useMovementEvents({ sessionId, enabled, questionId, position }: 
   // Adds one event to the buffer and schedules a send shortly after.
   const enqueue = useCallback(
     (event: Omit<BufferedMovementEvent, "at">) => {
-      bufferRef.current.push({ ...event, at: Date.now() }); // remember when it happened here
+      const at = Date.now();
+      if (queueOffline) {
+        void queueOffline({ kind: "movement", event: { ...event, at } }, new Date(at).toISOString())
+          .catch(() => { /* The offline queue retains the write for retry. */ });
+        return;
+      }
+      bufferRef.current.push({ ...event, at });
       if (bufferRef.current.length > MAX_BUFFER) bufferRef.current.shift(); // a very long outage drops the oldest event
       if (flushTimerRef.current) clearTimeout(flushTimerRef.current); // restart the short wait
       flushTimerRef.current = setTimeout(() => void flush(), FLUSH_DELAY_MS);
     },
-    [flush],
+    [flush, queueOffline],
   );
 
   // 1. Question navigation: an event whenever the student's position changes.

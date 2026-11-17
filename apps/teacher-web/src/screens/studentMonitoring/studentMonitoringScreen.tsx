@@ -1,223 +1,178 @@
-import { TeacherHeader } from "../../components/layout/teacherHeader"; 
-import { TeacherSidebar } from "../../components/layout/teacherSidebar"; 
-import { useRouterLogic } from "../../router/routerLogic"; 
+import { useState, type ReactNode } from "react";
+import { ArrowLeft, RefreshCw, ShieldAlert } from "lucide-react";
+import { examButton, examSecondary } from "../../components/examLibrary/examDialog";
+import { TeacherHeader } from "../../components/layout/teacherHeader";
+import { TeacherSidebar } from "../../components/layout/teacherSidebar";
+import { MovementHistoryModal } from "../../components/studentMonitoring/movementHistoryModal";
+import { Pagination } from "../../components/shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
+import { useStudentMonitoring } from "../../hooks/useStudentMonitoring";
+import { useRouterLogic } from "../../router/routerLogic";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore";
-import { useStudentMonitoring } from "../../hooks/useStudentMonitoring"; 
-import { useState } from "react"; 
-import { MovementHistoryModal } from "../../components/studentMonitoring/movementHistoryModal"; 
-import type {
-  MonitoringStatus,
-  StudentMonitoringRow,
-} from "./studentMonitoringScreen.types";
+import type { MonitoringStatus, StudentMonitoringRow } from "./studentMonitoringScreen.types";
 
-const DASH = "\u2014"; // shown when a value does not apply
-
-const buttonClass =
-  "px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)] disabled:opacity-50 disabled:cursor-not-allowed"; 
-
-const violationsButtonClass =
-  "px-3 py-2 rounded-lg border text-[13px] font-semibold cursor-pointer transition-opacity hover:opacity-80 border-transparent bg-[var(--color-error)] text-white";
-
-const STATUS_STYLE: Record<MonitoringStatus, { label: string; bg: string; text: string }> = {
-  not_joined: { label: "Not joined", bg: "#E5E7EB", text: "#374151" }, 
-  in_progress: { label: "In Progress", bg: "#DCFCE7", text: "#166534" },
-  offline: { label: "Offline", bg: "#FEF3C7", text: "#92400E" }, 
-  submitted: { label: "Submitted", bg: "#DBEAFE", text: "#1E40AF" }, 
-  timed_out: { label: "Timed Out", bg: "#EDE9FE", text: "#5B21B6" }, 
-  removed: { label: "Removed", bg: "#FEE2E2", text: "#991B1B" },
+const DASH = "—";
+const wideCell = "@min-[46rem]:table-cell @min-[46rem]:px-3 @min-[46rem]:py-2.5 @min-[46rem]:align-middle";
+const rosterColumns = ["Student", "Status", "Question", "Answered", "Last seen", "Violations", "History"];
+const statusStyles: Record<MonitoringStatus, { label: string; color: string }> = {
+  not_joined: { label: "Not joined", color: "bg-stone-200 text-stone-700" },
+  in_progress: { label: "In progress", color: "bg-[#e5eddf] text-[#3d5431]" },
+  offline: { label: "Offline", color: "bg-amber-100 text-amber-900" },
+  submitted: { label: "Submitted", color: "bg-blue-100 text-blue-900" },
+  timed_out: { label: "Timed out", color: "bg-violet-100 text-violet-900" },
+  removed: { label: "Removed", color: "bg-red-100 text-red-800" },
 };
 
 function formatSeen(seconds: number | null): string {
-  if (seconds === null) return DASH; 
+  if (seconds === null) return DASH;
   if (seconds < 60) return `${seconds}s ago`;
   if (seconds < 3600) return `${Math.floor(seconds / 60)}m ago`;
   return `${Math.floor(seconds / 3600)}h ago`;
 }
 
-// the colored pill showing a student's status
-function StatusBadge({ row }: { row: StudentMonitoringRow }) {
-  const style = STATUS_STYLE[row.status]; 
+function RosterCell({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <div className="flex flex-col items-start gap-1">
-      <span
-        className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold" 
-        style={{ backgroundColor: style.bg, color: style.text }} 
-      >
-        {style.label}
-      </span>
-      {row.status === "in_progress" && row.isFocused === false && (
-        <span
-          className="px-2.5 py-0.5 rounded-full text-[11px] font-semibold" 
-          style={{ backgroundColor: "#FEF3C7", color: "#92400E" }} 
-        >
-          Window not in front
-        </span>
-      )}
-    </div>
+    <td role="cell" className={`block min-w-0 text-sm wrap-anywhere ${wideCell}`}>
+      <span aria-hidden="true" className="mb-0.5 block text-xs text-stone-600 @min-[46rem]:hidden">{label}</span>
+      {children}
+    </td>
   );
 }
 
-// answered out of total, as a small bar plus the numbers
 function ProgressCell({ row }: { row: StudentMonitoringRow }) {
-  if (row.totalQuestions === null || row.answeredCount === null) return <span className="opacity-60">{DASH}</span>;
-  const pct = row.totalQuestions > 0 ? Math.min(100, Math.round((row.answeredCount / row.totalQuestions) * 100)) : 0; 
+  if (row.totalQuestions === null || row.answeredCount === null) return DASH;
+  const percentage = row.totalQuestions > 0
+    ? Math.min(100, (row.answeredCount / row.totalQuestions) * 100)
+    : 0;
   return (
-    <div className="flex items-center gap-2">
-      <div className="w-24 h-1.5 rounded-full overflow-hidden bg-[var(--color-base-300)]">
-        <div className="h-full rounded-full" style={{ width: `${pct}%`, backgroundColor: "var(--color-primary)" }} />
+    <div className="flex max-w-28 flex-col gap-1 text-xs tabular-nums">
+      <div aria-hidden="true" className="h-1.5 min-w-10 overflow-hidden rounded-full bg-[var(--color-base-300)]">
+        <div className="h-full rounded-full bg-[#465a3b]" style={{ width: `${percentage}%` }} />
       </div>
-      <span className="text-[12px] opacity-80">
-        {row.answeredCount}/{row.totalQuestions}
-      </span>
+      <span>{row.answeredCount} / {row.totalQuestions}</span>
     </div>
   );
 }
 
 export function StudentMonitoringScreen() {
-  const navigateTo = useRouterLogic((state) => state.navigateTo); 
-  const classExamId = useViolationMonitoringStore((state) => state.currentClassExamId); 
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const classExamId = useViolationMonitoringStore((state) => state.currentClassExamId);
+  const returnScreen = useViolationMonitoringStore((state) => state.returnScreen);
+  const returnLabel = returnScreen === "dashboard" ? "Dashboard" : "Exam Library";
   const { rows, header, isLoading, error, refetch, lastRefreshedAt, summary } = useStudentMonitoring(classExamId);
-  const [historyTarget, setHistoryTarget] = useState<{ studentId: string; studentName: string } | null>(null); 
+  const [historyTarget, setHistoryTarget] = useState<{ studentId: string; studentName: string } | null>(null);
+  const rosterPage = usePagination(rows, 10, classExamId ?? "");
+  const hasRoster = classExamId !== null && rows.length > 0;
+  const emptyMessage = classExamId === null
+    ? "No class exam selected. Open Student Monitoring from a class exam."
+    : isLoading
+      ? "Loading students…"
+      : error
+        ? null
+        : "No students are enrolled in this class yet.";
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
-      {/* full-screen shell */}
-      <TeacherSidebar activeItem="examLibrary" /> {}
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TeacherHeader /> {}
-        <main className="flex-1 overflow-y-auto px-8 py-6" style={{ color: "var(--color-base-content)" }}>
-          <p className="text-xs opacity-60 mb-2">Teacher Portal &gt; Exam Library &gt; Student Monitoring</p> {}
-          <div className="flex items-start justify-between gap-6 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold mb-1">Student Monitoring</h1> {}
-              <p className="text-sm opacity-70 max-w-md leading-relaxed">
-                {header
-                  ? `Live view of "${header.examTitle}" in ${header.className}.`
-                  : "Live view of the students in this class exam."}
-              </p>
-              {classExamId !== null && !error && rows.length > 0 && (
-                <p className="text-[12px] opacity-60 mt-1">
-                  {summary.total} students: {summary.inProgress} in progress, {summary.offline} offline, {summary.notJoined} not joined, {summary.finished} finished
-                </p>
-              )}
-            </div>
-            <div className="flex flex-col items-end gap-1">
-              <div className="flex gap-2"> {}
-                <button onClick={() => navigateTo("violationMonitoring")} className={violationsButtonClass}>
-                  Violations
+    <div className="flex h-dvh overflow-hidden bg-[var(--color-base-200)] text-[var(--color-base-content)]">
+      <TeacherSidebar activeItem="examLibrary" />
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TeacherHeader title="Student Monitoring" />
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-8 sm:py-6">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <button type="button" className={examSecondary} onClick={() => navigateTo(returnScreen)}>
+                <ArrowLeft size={15} aria-hidden="true" /> Back to {returnLabel}
+              </button>
+              <div className="flex flex-wrap gap-2">
+                <button type="button" className={examSecondary} onClick={() => void refetch()} disabled={classExamId === null || isLoading}>
+                  <RefreshCw size={15} aria-hidden="true" className={isLoading && classExamId !== null ? "motion-safe:animate-spin" : undefined} />
+                  {isLoading && hasRoster ? "Refreshing…" : "Refresh"}
                 </button>
-                <button onClick={() => void refetch()} disabled={isLoading} className={buttonClass}>
-                  {isLoading ? "Refreshing..." : "Refresh"}
+                <button type="button" className={`${examButton} border-red-200 bg-red-50 text-red-800 hover:bg-red-100`} disabled={classExamId === null}
+                  onClick={() => navigateTo("violationMonitoring")}>
+                  <ShieldAlert size={15} aria-hidden="true" /> Violations
                 </button>
               </div>
-              {lastRefreshedAt && (
-                <span className="text-[11px] opacity-60">Updated {lastRefreshedAt.toLocaleTimeString("en-GB")}</span> 
-              )}
             </div>
-          </div>
 
-          {error && (
-            <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>
-              {error}
-            </p>
-          )}
+            <div className="min-w-0">
+              <h2 className="text-lg font-semibold wrap-anywhere">{header?.examTitle ?? "Class exam"}</h2>
+              {header && <p className="mt-0.5 text-sm text-stone-600 wrap-anywhere">{header.className}</p>}
+            </div>
 
-          <div className="rounded-2xl border overflow-hidden bg-[var(--color-base-100)] border-[var(--color-base-300)]">
-            <table className="w-full text-[13px] text-[var(--color-base-content)]">
-              <thead>
-                <tr className="text-left border-b border-[var(--color-base-300)] opacity-60">
-                  <th className="px-5 py-3 font-medium">Student</th>
-                  <th className="px-5 py-3 font-medium">ID Number</th>
-                  <th className="px-5 py-3 font-medium">Status</th>
-                  <th className="px-5 py-3 font-medium">Current Question</th>
-                  <th className="px-5 py-3 font-medium">Progress</th>
-                  <th className="px-5 py-3 font-medium">Last Seen</th>
-                  <th className="px-5 py-3 font-medium">Violations</th>
-                  <th className="px-5 py-3 font-medium">History</th>
-                </tr>
-              </thead>
-              <tbody>
-                {classExamId === null && (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-6 text-center opacity-60">
-                      No class exam selected. Open this screen from an exam card.
-                    </td>
-                  </tr>
+            {hasRoster && (
+              <div className="flex flex-wrap items-center justify-between gap-x-5 gap-y-2 border-b border-[var(--color-base-300)] pb-3 text-xs text-stone-600">
+                <ul aria-label="Class summary" className="flex flex-wrap gap-x-4 gap-y-1 tabular-nums">
+                  <li><strong className="font-semibold text-[var(--color-base-content)]">{summary.total}</strong> enrolled</li>
+                  <li><span aria-hidden="true" className="me-1.5 inline-block size-1.5 rounded-full bg-[#465a3b] align-middle" />{summary.inProgress} in progress</li>
+                  <li><span aria-hidden="true" className="me-1.5 inline-block size-1.5 rounded-full bg-amber-700 align-middle" />{summary.offline} offline</li>
+                  <li>{summary.notJoined} not joined</li>
+                  <li>{summary.finished} finished</li>
+                </ul>
+                {lastRefreshedAt && (
+                  <p role="status">Updated <time dateTime={lastRefreshedAt.toISOString()} className="tabular-nums">{lastRefreshedAt.toLocaleTimeString("en-GB")}</time></p>
                 )}
+              </div>
+            )}
 
-                {classExamId !== null && isLoading && rows.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-6 text-center opacity-60">
-                      Loading students...
-                    </td>
-                  </tr>
-                )}
+            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
 
-                {classExamId !== null && !isLoading && !error && rows.length === 0 && (
-                  <tr>
-                    <td colSpan={8} className="px-5 py-6 text-center opacity-60">
-                      No students are enrolled in this class yet.
-                    </td>
-                  </tr>
-                )}
-
-                {classExamId !== null &&
-                  rows.map((row) => {
-                    const showPosition = row.status === "in_progress" || row.status === "offline"; 
-                    const hasAttempt = row.sessionId !== null;
-                    return (
-                      <tr key={row.studentId} className="border-t border-[var(--color-base-300)]">
-                        <td className="px-5 py-3">
-                          {row.studentName}
-                          {row.attemptNumber !== null && row.attemptNumber > 1 ? ` (Attempt ${row.attemptNumber})` : ""}
-                        </td>
-                        <td className="px-5 py-3 opacity-80">{row.studentIdNumber}</td>
-                        <td className="px-5 py-3">
-                          <StatusBadge row={row} />
-                        </td>
-                        <td className="px-5 py-3 opacity-80">
-                          {showPosition && row.currentPosition !== null && row.totalQuestions !== null
-                            ? `Q${row.currentPosition} of ${row.totalQuestions}`
-                            : DASH}
-                        </td>
-                        <td className="px-5 py-3">
-                          <ProgressCell row={row} />
-                        </td>
-                        <td className="px-5 py-3 opacity-80">{formatSeen(row.secondsSinceSeen)}</td>
-                        <td
-                          className="px-5 py-3 font-bold"
-                          style={row.violationCount > 0 ? { color: "var(--color-error)" } : undefined} 
-                        >
-                          {row.violationCount}
-                        </td>
-                        <td className="px-5 py-3">
-                          {hasAttempt ? (
-                            <button
-                              onClick={() => setHistoryTarget({ studentId: row.studentId, studentName: row.studentName })} 
-                              className="text-[13px] font-semibold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-secondary)]"
-                            >
-                              View
-                            </button>
-                          ) : (
-                            <span className="opacity-60">{DASH}</span> 
-                          )}
-                        </td>
-                      </tr>
-                    );
-                  })}
-              </tbody>
-            </table>
+            <section aria-labelledby="class-roster-heading" className="@container min-w-0 overflow-hidden rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)]">
+              <h2 id="class-roster-heading" className="border-b border-[var(--color-base-300)] px-4 py-3 text-sm font-semibold">Class roster</h2>
+              {hasRoster ? (
+                <><table role="table" aria-labelledby="class-roster-heading" className="block w-full border-collapse @min-[46rem]:table">
+                  <thead role="rowgroup" className="sr-only @min-[46rem]:not-sr-only @min-[46rem]:table-header-group">
+                    <tr role="row" className="border-b border-[var(--color-base-300)] text-left text-xs text-stone-600">
+                      {rosterColumns.map((label) => <th key={label} scope="col" role="columnheader" className="px-3 py-2 font-medium">{label}</th>)}
+                    </tr>
+                  </thead>
+                  <tbody role="rowgroup" className="block divide-y divide-[var(--color-base-300)] @min-[46rem]:table-row-group">
+                    {rosterPage.items.map((row) => {
+                      const showPosition = row.status === "in_progress" || row.status === "offline";
+                      const status = statusStyles[row.status];
+                      return (
+                        <tr key={row.studentId} role="row" className="grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 @min-[46rem]:table-row">
+                          <th scope="row" role="rowheader" className={`col-span-2 block min-w-0 text-left text-sm font-semibold wrap-anywhere ${wideCell}`}>
+                            {row.studentName}
+                            <span className="block text-xs font-normal text-stone-600">
+                              {row.studentIdNumber}
+                              {row.attemptNumber !== null && row.attemptNumber > 1 && ` · Attempt ${row.attemptNumber}`}
+                            </span>
+                          </th>
+                          <RosterCell label="Status">
+                            <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}>{status.label}</span>
+                            {row.status === "in_progress" && row.isFocused === false && <span className="mt-1 block text-xs font-medium text-amber-900">Window not in front</span>}
+                          </RosterCell>
+                          <RosterCell label="Question">
+                            {showPosition && row.currentPosition !== null && row.totalQuestions !== null
+                              ? `Q${row.currentPosition} of ${row.totalQuestions}` : DASH}
+                          </RosterCell>
+                          <RosterCell label="Answered"><ProgressCell row={row} /></RosterCell>
+                          <RosterCell label="Last seen"><span className="tabular-nums">{formatSeen(row.secondsSinceSeen)}</span></RosterCell>
+                          <RosterCell label="Violations"><span className={row.violationCount > 0 ? "font-semibold text-red-700" : undefined}>{row.violationCount}</span></RosterCell>
+                          <RosterCell label="History">
+                            {row.sessionId !== null ? (
+                              <button type="button" className={examSecondary} aria-label={`Movement history for ${row.studentName}`}
+                                onClick={() => setHistoryTarget({ studentId: row.studentId, studentName: row.studentName })}>
+                                History
+                              </button>
+                            ) : DASH}
+                          </RosterCell>
+                        </tr>
+                      );
+                    })}
+                  </tbody>
+                </table><Pagination label="Student roster pages" {...rosterPage} /></>
+              ) : emptyMessage && <p role="status" className="px-4 py-5 text-sm text-stone-600">{emptyMessage}</p>}
+            </section>
           </div>
         </main>
       </div>
 
-      <MovementHistoryModal
-        key={historyTarget?.studentId ?? "closed"} 
-        classExamId={classExamId} 
-        studentId={historyTarget?.studentId ?? null} 
-        studentName={historyTarget?.studentName ?? ""} 
-        onClose={() => setHistoryTarget(null)} 
-      />
+      {classExamId !== null && historyTarget && (
+        <MovementHistoryModal key={classExamId + ":" + historyTarget.studentId}
+          classExamId={classExamId} studentId={historyTarget.studentId} studentName={historyTarget.studentName}
+          onClose={() => setHistoryTarget(null)} />
+      )}
     </div>
   );
 }

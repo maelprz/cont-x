@@ -1,3 +1,6 @@
+import type { SessionTiming } from "../../services/examService";
+import type { OfflineAttemptKey } from "../../types/offlineExam";
+
 // ---------------------------------------------------------------------------
 // Question types
 // ---------------------------------------------------------------------------
@@ -65,6 +68,7 @@ export type Question = CodingQuestion | MCQQuestion | FITBQuestion;
 // ---------------------------------------------------------------------------
 
 export interface ExamQuestionScreenProps {
+  onExamTimingRefreshed?: (key: OfflineAttemptKey, timing: SessionTiming) => void;
   // Exam-level
   examTitle?: string;
   timeLeftSeconds?: number;

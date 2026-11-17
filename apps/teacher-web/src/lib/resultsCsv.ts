@@ -1,5 +1,6 @@
 import type { StudentResultRow } from "../screens/examResult/examResultsScreen.types";
 import { collectPoolColumns } from "./resultsPools";
+import type { KeystrokeBatch } from "../services/keystrokeExportService";
 
 // percent of the exam's points this attempt earned (0 when the exam has no points)
 export function scorePercent(row: StudentResultRow): number {
@@ -11,8 +12,12 @@ export function scorePercent(row: StudentResultRow): number {
 function escapeCell(value: string | number | null): string {
   if (typeof value === "number") return String(value);
   let text = value ?? "";
-  if (/^[=+\-@\t\r]/.test(text)) text = `'${text}`;
+  if (/^\s*[=+\-@]|^[\t\r\n]/.test(text)) text = `'${text}`;
   return `"${text.replace(/"/g, '""')}"`;
+}
+
+function serializeCsv(rows: (string | number | null)[][]): string {
+  return rows.map((cells) => cells.map(escapeCell).join(",")).join("\r\n");
 }
 
 // builds the full results sheet: one line per attempt, one column per question
@@ -62,9 +67,40 @@ export function buildResultsCsv(
     ];
   });
 
-  return [header, ...lines]
-    .map((cells) => cells.map(escapeCell).join(","))
-    .join("\r\n");
+  return serializeCsv([header, ...lines]);
+}
+
+export function buildKeystrokeCsv(
+  batches: KeystrokeBatch[],
+  questions: StudentResultRow["questionScores"],
+): string {
+  const labels = new Map(questions.map(({ questionId, label }) => [questionId, label]));
+  const rows: (string | number | null)[][] = [
+    ["Question", "Question Title", "Question or Pool Draw ID", "Elapsed (ms)", "Key", "Event", "Batch Saved At (UTC)"],
+  ];
+
+  for (const batch of batches) {
+    const savedAt = new Date(batch.loggedAt).toISOString();
+    // The recorder resets the first gap to its start time at each drain.
+    let elapsedMs = 0;
+    for (const token of batch.sequence.split(",")) {
+      const match = /^(\d+):([a-z0-9]+)(:up)?$/i.exec(token);
+      if (!match) throw new Error("Invalid keystroke data.");
+      const [, gap, code, release] = match;
+      elapsedMs += Number(gap);
+      rows.push([
+        labels.get(batch.questionId) ?? null,
+        batch.questionTitle,
+        batch.questionId,
+        elapsedMs,
+        code,
+        release ? "Release" : "Press",
+        savedAt,
+      ]);
+    }
+  }
+
+  return serializeCsv(rows);
 }
 
 // turns pieces of a title into a safe file name, e.g. "Midterm-CS101-A"

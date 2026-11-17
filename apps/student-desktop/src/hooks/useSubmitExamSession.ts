@@ -4,6 +4,7 @@ import {
   type SubmitExamSessionResult,
   type SubmittedAnswer,
 } from "../services/examService"; // the actual Supabase call
+import { useExamSessionStore } from '../stores/useExamSessionStore';
 
 // One answer to submit, matches the shape the service function expects.
 
@@ -12,6 +13,7 @@ import {
 export function useSubmitExamSession() {
   const [isSubmitting, setIsSubmitting] = useState(false); // true while grading is in flight
   const [error, setError] = useState<string | null>(null); // holds a message to show the student
+  const [submissionLocked, setSubmissionLocked] = useState(() => Boolean(useExamSessionStore.getState().offlineExam?.gradingState?.submission));
 
   // Runs the real grading call and returns the result, or null if it failed.
   async function submitSession(
@@ -21,17 +23,19 @@ export function useSubmitExamSession() {
   ): Promise<SubmitExamSessionResult | null> {
     setIsSubmitting(true); // show a loading state while grading runs
     setError(null); // clear any previous error before trying again
+    let locallyGraded = submissionLocked;
 
     try {
-      const result = await submitExamSession(sessionId, status, answers); // real grading call
+      const result = await submitExamSession(sessionId, status, answers, () => { locallyGraded = true; setSubmissionLocked(true); });
       return result; // caller decides what happens next
-    } catch {
-      setError("Your exam could not be submitted. Please try again.");
+    } catch (error) {
+      setError(locallyGraded ? "Your locally graded submission is saved. Reconnect and retry sync."
+        : error instanceof Error ? error.message : "Local grading could not finish. Your answers are still here; retry.");
       return null;
     } finally {
       setIsSubmitting(false); // loading is done either way
     }
   }
 
-  return { submitSession, isSubmitting, error, clearError: () => setError(null) };
+  return { submitSession, isSubmitting, error, submissionLocked, clearError: () => setError(null) };
 }

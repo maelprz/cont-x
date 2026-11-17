@@ -1,466 +1,252 @@
+import { useId, type ReactNode } from "react";
+import { ArrowLeft, RefreshCw } from "lucide-react";
+import { ExamConfirmDialog, ExamDialog, examSecondary } from "../../components/examLibrary/examDialog";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
-import { ConfirmActionDialog } from "../../components/shared/confirmActionDialog"; // shared yes/no dialog, reused for the Remove confirmation
+import { Pagination } from "../../components/shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { useViolationMonitoring } from "../../hooks/useViolationMonitoring";
-import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore"; // reads which class exam is selected
-import { useRouterLogic } from "../../router/routerLogic"; // gives us navigateTo for the Back button
-import type { ViolationDetailRow } from "./violationMonitoringScreen.types";
-import { formatTimestamp } from "../../services/violationService"; // formats the raw log time for display
+import { useRouterLogic } from "../../router/routerLogic";
+import { CLASS_LOG_LIMIT, formatTimestamp } from "../../services/violationService";
+import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore";
+import type { ViolationDetailRow, ViolationSessionRow } from "./violationMonitoringScreen.types";
 
-// turns a raw violation_type value into a readable label
-function getViolationTypeLabel(
-  type: ViolationDetailRow["violationType"],
-): string {
-  switch (type) {
-    case "alt_tab":
-      return "Alt+Tab"; // switched away using alt tab
-    case "windows":
-      return "Windows Key"; // pressed the windows key
-    case "screenshot":
-      return "Screenshot"; // took a screenshot
-    case "copy_paste":
-      return "Copy / Paste"; // used copy, cut, or paste
-    case "disallowed_process":
-      return "Disallowed app detected";
-  }
+const DASH = "—";
+const tabs = [
+  { id: "attempts", label: "Attempts" },
+  { id: "log", label: "Activity log" },
+] as const;
+const wideCell = "@min-[46rem]:table-cell @min-[46rem]:px-3 @min-[46rem]:py-2.5 @min-[46rem]:align-middle";
+const rowClass = "grid grid-cols-2 gap-x-3 gap-y-2 px-4 py-3 @min-[46rem]:table-row";
+
+const violationLabels: Record<ViolationDetailRow["violationType"], string> = {
+  alt_tab: "Alt+Tab",
+  windows: "Windows key",
+  screenshot: "Screenshot",
+  copy_paste: "Copy / Paste",
+  disallowed_process: "Disallowed app detected",
+};
+
+const attemptStatuses: Record<ViolationSessionRow["status"], { label: string; color: string }> = {
+  in_progress: { label: "In progress", color: "bg-[#e5eddf] text-[#3d5431]" },
+  submitted: { label: "Submitted", color: "bg-blue-100 text-blue-900" },
+  timed_out: { label: "Timed out", color: "bg-violet-100 text-violet-900" },
+  removed: { label: "Removed", color: "bg-red-100 text-red-800" },
+};
+
+function AttemptTable({ label, columns, children }: { label: string; columns: string[]; children: ReactNode }) {
+  return (
+    <table role="table" aria-label={label} className="block w-full border-collapse @min-[46rem]:table">
+      <thead role="rowgroup" className="sr-only @min-[46rem]:not-sr-only @min-[46rem]:table-header-group">
+        <tr role="row" className="border-b border-[var(--color-base-300)] text-left text-xs text-stone-600">
+          {columns.map((column) => <th key={column} scope="col" role="columnheader" className="px-3 py-2 font-medium">{column}</th>)}
+        </tr>
+      </thead>
+      <tbody role="rowgroup" className="block divide-y divide-[var(--color-base-300)] @min-[46rem]:table-row-group">
+        {children}
+      </tbody>
+    </table>
+  );
 }
 
-// turns a raw session status into a readable label
-function getStatusLabel(
-  status: "in_progress" | "submitted" | "timed_out" | "removed",
-): string {
-  switch (status) {
-    case "in_progress":
-      return "In Progress"; // student is still taking the exam
-    case "submitted":
-      return "Submitted"; // student submitted their answers
-    case "timed_out":
-      return "Timed Out"; // the exam timer ran out
-    case "removed":
-      return "Removed"; // the teacher removed the student mid-exam
-  }
+function AttemptCell({ label, children }: { label: string; children: ReactNode }) {
+  return (
+    <td role="cell" className={`block min-w-0 text-sm wrap-anywhere ${wideCell}`}>
+      <span aria-hidden="true" className="mb-0.5 block text-xs text-stone-600 @min-[46rem]:hidden">{label}</span>
+      {children}
+    </td>
+  );
 }
 
-// the overlay listing full violation detail for one clicked session
-function ViolationDetailModal({
-  isOpen,
-  isLoading,
-  error,
-  violations,
-  onClose,
-}: {
-  isOpen: boolean;
+function AttemptStudent({ name, detail }: { name: string; detail: string }) {
+  return (
+    <th scope="row" role="rowheader" className={`order-first col-span-2 block min-w-0 text-left text-sm font-semibold wrap-anywhere ${wideCell}`}>
+      {name}
+      {detail && <span className="block text-xs font-normal text-stone-600">{detail}</span>}
+    </th>
+  );
+}
+
+function ViolationDetailDialog({ session, isLoading, error, violations, onClose }: {
+  session: ViolationSessionRow | undefined;
   isLoading: boolean;
   error: string | null;
   violations: ViolationDetailRow[];
   onClose: () => void;
 }) {
-  if (!isOpen) return null; // render nothing when no session is selected
-
+  const page = usePagination(violations);
   return (
-    <div
-      className="fixed inset-0 flex items-center justify-center z-50"
-      style={{ backgroundColor: "rgba(0,0,0,0.4)" }} // dims the background behind the modal
-      onClick={onClose} // click outside the card closes the modal
-    >
-      <div
-        className="rounded-2xl border w-[520px] max-h-[70vh] overflow-y-auto p-6 bg-[var(--color-base-100)] border-[var(--color-base-300)]"
-        onClick={(event) => event.stopPropagation()} // stops the outside click from firing
-      >
-        <div className="flex items-center justify-between mb-4">
-          <h2 className="text-[16px] font-bold text-[var(--color-base-content)]">
-            Violation Details
-          </h2>
-          <button
-            onClick={onClose}
-            className="text-[13px] font-medium cursor-pointer border-none bg-transparent text-[var(--color-base-content)] opacity-60 hover:opacity-100"
-          >
-            Close
-          </button>
-        </div>
-
-        {isLoading && (
-          <p className="text-[13px] text-[var(--color-base-content)] opacity-60">
-            Loading violations...
-          </p>
-        )}
-
-        {error && (
-          <p className="text-[13px]" style={{ color: "var(--color-error)" }}>
-            {error}
-          </p>
-        )}
-
-        {!isLoading && !error && violations.length === 0 && (
-          <p className="text-[13px] text-[var(--color-base-content)] opacity-60">
-            No violations were logged for this session.
-          </p>
-        )}
-
-        {!isLoading && !error && violations.length > 0 && (
-          <table className="w-full text-[13px] text-[var(--color-base-content)]">
-            <thead>
-              <tr className="text-left opacity-60">
-                <th className="pb-2 font-medium">Type</th>
-                <th className="pb-2 font-medium">Details</th>
-                <th className="pb-2 font-medium">Question</th>
-                <th className="pb-2 font-medium">Time</th>
-              </tr>
-            </thead>
-            <tbody>
-              {violations.map((violation) => (
-                <tr
-                  key={violation.id}
-                  className="border-t border-[var(--color-base-300)]"
-                >
-                  <td className="py-2 pr-3">
-                    {getViolationTypeLabel(violation.violationType)}
-                  </td>
-                  <td className="py-2 pr-3 opacity-80">
-                    {violation.details ?? "\u2014"}
-                  </td>
-                  <td className="py-2 pr-3 opacity-80">
-                    {violation.questionTitle ?? "\u2014"}
-                  </td>
-                  <td className="py-2 opacity-80">{violation.loggedAt}</td>
-                </tr>
-              ))}
-            </tbody>
-          </table>
-        )}
-      </div>
-    </div>
+    <ExamDialog title="Violation details" subtitle={session && `${session.studentName} · Attempt ${session.attemptNumber}`}
+      onClose={onClose} dismissOnBackdrop wide
+      footer={<button type="button" className={examSecondary} onClick={onClose}>Close</button>}>
+      {isLoading && <p role="status" className="text-sm text-stone-600">Loading violations…</p>}
+      {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+      {!isLoading && !error && (violations.length > 0 ? (
+        <><ul aria-label="Recorded violations" className="divide-y divide-[var(--color-base-300)]">
+          {page.items.map((violation) => (
+            <li key={violation.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
+              <div className="min-w-0 text-sm wrap-anywhere">
+                <h3 className="font-semibold">{violationLabels[violation.violationType]}</h3>
+                {violation.details && <p className="mt-0.5 text-stone-700">{violation.details}</p>}
+                {violation.questionTitle && <p className="mt-0.5 text-xs text-stone-600">{violation.questionTitle}</p>}
+              </div>
+              <span className="shrink-0 text-xs text-stone-600 tabular-nums">{violation.loggedAt}</span>
+            </li>
+          ))}
+        </ul><Pagination label="Violation detail pages" {...page} /></>
+      ) : <p role="status" className="text-sm text-stone-600">No violations were logged for this attempt.</p>)}
+    </ExamDialog>
   );
 }
 
 export function ViolationMonitoringScreen() {
-  const navigateTo = useRouterLogic((state) => state.navigateTo); // used by the Back button
-  const classExamId = useViolationMonitoringStore(
-    (state) => state.currentClassExamId,
-  );
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const classExamId = useViolationMonitoringStore((state) => state.currentClassExamId);
+  const tabId = useId();
   const {
-    sessions,
-    header,
-    isLoading,
-    error,
-    refetch,
-    selectedSessionId,
-    violations,
-    isViolationsLoading,
-    violationsError,
-    openViolationModal,
-    closeViolationModal,
-    sessionToRemove, // the row waiting for the teacher's confirmation
-    isRemoving, // true while the remove call is running
-    removeError, // failure reason shown inside the confirm dialog
-    requestRemove, // opens the confirm dialog for one row
-    cancelRemove, // closes the dialog without removing anyone
-    confirmRemove, // runs the removal
-    activeTab, // which tab is showing
-    setActiveTab, // switches tabs
-    logEntries, // merged log rows (violations + removals), newest first
-    isLogTruncated, // true when the 500-row cap was hit
+    sessions, header, lastRefreshedAt, isLoading, error, refetch,
+    selectedSessionId, violations, isViolationsLoading, violationsError, openViolationModal, closeViolationModal,
+    sessionToRemove, isRemoving, removeError, requestRemove, cancelRemove, confirmRemove,
+    activeTab, setActiveTab, logEntries, isLogTruncated,
   } = useViolationMonitoring(classExamId);
 
+  const selectedSession = sessions.find((session) => session.id === selectedSessionId);
+  const attemptsPage = usePagination(sessions, 10, classExamId ?? "");
+  const logPage = usePagination(logEntries, 10, classExamId ?? "");
+  const activeRows = activeTab === "attempts" ? sessions : logEntries;
+  const hasRows = classExamId !== null && activeRows.length > 0;
+  const emptyMessage = classExamId === null
+    ? "No class exam selected. Open Violation Monitoring from Student Monitoring."
+    : isLoading
+      ? "Loading " + (activeTab === "attempts" ? "attempts…" : "activity log…")
+      : error
+        ? null
+        : activeTab === "attempts"
+          ? "No attempts have been recorded for this class yet."
+          : "No violations or removals were recorded for this class exam.";
+
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
+    <div className="flex h-dvh overflow-hidden bg-[var(--color-base-200)] text-[var(--color-base-content)]">
       <TeacherSidebar activeItem="examLibrary" />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TeacherHeader />
-
-        <main
-          className="flex-1 overflow-y-auto px-8 py-6"
-          style={{ color: "var(--color-base-content)" }}
-        >
-          <p className="text-xs opacity-60 mb-2">
-            Teacher Portal &gt; Exam Library &gt; Student Monitoring &gt;
-            Violation Monitoring
-          </p>
-
-          <div className="flex items-start justify-between gap-6 mb-6">
-            <div>
-              <h1 className="text-2xl font-bold mb-1">Violation Monitoring</h1>
-              <p className="text-sm opacity-70 max-w-md leading-relaxed">
-                {header
-                  ? `Reviewing attempts for "${header.examTitle}" in ${header.className}.` // exam and class this screen is scoped to
-                  : "Reviewing attempts for this class exam."}
-              </p>
-            </div>
-
-            {/* both buttons share one row so the header layout stays two-column */}
-            <div className="flex gap-2">
-              <button
-                onClick={() => navigateTo("studentMonitoring")} // go back to the live student list
-                className="px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)]"
-              >
-                Back to Student Monitoring
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TeacherHeader title="Violation Monitoring" />
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-8 sm:py-6">
+            <div className="flex flex-wrap items-center justify-between gap-x-4 gap-y-2">
+              <button type="button" className={examSecondary} onClick={() => navigateTo("studentMonitoring")}>
+                <ArrowLeft size={15} aria-hidden="true" /> Back to Student Monitoring
               </button>
-
-              <button
-                onClick={refetch}
-                className="px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer transition-opacity hover:opacity-70 border-[var(--color-base-300)] bg-[var(--color-base-100)] text-[var(--color-base-content)]"
-              >
-                Refresh
+              <button type="button" className={examSecondary} onClick={() => void refetch()} disabled={classExamId === null || isLoading}>
+                <RefreshCw size={15} aria-hidden="true" className={isLoading && classExamId !== null ? "motion-safe:animate-spin" : undefined} />
+                {isLoading && hasRows ? "Refreshing…" : "Refresh"}
               </button>
             </div>
-          </div>
 
-          {error && (
-            <p
-              className="text-[13px] mb-4"
-              style={{ color: "var(--color-error)" }}
-            >
-              {error}
-            </p>
-          )}
+            <div className="flex min-w-0 flex-wrap items-end justify-between gap-x-4 gap-y-2">
+              <div className="min-w-0">
+                <h2 className="text-lg font-semibold wrap-anywhere">{header?.examTitle ?? "Class exam"}</h2>
+                {header && <p className="mt-0.5 text-sm text-stone-600 wrap-anywhere">{header.className}</p>}
+              </div>
+              {classExamId && lastRefreshedAt && (
+                <p role="status" className="text-xs text-stone-600">
+                  Updated <time dateTime={lastRefreshedAt.toISOString()} className="tabular-nums">{lastRefreshedAt.toLocaleTimeString("en-GB")}</time>
+                </p>
+              )}
+            </div>
 
-          {/* two buttons that switch between the attempts table and the class log */}
-          <div className="flex gap-2 mb-4">
-            {(["attempts", "log"] as const).map((tab) => (
-              <button
-                key={tab} // one button per tab
-                onClick={() => setActiveTab(tab)} // switch to this tab
-                className={`px-3 py-2 rounded-lg border text-[13px] font-medium cursor-pointer border-[var(--color-base-300)] ${
-                  activeTab === tab
-                    ? "bg-[var(--color-base-100)] font-bold"
-                    : "opacity-60" // highlight the active tab
-                }`}
-              >
-                {tab === "attempts" ? "Attempts" : "Activity Log"}
-              </button>
+            <div role="tablist" aria-label="Monitoring view" className="flex gap-4 border-b border-[var(--color-base-300)]">
+              {tabs.map(({ id, label }) => (
+                <button key={id} type="button" role="tab" id={tabId + "-" + id}
+                  aria-selected={activeTab === id} aria-controls={tabId + "-" + id + "-panel"} tabIndex={activeTab === id ? 0 : -1}
+                  onClick={() => setActiveTab(id)}
+                  onKeyDown={(event) => {
+                    if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                    event.preventDefault();
+                    const next = event.key === "Home" ? "attempts" : event.key === "End" ? "log" : id === "attempts" ? "log" : "attempts";
+                    setActiveTab(next);
+                    document.getElementById(tabId + "-" + next)?.focus();
+                  }}
+                  className="min-h-10 cursor-pointer border-b-2 border-transparent px-1.5 pb-2 text-sm text-stone-600 focus-visible:outline-2 focus-visible:outline-[#465a3b] aria-selected:border-[#465a3b] aria-selected:font-semibold aria-selected:text-[#465a3b]">
+                  {label}
+                </button>
+              ))}
+            </div>
+
+            {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
+
+            {tabs.map(({ id, label }) => (
+              <section key={id} role="tabpanel" id={tabId + "-" + id + "-panel"} aria-labelledby={tabId + "-" + id}
+                hidden={activeTab !== id} tabIndex={0}
+                className="@container min-w-0 overflow-hidden rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] focus-visible:outline-2 focus-visible:outline-[#465a3b]">
+                {activeTab === id && (hasRows ? (
+                  id === "attempts" ? (
+                    <><AttemptTable label={label} columns={["Student", "Status", "Joined", "Submitted", "Violations", "Actions"]}>
+                      {attemptsPage.items.map((session) => {
+                        const status = attemptStatuses[session.status];
+                        const attemptLabel = `${session.studentName}, attempt ${session.attemptNumber}`;
+                        return (
+                          <tr key={session.id} role="row" className={rowClass}>
+                            <AttemptStudent name={session.studentName} detail={`${session.studentIdNumber} · Attempt ${session.attemptNumber}`} />
+                            <AttemptCell label="Status">
+                              <span className={`inline-flex rounded-full px-2 py-0.5 text-xs font-medium ${status.color}`}>{status.label}</span>
+                            </AttemptCell>
+                            <AttemptCell label="Joined">{session.joinedAt}</AttemptCell>
+                            <AttemptCell label="Submitted">{session.submittedAt ?? DASH}</AttemptCell>
+                            <AttemptCell label="Violations">
+                              <button type="button" className={examSecondary}
+                                aria-label={`View violations for ${attemptLabel}`} onClick={() => void openViolationModal(session.id)}>
+                                {session.violationCount} {session.violationCount === 1 ? "event" : "events"}
+                              </button>
+                            </AttemptCell>
+                            <AttemptCell label="Actions">
+                              {session.status === "in_progress" ? (
+                                <button type="button" className={examSecondary + " text-red-700"} disabled={isLoading}
+                                  aria-label={`Remove ${attemptLabel}`} onClick={() => requestRemove(session)}>
+                                  Remove
+                                </button>
+                              ) : DASH}
+                            </AttemptCell>
+                          </tr>
+                        );
+                      })}
+                    </AttemptTable><Pagination label="Violation attempt pages" {...attemptsPage} /></>
+                  ) : (
+                    <><AttemptTable label={label} columns={["Time", "Student", "Event", "Details", "Question"]}>
+                      {logPage.items.map((entry) => (
+                        <tr key={entry.id} role="row" className={rowClass}>
+                          <AttemptCell label="Time"><time dateTime={entry.occurredAt}>{formatTimestamp(entry.occurredAt)}</time></AttemptCell>
+                          <AttemptStudent name={entry.studentName} detail={entry.attemptNumber > 0 ? `Attempt ${entry.attemptNumber}` : ""} />
+                          <AttemptCell label="Event">
+                            {entry.kind === "removal"
+                              ? <span className="font-semibold text-red-700">Removed from exam</span>
+                              : entry.violationType ? violationLabels[entry.violationType] : DASH}
+                          </AttemptCell>
+                          <AttemptCell label="Details">{entry.details ?? DASH}</AttemptCell>
+                          <AttemptCell label="Question">{entry.questionTitle ?? DASH}</AttemptCell>
+                        </tr>
+                      ))}
+                    </AttemptTable><Pagination label="Activity log pages" {...logPage} /></>
+                  )
+                ) : emptyMessage && <p role="status" className="px-4 py-5 text-sm text-stone-600">{emptyMessage}</p>)}
+              </section>
             ))}
+
+            {activeTab === "log" && classExamId && isLogTruncated && (
+              <p className="text-xs text-stone-600">Showing the newest {CLASS_LOG_LIMIT} violations, plus removals.</p>
+            )}
           </div>
-
-          {/* attempts table: only shown on the attempts tab */}
-          {activeTab === "attempts" && (
-            <div className="rounded-2xl border overflow-hidden bg-[var(--color-base-100)] border-[var(--color-base-300)]">
-              <table className="w-full text-[13px] text-[var(--color-base-content)]">
-                <thead>
-                  <tr className="text-left border-b border-[var(--color-base-300)] opacity-60">
-                    <th className="px-5 py-3 font-medium">Student</th>
-                    <th className="px-5 py-3 font-medium">ID Number</th>
-                    <th className="px-5 py-3 font-medium">Attempt</th>
-                    <th className="px-5 py-3 font-medium">Status</th>
-                    <th className="px-5 py-3 font-medium">Joined</th>
-                    <th className="px-5 py-3 font-medium">Submitted</th>
-                    <th className="px-5 py-3 font-medium">Violations</th>
-                    <th className="px-5 py-3 font-medium">Actions</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {classExamId === null && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="px-5 py-6 text-center opacity-60"
-                      >
-                        No class exam selected. Open this screen from an exam
-                        card.
-                      </td>
-                    </tr>
-                  )}
-
-                  {classExamId !== null && isLoading && (
-                    <tr>
-                      <td
-                        colSpan={8}
-                        className="px-5 py-6 text-center opacity-60"
-                      >
-                        Loading sessions...
-                      </td>
-                    </tr>
-                  )}
-
-                  {classExamId !== null &&
-                    !isLoading &&
-                    sessions.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={8}
-                          className="px-5 py-6 text-center opacity-60"
-                        >
-                          No attempts have been recorded for this class yet.
-                        </td>
-                      </tr>
-                    )}
-
-                  {classExamId !== null &&
-                    !isLoading &&
-                    sessions.map((session) => (
-                      <tr
-                        key={session.id}
-                        className="border-t border-[var(--color-base-300)]"
-                      >
-                        <td className="px-5 py-3">{session.studentName}</td>
-                        <td className="px-5 py-3 opacity-80">
-                          {session.studentIdNumber}
-                        </td>
-                        <td className="px-5 py-3 opacity-80">
-                          {session.attemptNumber}
-                        </td>
-                        <td className="px-5 py-3 opacity-80">
-                          {getStatusLabel(session.status)}
-                        </td>
-                        <td className="px-5 py-3 opacity-80">
-                          {session.joinedAt}
-                        </td>
-                        <td className="px-5 py-3 opacity-80">
-                          {session.submittedAt ?? "\u2014"}
-                        </td>
-                        <td className="px-5 py-3">
-                          <button
-                            onClick={() => openViolationModal(session.id)}
-                            className="font-bold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-secondary)]"
-                          >
-                            {session.violationCount}
-                          </button>
-                        </td>
-
-                        <td className="px-5 py-3">
-                          {session.status === "in_progress" && ( // only a running attempt can be removed
-                            <button
-                              onClick={() => requestRemove(session)} // opens the confirm dialog for this row
-                              className="text-[13px] font-semibold cursor-pointer border-none bg-transparent transition-opacity hover:opacity-70 text-[var(--color-error)]"
-                            >
-                              Remove
-                            </button>
-                          )}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* class-wide activity log: only shown on the log tab */}
-          {activeTab === "log" && (
-            <div className="rounded-2xl border overflow-hidden bg-[var(--color-base-100)] border-[var(--color-base-300)]">
-              <table className="w-full text-[13px] text-[var(--color-base-content)]">
-                <thead>
-                  <tr className="text-left border-b border-[var(--color-base-300)] opacity-60">
-                    <th className="px-5 py-3 font-medium">Time</th>
-                    <th className="px-5 py-3 font-medium">Student</th>
-                    <th className="px-5 py-3 font-medium">Event</th>
-                    <th className="px-5 py-3 font-medium">Details</th>
-                    <th className="px-5 py-3 font-medium">Question</th>
-                  </tr>
-                </thead>
-                <tbody>
-                  {/* nothing to show until a class exam is selected */}
-                  {classExamId === null && (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-5 py-6 text-center opacity-60"
-                      >
-                        No class exam selected. Open this screen from an exam
-                        card.
-                      </td>
-                    </tr>
-                  )}
-
-                  {/* shown while the sessions and violations are loading */}
-                  {classExamId !== null && isLoading && (
-                    <tr>
-                      <td
-                        colSpan={5}
-                        className="px-5 py-6 text-center opacity-60"
-                      >
-                        Loading activity log...
-                      </td>
-                    </tr>
-                  )}
-
-                  {/* shown when nothing has happened yet */}
-                  {classExamId !== null &&
-                    !isLoading &&
-                    logEntries.length === 0 && (
-                      <tr>
-                        <td
-                          colSpan={5}
-                          className="px-5 py-6 text-center opacity-60"
-                        >
-                          No violations or removals recorded for this class
-                          exam.
-                        </td>
-                      </tr>
-                    )}
-
-                  {classExamId !== null &&
-                    !isLoading &&
-                    logEntries.map((entry) => (
-                      <tr
-                        key={entry.id} // prefixed id, unique across violations and removals
-                        className="border-t border-[var(--color-base-300)]"
-                      >
-                        {/* readable time built from the raw timestamp */}
-                        <td className="px-5 py-3 opacity-80">
-                          {formatTimestamp(entry.occurredAt)}
-                        </td>
-                        {/* student name, plus attempt number when known */}
-                        <td className="px-5 py-3">
-                          {entry.studentName}
-                          {entry.attemptNumber > 0
-                            ? ` (Attempt ${entry.attemptNumber})`
-                            : ""}
-                        </td>
-                        {/* removals are bold red so the teacher's action stands out */}
-                        <td
-                          className="px-5 py-3"
-                          style={
-                            entry.kind === "removal"
-                              ? { fontWeight: 700, color: "var(--color-error)" }
-                              : undefined
-                          }
-                        >
-                          {entry.kind === "removal"
-                            ? "Removed from exam"
-                            : getViolationTypeLabel(entry.violationType!)}
-                        </td>
-                        {/* extra text logged with the violation */}
-                        <td className="px-5 py-3 opacity-80">
-                          {entry.details ?? "\u2014"}
-                        </td>
-                        {/* question open at the time, if known */}
-                        <td className="px-5 py-3 opacity-80">
-                          {entry.questionTitle ?? "\u2014"}
-                        </td>
-                      </tr>
-                    ))}
-                </tbody>
-              </table>
-            </div>
-          )}
-
-          {/* tells the teacher older rows exist but were not loaded */}
-          {activeTab === "log" && isLogTruncated && (
-            <p className="text-[12px] opacity-60 mt-2">
-              Showing the newest 500 violations only.
-            </p>
-          )}
         </main>
       </div>
 
-      <ViolationDetailModal
-        isOpen={selectedSessionId !== null}
-        isLoading={isViolationsLoading}
-        error={violationsError}
-        violations={violations}
-        onClose={closeViolationModal}
-      />
+      {selectedSessionId !== null && (
+        <ViolationDetailDialog key={selectedSessionId} session={selectedSession} isLoading={isViolationsLoading} error={violationsError}
+          violations={violations} onClose={closeViolationModal} />
+      )}
 
-      <ConfirmActionDialog
-        isOpen={sessionToRemove !== null} // open whenever a row is waiting for confirmation
-        title="Remove student?" // short question
-        message={`${sessionToRemove?.studentName ?? "This student"} will be removed from this exam. Their saved answers are kept, this attempt is used up, and they will be sent back to their dashboard shortly.`} // says exactly what happens
-        confirmLabel="Remove" // red confirm button text
-        isProcessing={isRemoving} // disables the button while the call runs
-        error={removeError} // shows a failure reason inside the dialog
-        onConfirm={confirmRemove} // runs the removal
-        onCancel={cancelRemove} // closes without doing anything
-      />
+      <ExamConfirmDialog isOpen={sessionToRemove !== null} title="Remove student?"
+        message={`${sessionToRemove?.studentName ?? "This student"} will be removed from the exam. Their saved answers will be kept, this attempt will count toward their limit, and they will return to their dashboard shortly.`}
+        confirmLabel="Remove student" isProcessing={isRemoving} error={removeError}
+        onConfirm={() => void confirmRemove()} onCancel={cancelRemove} />
     </div>
   );
 }

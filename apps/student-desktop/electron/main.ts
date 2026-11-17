@@ -1,11 +1,16 @@
-import { app, BrowserWindow, ipcMain, dialog } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
-import path from "node:path";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { registerCompilerHandlers } from "./ipc/compilerHandlers";
+import { installEditorSandbox } from "./editorSandbox";
+import { registerOfflineExamHandlers } from "./ipc/offlineExamHandlers";
+import { checkOfflineExamStorage, closeOfflineExamStorage, setOfflineStorageConfigFile } from "./storage/offlineExamStorage";
 import { startExamProcessMonitor } from "./native/examProcessMonitor";
 import { checkExamApps } from "./native/disallowedProcesses";
-import { muteSystemAudio, unmuteSystemAudio } from "./native/audioControl";
+import { autoCloseDisallowedApps } from "../shared/examAppPolicy";
+import { muteSystemAudio, unmuteSystemAudio } from "./native/audioControl"; // audio mute/unmute, sits next to keyboard-hook folder
+import path from "node:path";
+
 import { getRuntimePaths } from "./setup/runtimePaths";
 import { verifyDependencies } from "./setup/verifyDependencies";
 
@@ -22,7 +27,7 @@ process.env.VITE_PUBLIC = VITE_DEV_SERVER_URL
   ? path.join(process.env.APP_ROOT, "public")
   : RENDERER_DIST;
 
-// Functions exported by the native keyboard-hook module.
+// type definition for every function exported by the C++ native module
 let keyboardHook: {
   startHook: (onViolation: (label: string) => void) => void;
   stopHook: () => void;
@@ -35,13 +40,8 @@ let keyboardHook: {
 
 try {
   keyboardHook = require(
-    getRuntimePaths(
-      app.isPackaged,
-      process.resourcesPath,
-      process.env.APP_ROOT,
-    ).keyboardHook,
+    getRuntimePaths(app.isPackaged, process.resourcesPath, process.env.APP_ROOT).keyboardHook,
   );
-
   console.log("[lockdown] keyboard hook loaded successfully");
 } catch (err) {
   console.error("[lockdown] keyboard hook failed to load:", err);
@@ -53,7 +53,6 @@ let startupVerified = false;
 let stopProcessMonitor: (() => void) | undefined;
 let preflightScan: AbortController | undefined;
 let detectedApps: string[] = [];
-let restorePreflightLockdown: (() => void) | undefined;
 
 function stopExamProcessMonitoring() {
   stopProcessMonitor?.();
@@ -65,10 +64,8 @@ ipcMain.on("set-exam-process-monitoring", (event, enabled: unknown) => {
     !win ||
     event.senderFrame !== win.webContents.mainFrame ||
     typeof enabled !== "boolean"
-  ) {
+  )
     return;
-  }
-
   if (!enabled) {
     stopExamProcessMonitoring();
   } else if (
@@ -77,7 +74,6 @@ ipcMain.on("set-exam-process-monitoring", (event, enabled: unknown) => {
     !stopProcessMonitor
   ) {
     endExamAppCheck();
-
     stopProcessMonitor = startExamProcessMonitor(
       ({ appName, executableName }) => {
         win?.webContents.send("violation-detected", {
@@ -91,8 +87,10 @@ ipcMain.on("set-exam-process-monitoring", (event, enabled: unknown) => {
 });
 
 app.on("before-quit", stopExamProcessMonitoring);
+app.on("before-quit", closeOfflineExamStorage);
 
-// Clear restrictions left by a previous crashed session.
+// clears any leftover restrictions from a crashed previous session
+// runs before createWindow so a clean state is guaranteed on startup
 function cleanupStaleLockdownState() {
   try {
     keyboardHook?.stopHook();
@@ -100,34 +98,29 @@ function cleanupStaleLockdownState() {
     keyboardHook?.setLockWorkstationDisabled(false);
     keyboardHook?.setChangePasswordDisabled(false);
     keyboardHook?.setFastUserSwitchingDisabled(false);
-    keyboardHook?.setTaskbarVisible(true);
-
-    unmuteSystemAudio();
-
+    keyboardHook?.setTaskbarVisible(true); // restore taskbar if it was hidden by a crash
+    unmuteSystemAudio(); // restore audio in case last run crashed while muted
     console.log("[lockdown] cleared any leftover state from last run");
   } catch (err) {
     console.error("[lockdown] cleanup failed:", err);
   }
 }
 
-// Apply restrictions only after startup dependencies have passed.
+// installs the WH_KEYBOARD_LL hook and applies all OS-level restrictions
 function registerLockdown() {
   try {
     keyboardHook?.startHook((violationType: string) => {
       win?.webContents.send("violation-detected", {
-        violationType,
-        occurredAt: new Date().toISOString(),
+        violationType, // which combo was blocked, e.g. 'alt_tab'
+        occurredAt: new Date().toISOString(), // when main process saw it
       });
     });
-
     keyboardHook?.setTaskManagerDisabled(true);
     keyboardHook?.setLockWorkstationDisabled(true);
     keyboardHook?.setChangePasswordDisabled(true);
     keyboardHook?.setFastUserSwitchingDisabled(true);
-    keyboardHook?.setTaskbarVisible(false);
-
-    muteSystemAudio();
-
+    keyboardHook?.setTaskbarVisible(false); // hide taskbar so student can't close app from it
+    muteSystemAudio(); // mute system audio the moment lockdown begins
     console.log("[lockdown] hook registered, taskbar hidden");
   } catch (err) {
     console.error("[lockdown] failed to register hook:", err);
@@ -135,7 +128,7 @@ function registerLockdown() {
   }
 }
 
-// Restore restrictions when the application exits or temporarily unlocks.
+// removes all restrictions — called before app quits or exam ends
 function unregisterLockdown() {
   try {
     keyboardHook?.stopHook();
@@ -143,10 +136,8 @@ function unregisterLockdown() {
     keyboardHook?.setLockWorkstationDisabled(false);
     keyboardHook?.setChangePasswordDisabled(false);
     keyboardHook?.setFastUserSwitchingDisabled(false);
-    keyboardHook?.setTaskbarVisible(true);
-
-    unmuteSystemAudio();
-
+    keyboardHook?.setTaskbarVisible(true); // always restore taskbar before exit
+    unmuteSystemAudio(); // restore audio when exam ends or app exits normally
     console.log("[lockdown] hook unregistered, taskbar restored");
   } catch (err) {
     console.error("[lockdown] failed to unregister hook:", err);
@@ -157,13 +148,10 @@ function endExamAppCheck() {
   preflightScan?.abort();
   preflightScan = undefined;
   detectedApps = [];
-  restorePreflightLockdown?.();
-  restorePreflightLockdown = undefined;
 }
 
 ipcMain.handle("check-exam-apps", async (event, closeApps: unknown) => {
   const examWindow = win;
-
   if (
     !examWindow ||
     event.senderFrame !== examWindow.webContents.mainFrame ||
@@ -174,93 +162,78 @@ ipcMain.handle("check-exam-apps", async (event, closeApps: unknown) => {
   ) {
     throw new Error("The exam app check is unavailable.");
   }
+  if (!autoCloseDisallowedApps) return [];
 
   const scan = new AbortController();
   preflightScan = scan;
-
   try {
     const remaining = await checkExamApps(
       scan.signal,
       closeApps ? detectedApps : [],
+      !!VITE_DEV_SERVER_URL,
     );
-
     if (scan.signal.aborted || examWindow.isDestroyed()) {
       throw new Error("The exam app check ended.");
     }
-
-    if (remaining.length > 0 && !restorePreflightLockdown) {
-      // Let the student switch to save prompts and close detected apps.
-      const wasKiosk = examWindow.isKiosk();
-      const wasOnTop = examWindow.isAlwaysOnTop();
-
-      restorePreflightLockdown = () => {
-        if (examWindow.isDestroyed() || isExiting) return;
-
-        examWindow.setKiosk(wasKiosk);
-        examWindow.setAlwaysOnTop(wasOnTop, "screen-saver");
-        registerLockdown();
-      };
-
-      unregisterLockdown();
-      examWindow.setKiosk(false);
-      examWindow.setAlwaysOnTop(false);
-    }
-
-    if (remaining.length === 0) {
-      endExamAppCheck();
-    } else {
-      detectedApps = remaining;
-    }
-
+    if (remaining.length === 0) endExamAppCheck();
+    else detectedApps = remaining;
     return remaining;
   } finally {
-    if (preflightScan === scan) {
-      preflightScan = undefined;
-    }
+    if (preflightScan === scan) preflightScan = undefined;
   }
 });
 
 ipcMain.on("end-exam-app-check", (event) => {
-  if (win && event.senderFrame === win.webContents.mainFrame) {
-    endExamAppCheck();
-  }
+  if (win && event.senderFrame === win.webContents.mainFrame) endExamAppCheck();
 });
 
 function createWindow() {
   win = new BrowserWindow({
     title: "Cont/x",
     icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
-    kiosk: true,
-    frame: false,
+    kiosk: true, // covers the taskbar area at the OS level as a secondary layer
+    frame: false, // removes the title bar and window controls
     webPreferences: {
-      preload: path.join(__dirname, "preload.mjs"),
+      preload: path.join(__dirname, "preload.cjs"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      webviewTag: false,
+      devTools: !app.isPackaged,
     },
   });
 
-  win.setAlwaysOnTop(true, "screen-saver");
+  // keeps the app above all other windows at the highest z-order level
+  installEditorSandbox(
+    win,
+    VITE_DEV_SERVER_URL ||
+      pathToFileURL(path.join(RENDERER_DIST, "index.html")).href,
+  );
+  win.setAlwaysOnTop(true, "screen-saver"); //comment this out for testing without restrictions
 
+  // if somehow minimized (e.g. via a hotkey we didn't catch), restore immediately
   win.on("minimize", () => {
     win?.restore();
   });
 
+  // prevents the student from closing the app via taskbar right-click → Close
+  // or any other close attempt while the app is running
   win.on("close", (event) => {
     if (!isExiting) {
+      // student tried to close via taskbar, Alt+F4, or anything else — block it
       event.preventDefault();
       console.log("[lockdown] close attempt blocked");
     }
+    // if isExiting is true, we let the close proceed naturally
   });
 
-  win.on("page-title-updated", (event) => {
-    event.preventDefault();
-  });
+  // prevents Vite from overriding the window title during dev
+  win.on("page-title-updated", (evt) => evt.preventDefault());
 
   win.webContents.on("did-finish-load", () => {
-    win?.webContents.send(
-      "main-process-message",
-      new Date().toLocaleString(),
-    );
+    win?.webContents.send("main-process-message", new Date().toLocaleString());
   });
-
   win.webContents.on(
     "did-start-navigation",
     (_event, _url, isInPlace, isMainFrame) => {
@@ -270,7 +243,6 @@ function createWindow() {
       }
     },
   );
-
   win.webContents.on("render-process-gone", stopExamProcessMonitoring);
   win.webContents.on("render-process-gone", endExamAppCheck);
   win.on("closed", stopExamProcessMonitoring);
@@ -283,17 +255,16 @@ function createWindow() {
   }
 }
 
-// The existing logout flow requests this exit.
-ipcMain.on("exit-app", () => {
-  isExiting = true;
+// called when the student clicks logout — the only valid exit path
+ipcMain.on("exit-app", (event) => {
+  if (!win || event.senderFrame !== win.webContents.mainFrame) return;
+  isExiting = true; // tell the close handler to allow the next close
   endExamAppCheck();
-  unregisterLockdown();
-
+  unregisterLockdown(); // restore taskbar, remove hooks, re-enable task manager, unmute audio
   if (win) {
-    win.setAlwaysOnTop(false);
+    win.setAlwaysOnTop(false); // release always-on-top before quitting
   }
-
-  app.quit();
+  app.quit(); // now the close event fires and isExiting = true lets it through
 });
 
 // Avoid changing Windows state if startup verification never passed.
@@ -343,19 +314,33 @@ app.whenReady().then(async () => {
       );
     }
 
+    const mysqlConfigPath = path.join(app.getPath("userData"), "offline-mysql.env");
+    if (app.isPackaged) setOfflineStorageConfigFile(mysqlConfigPath);
+
     await verifyDependencies();
 
     // Test setup and exit before creating the exam window or lockdown.
     if (process.argv.includes("--contx-check-setup")) {
+      let storageStatus: string;
+      let storageReady = false;
+      try {
+        storageReady = await checkOfflineExamStorage();
+        storageStatus = storageReady
+          ? "Local MySQL storage passed its schema check."
+          : "Local MySQL storage needs configuration.";
+      } catch {
+        storageStatus = "Local MySQL storage is unavailable. Check the local server, database, and credentials.";
+      }
+
       dialog.showMessageBoxSync({
-        type: "info",
-        title: "Cont/x setup verified",
+        type: storageReady ? "info" : "warning",
+        title: storageReady ? "Cont/x setup verified" : "Cont/x offline setup needs attention",
         message: "Compiler and native components passed their startup checks.",
         detail:
           "Keyboard-hook module loaded.\n" +
           "Audio component loaded.\n" +
           "Bundled C compilation and execution passed.\n\n" +
-          "Lockdown was not activated.",
+          storageStatus + (storageReady ? "" : `\nConfiguration: ${mysqlConfigPath}`),
       });
 
       isExiting = true;
@@ -366,7 +351,8 @@ app.whenReady().then(async () => {
     startupVerified = true;
 
     cleanupStaleLockdownState();
-    registerCompilerHandlers();
+    registerCompilerHandlers(() => win);
+    registerOfflineExamHandlers(() => win);
     createWindow();
     registerLockdown();
   } catch (error) {

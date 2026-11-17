@@ -1,4 +1,4 @@
-import { useState, useEffect, useCallback, useMemo } from "react";
+import { useState, useEffect, useCallback, useMemo, useRef } from "react";
 import {
   getClassExamHeader,
   getSessionsForClassExam,
@@ -22,6 +22,8 @@ export function useViolationMonitoring(classExamId: string | null) {
   const [isLoading, setIsLoading] = useState(true); // true while the session list loads
   const [error, setError] = useState<string | null>(null);
   const [header, setHeader] = useState<ClassExamHeader | null>(null); // exam title and class name for the page heading
+  const [lastRefreshedAt, setLastRefreshedAt] = useState<Date | null>(null);
+  const sessionRequest = useRef(0);
 
   const [selectedSessionId, setSelectedSessionId] = useState<string | null>(
     null,
@@ -29,6 +31,7 @@ export function useViolationMonitoring(classExamId: string | null) {
   const [violations, setViolations] = useState<ViolationDetailRow[]>([]);
   const [isViolationsLoading, setIsViolationsLoading] = useState(false); // true while modal data loads
   const [violationsError, setViolationsError] = useState<string | null>(null);
+  const detailRequest = useRef(0);
 
   const [classViolations, setClassViolations] = useState<ClassViolationRow[]>(
     [],
@@ -37,10 +40,12 @@ export function useViolationMonitoring(classExamId: string | null) {
 
   // loads every session of this class exam, plus its heading, from the service
   const fetchSessions = useCallback(async () => {
+    const request = ++sessionRequest.current;
     // nothing selected yet — skip the query, show empty state instead
     if (classExamId === null) {
       setSessions([]); // clear out any stale rows
       setHeader(null); // and the heading
+      setLastRefreshedAt(null);
       setClassViolations([]);
       setError(null); // this isn't an error, just nothing to show
       setIsLoading(false); // stop the loading spinner
@@ -55,43 +60,58 @@ export function useViolationMonitoring(classExamId: string | null) {
         getClassExamHeader(classExamId),
         getViolationsForClassExam(classExamId),
       ]);
+      if (request !== sessionRequest.current) return;
       setSessions(rows);
       setHeader(headerInfo);
       setClassViolations(violationRows);
+      setLastRefreshedAt(new Date());
     } catch (err) {
+      if (request !== sessionRequest.current) return;
       setError(err instanceof Error ? err.message : "Failed to load sessions.");
     } finally {
-      setIsLoading(false);
+      if (request === sessionRequest.current) setIsLoading(false);
     }
   }, [classExamId]);
 
-  // runs once on mount, and again if the class exam id changes
   useEffect(() => {
-    fetchSessions();
+    let active = true;
+    queueMicrotask(() => {
+      if (active) void fetchSessions();
+    });
+    return () => {
+      active = false;
+      sessionRequest.current += 1;
+      detailRequest.current += 1;
+    };
   }, [fetchSessions]);
 
   // opens the modal and loads violations for the clicked session
   const openViolationModal = useCallback(async (sessionId: string) => {
+    const request = ++detailRequest.current;
     setSelectedSessionId(sessionId);
+    setViolations([]);
     setIsViolationsLoading(true);
     setViolationsError(null);
     try {
       const rows = await getViolationsForSession(sessionId);
-      setViolations(rows);
+      if (request === detailRequest.current) setViolations(rows);
     } catch (err) {
+      if (request !== detailRequest.current) return;
       setViolationsError(
         err instanceof Error ? err.message : "Failed to load violations.",
       );
     } finally {
-      setIsViolationsLoading(false);
+      if (request === detailRequest.current) setIsViolationsLoading(false);
     }
   }, []);
 
   // closes the modal and clears out its data
   const closeViolationModal = useCallback(() => {
+    detailRequest.current += 1;
     setSelectedSessionId(null);
     setViolations([]);
     setViolationsError(null);
+    setIsViolationsLoading(false);
   }, []);
 
   const { showToast } = useToast();
@@ -178,6 +198,7 @@ export function useViolationMonitoring(classExamId: string | null) {
   return {
     sessions,
     header,
+    lastRefreshedAt,
     isLoading,
     error,
     refetch: fetchSessions, // wired to the manual Refresh button

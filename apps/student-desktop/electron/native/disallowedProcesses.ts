@@ -1,12 +1,13 @@
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { autoCloseDisallowedApps, temporarilyExemptApps } from "../../shared/examAppPolicy";
 
 const execFileAsync = promisify(execFile);
 
 // Match main executable names from the Windows process list, including .exe.
 // Shared runtimes and helper processes do not identify a specific app.
-const disallowedExecutables = new Map([
+const disallowedExecutables = new Map<string, string>(([
   ["chrome.exe", "Chrome"],
   ["msedge.exe", "Edge"],
   ["opera.exe", "Opera"],
@@ -22,7 +23,7 @@ const disallowedExecutables = new Map([
   ["notepad++.exe", "Notepad++"],
   ["obs64.exe", "OBS Studio"],
   ["obs32.exe", "OBS Studio"],
-]);
+] as const).filter(([, appName]) => !temporarilyExemptApps.has(appName)));
 
 export function matchDisallowedExecutable(executableName: string): string | undefined {
   return disallowedExecutables.get(executableName.toLowerCase());
@@ -75,6 +76,7 @@ export async function scanDisallowedProcesses(signal?: AbortSignal): Promise<Dis
 export async function checkExamApps(
   signal: AbortSignal,
   approvedApps: readonly string[] = [],
+  protectDevLauncher = false,
 ): Promise<string[]> {
   if (process.platform !== "win32") return [];
 
@@ -82,23 +84,47 @@ export async function checkExamApps(
   if (!systemRoot) throw new Error("Windows system directory is unavailable.");
 
   const executableNames = [...disallowedExecutables.keys()];
-  const approvedExecutables = [...disallowedExecutables]
+  const approvedExecutables = autoCloseDisallowedApps ? [...disallowedExecutables]
     .filter(([, appName]) => approvedApps.includes(appName))
-    .map(([name]) => name);
+    .map(([name]) => name) : [];
   // Both lists contain only literals from the executable map.
   const quoteNames = (names: string[]) => names.map((name) => `'${name}'`).join(", ");
   const script = `
     $ErrorActionPreference = 'Stop'
-    $session = (Get-Process -Id ${process.pid}).SessionId
+    $examProcess = Get-Process -Id ${process.pid}
+    $session = $examProcess.SessionId
     $disallowed = @(${quoteNames(executableNames)})
     $approved = @(${quoteNames(approvedExecutables)})
+    $protectedIds = [System.Collections.Generic.HashSet[int]]::new()
+    $null = $protectedIds.Add($examProcess.Id)
+
+    # Closing an IDE or terminal that launched Vite can stop the exam app too.
+    if (${protectDevLauncher ? "$true" : "$false"}) {
+      $processesById = @{}
+      foreach ($entry in (Get-CimInstance -ClassName Win32_Process)) {
+        $processesById[[int]$entry.ProcessId] = $entry
+      }
+      $child = $processesById[$examProcess.Id]
+      while ($null -ne $child) {
+        $parent = $processesById[[int]$child.ParentProcessId]
+        # A newer process with the same PID is unrelated to this launch.
+        if ($null -eq $parent -or $parent.CreationDate -gt $child.CreationDate) { break }
+        if (-not $protectedIds.Add([int]$parent.ProcessId)) { break }
+        $child = $parent
+      }
+    }
 
     function Get-ExamProcesses {
       foreach ($candidate in (Get-Process)) {
         try {
           $name = $candidate.ProcessName + '.exe'
           if ($disallowed -notcontains $name) { continue }
-          if ($candidate.Id -eq ${process.pid} -or $candidate.SessionId -ne $session) { continue }
+          if ($protectedIds.Contains($candidate.Id) -or $candidate.SessionId -ne $session) { continue }
+          # Electron helpers share the executable of the main process.
+          if ($candidate.ProcessName -eq $examProcess.ProcessName) {
+            $candidatePath = $candidate.Path
+            if (-not $candidatePath -or $candidatePath -eq $examProcess.Path) { continue }
+          }
         } catch [System.InvalidOperationException] {
           continue
         }
@@ -128,6 +154,22 @@ export async function checkExamApps(
         }
       }
       Start-Sleep -Milliseconds 800
+
+      # Rescan before force-quitting so tray apps get the same protections.
+      $requestedTermination = $false
+      foreach ($match in (Get-ExamProcesses)) {
+        if ($match.CanClose -and $approved -contains $match.Name) {
+          try {
+            if (-not $match.Process.HasExited) {
+              $match.Process.Kill()
+              $requestedTermination = $true
+            }
+          } catch {
+            # Apps that cannot be terminated stay listed in the final scan.
+          }
+        }
+      }
+      if ($requestedTermination) { Start-Sleep -Milliseconds 300 }
     }
 
     $remaining = @(Get-ExamProcesses | ForEach-Object { $_.Name } | Sort-Object -Unique)

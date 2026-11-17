@@ -1,5 +1,6 @@
 import { useCallback, useEffect, useRef } from "react"; 
 import { reportLiveState } from "../services/liveStateService"; 
+import type { OfflineEnqueue } from "../types/offlineExam";
 
 const HEARTBEAT_MS = 20000; 
 const JITTER_MS = 5000; 
@@ -13,6 +14,7 @@ interface Options {
   position: number | null; 
   total: number | null; 
   answeredCount: number; 
+  queueOffline?: OfflineEnqueue;
 }
 
 // Tells the teacher's Student Monitoring screen where this student is (WBS 7.3).
@@ -25,6 +27,7 @@ export function useLiveStateReporter({
   position,
   total,
   answeredCount,
+  queueOffline,
 }: Options) {
   const latestRef = useRef({ questionId, position, total, answeredCount }); 
   const inFlightRef = useRef(false);
@@ -45,13 +48,15 @@ export function useLiveStateReporter({
     inFlightRef.current = true; 
     try {
       const latest = latestRef.current; 
-      await reportLiveState(sessionId, {
+      const state = {
         currentQuestionId: latest.questionId,
         currentPosition: latest.position,
         totalQuestions: latest.total,
         answeredCount: latest.answeredCount,
         isFocused: document.visibilityState === "visible" && document.hasFocus(), // checked at send time
-      });
+      };
+      if (queueOffline) await queueOffline({ kind: "live", state }).catch(() => {});
+      else await reportLiveState(sessionId, state);
     } finally {
       inFlightRef.current = false; 
     }
@@ -59,7 +64,7 @@ export function useLiveStateReporter({
       pendingRef.current = false; 
       void send(); 
     }
-  }, [sessionId, enabled]);
+  }, [sessionId, enabled, queueOffline]);
 
   // 1. Heartbeat: a repeating timer that runs whether or not the student is typing.
   useEffect(() => {

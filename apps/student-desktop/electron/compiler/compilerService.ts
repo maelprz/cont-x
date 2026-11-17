@@ -1,6 +1,6 @@
 import { app } from 'electron';
 import { spawn, spawnSync } from 'child_process';
-import { writeFileSync, mkdtempSync, rmSync } from 'fs';
+import { cpSync, existsSync, readdirSync, writeFileSync, mkdtempSync, rmSync } from 'fs';
 import { join, dirname, delimiter } from 'path';
 import { tmpdir } from 'os';
 import { getRuntimePaths } from '../setup/runtimePaths';
@@ -21,18 +21,45 @@ export interface RunResult {
 const COMPILE_TIMEOUT_MS = 15_000;
 const MAX_OUTPUT_BYTES = 1024 * 1024;
 
+function resolveCompiler(gcc: string): string {
+  const mingw = dirname(dirname(gcc));
+  const compilerDir = join('libexec', 'gcc', 'x86_64-w64-mingw32');
+  const version = existsSync(join(mingw, compilerDir))
+    ? readdirSync(join(mingw, compilerDir)).find((entry) =>
+        existsSync(join(mingw, compilerDir, entry, 'cc1.exe')))
+    : undefined;
+  if (!existsSync(gcc) || !version) {
+    throw new Error('The bundled C compiler is incomplete.');
+  }
+  if (!/\s/.test(mingw)) return gcc;
+
+  const cache = join(tmpdir(), 'contx-mingw-copy', version);
+  if (/\s/.test(cache)) {
+    throw new Error('GCC requires a compiler path without spaces. Ask your exam administrator for help.');
+  }
+  const cachedGcc = join(cache, 'bin', 'gcc.exe');
+  if (!existsSync(cachedGcc) || !existsSync(join(cache, compilerDir, version, 'cc1.exe'))) {
+    cpSync(mingw, cache, { recursive: true });
+  }
+  return cachedGcc;
+}
+
 // Find the bundled compiler and expose its DLLs to child processes only.
 function compilerEnvironment() {
-  const { gcc } = getRuntimePaths(
+  const runtimePaths = getRuntimePaths(
     app.isPackaged,
     process.resourcesPath,
     process.env.APP_ROOT ?? app.getAppPath(),
   );
-
+  const gcc = resolveCompiler(runtimePaths.gcc);
+  const env = { ...process.env };
+  for (const key of Object.keys(env)) {
+    if (/^CONTX_MYSQL_/i.test(key)) delete env[key];
+  }
   return {
     gcc,
     env: {
-      ...process.env,
+      ...env,
       PATH: [dirname(gcc), process.env.PATH ?? ''].join(delimiter),
     },
   };
@@ -69,14 +96,17 @@ export function compileSource(sourceCode: string): CompileResult {
       },
     );
 
-    if (proc.error || proc.status !== 0) {
+    if (proc.status !== 0) {
       const diagnostics = [
         proc.error?.message,
         proc.stderr,
       ].filter(Boolean).join('\n');
 
-      cleanupDir(workDir);
+      if (proc.error || proc.signal || /gcc(?:\.exe)?: fatal error: cannot execute/i.test(diagnostics)) {
+        throw new Error(`The local C compiler could not run. ${diagnostics}`.trim());
+      }
 
+      cleanupDir(workDir);
       return {
         success: false,
         stderr: diagnostics || 'Compilation failed.',
@@ -91,11 +121,7 @@ export function compileSource(sourceCode: string): CompileResult {
     };
   } catch (error) {
     cleanupDir(workDir);
-
-    return {
-      success: false,
-      stderr: error instanceof Error ? error.message : String(error),
-    };
+    throw error;
   }
 }
 

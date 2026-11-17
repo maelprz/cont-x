@@ -22,6 +22,8 @@ type ExamRow = {
     status: ClassExamStatus;
     starts_at: string | null;
     ended_at: string | null;
+    latest_submission?: { submitted_at: string | null }[];
+    latest_adjustment?: { adjusted_at: string | null }[];
     classes: { id: string; name: string; class_students: { count: number }[] } | null;
   }[];
 };
@@ -42,6 +44,9 @@ function mapExamRowToCard(row: ExamRow): ExamCard {
     status: ce.status,
     startsAt: ce.starts_at,
     endedAt: ce.ended_at,
+    resultsUpdatedAt: [ce.ended_at, ce.latest_submission?.[0]?.submitted_at, ce.latest_adjustment?.[0]?.adjusted_at]
+      .filter((time): time is string => !!time)
+      .sort((a, b) => Date.parse(b) - Date.parse(a))[0] ?? null,
     studentCount: ce.classes?.class_students[0]?.count ?? 0, // students enrolled in the class
   }));
 
@@ -71,8 +76,9 @@ function mapExamRowToCard(row: ExamRow): ExamCard {
 // class this exam has been attached to (each with its own status + headcount)
 export async function getExamsByTeacherId(
   teacherId: string,
+  includeResultsUpdates = false,
 ): Promise<ExamCard[]> {
-  const { data, error } = await supabase
+  const query = supabase
     .from("exams")
     .select(
       `
@@ -91,12 +97,28 @@ export async function getExamsByTeacherId(
         status,
         starts_at,
         ended_at,
+        ${includeResultsUpdates ? `
+        latest_submission:exam_sessions!exam_sessions_class_exam_id_fkey(submitted_at),
+        latest_adjustment:exam_sessions!exam_sessions_class_exam_id_fkey(adjusted_at),` : ""}
         classes(id, name, class_students(count))
       )
     `,
     )
     .eq("teacher_id", teacherId)
     .order("created_at", { ascending: false }); // newest exams first
+
+  if (includeResultsUpdates) {
+    const submission = "class_exams.latest_submission";
+    const adjustment = "class_exams.latest_adjustment";
+    query.in(`${submission}.status`, ["submitted", "timed_out"])
+      .order("submitted_at", { referencedTable: submission, ascending: false, nullsFirst: false })
+      .limit(1, { referencedTable: submission })
+      .in(`${adjustment}.status`, ["submitted", "timed_out"])
+      .order("adjusted_at", { referencedTable: adjustment, ascending: false, nullsFirst: false })
+      .limit(1, { referencedTable: adjustment });
+  }
+
+  const { data, error } = await query;
 
   if (error) throw error; // let the hook decide how to show this error
 

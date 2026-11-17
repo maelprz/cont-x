@@ -27,7 +27,7 @@ export async function reportLiveState(
         // last_seen_at and updated_at are set by the database trigger, never by this app
       },
       { onConflict: "session_id" },
-    );
+    ).abortSignal(AbortSignal.timeout(8_000));
     return !error; // false when RLS refused it, the network dropped, or the session already ended
   } catch {
     return false; // network error: the next heartbeat simply tries again

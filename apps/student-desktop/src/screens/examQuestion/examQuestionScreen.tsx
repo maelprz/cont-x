@@ -13,7 +13,7 @@ import { QuestionAnswerSplit } from "../../components/examQuestion/questionAnswe
 import { QuestionMapGrid } from "../../components/examQuestion/questionMapGrid";
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
-import type { SubmittedAnswer } from "../../services/examService";
+import type { SessionTiming, SubmittedAnswer } from "../../services/examService";
 import { countAnsweredQuestions, hasQuestionAnswer } from "../../lib/examProgress";
 import { AnswerChangeTracker } from "../../lib/answerChanges";
 import { useViolationLogger } from "../../hooks/useViolationLogger"; 
@@ -21,6 +21,11 @@ import { useRemovalWatcher } from "../../hooks/useRemovalWatcher";
 import { useLiveStateReporter } from "../../hooks/useLiveStateReporter"; 
 import { checkIfRemoved, getSessionStatus } from "../../services/removalService";
 import { useMovementEvents } from "../../hooks/useMovementEvents"; 
+import { useKeystrokeRecorder } from "../../hooks/useKeystrokeRecorder";
+import { useOfflineDraft } from "../../hooks/useOfflineDraft";
+import { useOfflineSync } from "../../hooks/useOfflineSync";
+import { finishOfflineExam } from "../../services/offlineExamService";
+import type { OfflineExamSnapshot, OfflineSubmission } from "../../types/offlineExam";
 
 import type {
   ExamQuestionScreenProps,
@@ -35,7 +40,7 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const footerButtonClass =
+const submitButtonClass =
   "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer shadow-[0_0_20px_rgba(173,198,255,0.25)] transition-all duration-150 hover:bg-[#c5d7ff] hover:border-[#c5d7ff] hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(173,198,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:scale-100 disabled:hover:bg-[#adc6ff] disabled:hover:border-[#adc6ff]";
 
 function formatTime(seconds: number): string {
@@ -43,6 +48,21 @@ function formatTime(seconds: number): string {
   const m = Math.floor((seconds % 3600) / 60);
   const s = seconds % 60;
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
+}
+
+function sameExamTiming(left: SessionTiming, right: SessionTiming): boolean {
+  return left.normalDeadline === right.normalDeadline && left.hardDeadline === right.hardDeadline &&
+    left.forceSubmit === right.forceSubmit && left.sessionStatus === right.sessionStatus &&
+    left.classExamStatus === right.classExamStatus && left.allowOvertime === right.allowOvertime &&
+    left.overtimeMinutes === right.overtimeMinutes && left.overtimeDeduction === right.overtimeDeduction &&
+    left.durationMinutes === right.durationMinutes;
+}
+
+function localDeadline(snapshot?: Pick<OfflineExamSnapshot, "timing" | "timingReceivedAt"> | null): number {
+  if (!snapshot) return Infinity;
+  const { timing, timingReceivedAt } = snapshot;
+  const deadline = timingReceivedAt + Date.parse(timing.hardDeadline) - Date.parse(timing.serverNow);
+  return timing.forceSubmit ? Math.min(timingReceivedAt, deadline) : deadline;
 }
 
 export function ExamQuestionScreen({
@@ -53,42 +73,80 @@ export function ExamQuestionScreen({
   onPrevious,
   onNext,
   onSubmit,
+  onExamTimingRefreshed,
 }: ExamQuestionScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
+  const savedExam = useExamSessionStore((state) => state.offlineExam);
+  const draft = savedExam?.draft;
+  const deadlineRef = useRef(localDeadline(savedExam));
+  const savedTiming = useRef(savedExam ? { timing: savedExam.timing, receivedAt: savedExam.timingReceivedAt } : null);
+  const closed = useRef(false);
+  const legacySubmission = savedExam?.pendingSubmission ? undefined : savedExam?.gradingState?.submission;
+  const [pendingSubmission, setPendingSubmission] = useState(Boolean(savedExam?.pendingSubmission || legacySubmission));
+  const [submissionStored, setSubmissionStored] = useState(Boolean(savedExam?.pendingSubmission));
+  const pendingRef = useRef<OfflineSubmission | null>(savedExam?.pendingSubmission ?? null);
   const removed = useExamSessionStore((state) => state.removed); // stop reporting once the teacher removed this student
   const questionIdRef = useRef<string | null>(null);
-  useViolationLogger(sessionId, questionIdRef); 
-  useRemovalWatcher(sessionId);
+  useRemovalWatcher(savedExam ? null : sessionId);
   const {
     questions: fetchedQuestions,
     isLoading,
     error,
-  } = useExamQuestions(sessionId); // this attempt's questions, in this student's own order
+  } = useExamQuestions(sessionId, savedExam?.questions);
   const { submitSession, isSubmitting, error: submissionError, clearError: clearSubmissionError } = useSubmitExamSession();
   const submissionInFlightRef = useRef(false);
   const timedOutAnswersRef = useRef<SubmittedAnswer[] | null>(null);
-  const answersLocked = () => submissionInFlightRef.current || timedOutAnswersRef.current !== null;
+  const answersLocked = () => closed.current || Boolean(pendingRef.current) ||
+    submissionInFlightRef.current || timedOutAnswersRef.current !== null || Date.now() >= deadlineRef.current;
 
-
-  // Retain exactly the answers present at the deadline if the network requires a retry.
-  const handleTimeExpired = async () => {
-    timedOutAnswersRef.current = buildAnswers();
-    setShowSubmitConfirm(false);
-    await submitAndLeave();
+  const finish = (status: "result" | "removed") => {
+    if (closed.current) return;
+    closed.current = true;
+    if (savedExam) finishOfflineExam({ studentId: savedExam.studentId, sessionId: savedExam.sessionId });
+    if (status === "removed") useExamSessionStore.getState().markRemoved();
+    else {
+      onSubmit?.();
+      navigateTo("examResult");
+    }
   };
 
-  const { rules, isLoaded: rulesLoaded, error: rulesError, retry: retryRules } = useSessionRules(sessionId);
+  // Retain exactly the answers present at the deadline if the network requires a retry.
+  const handleTimeExpired = async (deadlineLocalMs: number) => {
+    if (savedExam && (closed.current || pendingRef.current || pendingSubmission)) return;
+    timedOutAnswersRef.current = buildAnswers(deadlineLocalMs);
+    setShowSubmitConfirm(false);
+    if (savedExam) await saveSubmission("timed_out", timedOutAnswersRef.current, deadlineLocalMs);
+    else await submitAndLeave();
+  };
+
+  const { rules, isLoaded: rulesLoaded, error: rulesError, retry: retryRules } = useSessionRules(sessionId, savedExam?.rules);
   // Hard stop by default: at zero the answers are submitted automatically. With overtime allowed the clock keeps running past zero.
   const timer = useExamTimer(sessionId, handleTimeExpired, {
     allowOvertime: rules.allowOvertime,
     rulesReady: rulesLoaded,
+    savedExam: savedExam ?? undefined,
     onTimeRestored: () => {
-      if (submissionInFlightRef.current) return false;
+      if (submissionInFlightRef.current || pendingRef.current) return false;
       timedOutAnswersRef.current = null;
       clearSubmissionError();
       return true;
+    },
+    onServerTiming: (timing, receivedAt) => {
+      if (!savedExam) return;
+      deadlineRef.current = localDeadline({ timing, timingReceivedAt: receivedAt });
+      const key = { studentId: savedExam.studentId, sessionId: savedExam.sessionId };
+      onExamTimingRefreshed?.(key, timing);
+      if (timing.sessionStatus === "removed") { finish("removed"); return; }
+      if (timing.sessionStatus === "submitted" || timing.sessionStatus === "timed_out") { finish("result"); return; }
+      if (!savedTiming.current || !sameExamTiming(savedTiming.current.timing, timing)) {
+        void window.ipcRenderer.updateOfflineTiming(key, timing, receivedAt).then(() => {
+          if (!savedTiming.current || savedTiming.current.receivedAt < receivedAt) {
+            savedTiming.current = { timing, receivedAt };
+          }
+        }).catch(() => { /* Retry this timing update on the next server refresh. */ });
+      }
     },
   }); // real countdown, ticks every second
   const timeLeftSeconds = timer.secondsLeft;
@@ -104,33 +162,49 @@ export function ExamQuestionScreen({
     clearResults,
   } = useCodeExecution();
 
+  const sync = useOfflineSync(savedExam, (outcome) => {
+    if (outcome !== "extended") {
+      finish(outcome);
+      return;
+    }
+    pendingRef.current = null;
+    timedOutAnswersRef.current = null;
+    setPendingSubmission(false);
+    setSubmissionStored(false);
+  }, () => setSubmissionStored(true));
+  const queueOffline = savedExam ? sync.enqueue : undefined;
+  useViolationLogger(pendingSubmission ? null : sessionId, questionIdRef, queueOffline);
+
   // Tracks which question is currently shown, by position in the loaded list.
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(draft?.currentIndex ?? 0);
   // WBS 6.7: how long the student spends on each question (only while it is on screen and the window is in front)
-  const { getTimes } = useQuestionTimeTracker(fetchedQuestions[currentIndex]?.id ?? null);
+  const { getTimes, getTimesMs } = useQuestionTimeTracker(
+    pendingSubmission ? null : fetchedQuestions[currentIndex]?.id ?? null, draft?.questionTimesMs,
+  );
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false); // the "are you sure?" step before submitting
   // The output panel height is kept here so it survives moving between questions (undefined = use the editor's default)
   const [panelHeight, setPanelHeight] = useState<number | undefined>(undefined);
   // WBS 8.13 / 8.16: when each answer was last changed, how many times it was changed after first being given,
   // and the last answer the student settled on (used to tell a real change from the first answer)
-  const answeredAtRef = useRef<Record<string, string>>({});
-  const changeTrackerRef = useRef(new AnswerChangeTracker());
+  const answeredAtRef = useRef<Record<string, string>>({ ...draft?.answeredAt });
+  const changeTrackerRef = useRef(new AnswerChangeTracker(draft?.answerChanges));
   useEffect(() => {
     const current = fetchedQuestions[currentIndex];
     questionIdRef.current = current && !current.poolDrawId ? current.id : null; // null while loading, and for pooled questions (their id is a draw, not a question)
   }, [fetchedQuestions, currentIndex]);
-  // Tracks flagged state per question id, kept in memory only for now.
-  const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
-  // Tracks each question's chosen MCQ option id, kept in memory only for now.
+  const [flaggedIds, setFlaggedIds] = useState(() => new Set(draft?.flaggedIds));
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string>
-  >({});
-  // Tracks each fill-in-the-blank question's typed answer, kept in memory only for now.
-  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
-  // Tracks each coding question's current code text, kept in memory only for now.
+  >(draft?.selectedOptions ?? {});
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>(draft?.textAnswers ?? {});
   const [codeByQuestion, setCodeByQuestion] = useState<Record<string, string>>(
-    {},
+    draft?.codeByQuestion ?? {},
   );
+  const captureDraft = () => ({
+    currentIndex, flaggedIds: [...flaggedIds], selectedOptions, textAnswers, codeByQuestion,
+    answeredAt: answeredAtRef.current, answerChanges: changeTrackerRef.current.snapshot(),
+  });
+  const draftError = useOfflineDraft(savedExam, captureDraft(), getTimesMs, pendingSubmission);
 
   // Builds the question map (sidebar grid) from the real fetched list.
   // Same idea as the "answered" status in the map: something was selected, typed or written.
@@ -141,8 +215,16 @@ export function ExamQuestionScreen({
   };
 
   const liveQuestion = fetchedQuestions[currentIndex]; 
-  const reportingEnabled = !isLoading && !removed && fetchedQuestions.length > 0; 
-  const processMonitoringEnabled = Boolean(sessionId && !removed && timer.timing?.sessionStatus === "in_progress");
+  const reportingEnabled = !isLoading && !removed && !pendingSubmission && fetchedQuestions.length > 0;
+  const processMonitoringEnabled = Boolean(sessionId && !removed && !pendingSubmission && timer.timing?.sessionStatus === "in_progress");
+  const recordKeystrokes = processMonitoringEnabled && rulesLoaded && !isLoading && !error;
+  const { flush: flushKeystrokes } = useKeystrokeRecorder(
+    sessionId,
+    recordKeystrokes && liveQuestion && !liveQuestion.poolDrawId ? liveQuestion.id : null,
+    recordKeystrokes ? liveQuestion?.poolDrawId ?? null : null,
+    answersLocked,
+    queueOffline,
+  );
   useEffect(() => {
     if (!processMonitoringEnabled) return;
     window.ipcRenderer?.setExamProcessMonitoring(true);
@@ -157,12 +239,14 @@ export function ExamQuestionScreen({
     position: reportedPosition, 
     total: fetchedQuestions.length > 0 ? fetchedQuestions.length : null, 
     answeredCount: countAnsweredQuestions(fetchedQuestions, answers),
+    queueOffline,
   });
   const { flushNow: flushMovementEvents } = useMovementEvents({
     sessionId,
     enabled: reportingEnabled, 
     questionId: reportedQuestionId, 
     position: reportedPosition, 
+    queueOffline,
   });
 
   // In-order exams: the first question with no answer yet. Nothing past it can be opened.
@@ -196,7 +280,7 @@ export function ExamQuestionScreen({
     const shared = {
       number: currentIndex + 1, // 1-based display number
       totalQuestions: fetchedQuestions.length, // real count of loaded questions
-      title: raw.title,
+      title: raw.title || `Question ${currentIndex + 1}`,
       body: raw.prompt,
       isFlagged: flaggedIds.has(raw.id),
       sectionTitle: raw.sectionTitle ?? undefined, // shown above the title when the exam has sections
@@ -323,6 +407,7 @@ export function ExamQuestionScreen({
       raw.programType ?? "cProgram",
       raw.mainCode ?? undefined,
       Boolean(raw.poolDrawId), // a pooled question reads its tests through the pool function
+      savedExam?.visibleTests?.[raw.id],
     );
   };
 
@@ -344,6 +429,7 @@ export function ExamQuestionScreen({
   };
 
   const handleFlag = () => {
+    if (answersLocked()) return;
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
     const id = fetchedQuestions[currentIndex].id;
     setFlaggedIds((prev) => {
@@ -365,6 +451,7 @@ export function ExamQuestionScreen({
   };
 
   const handleNavigate = (n: number) => {
+    if (answersLocked()) return;
     if (n - 1 === currentIndex) return;
     if (rules.sequential && n - 1 > firstUnansweredIndex) return; // in-order exams: cannot jump past an unanswered question
     settleCurrentAnswer();
@@ -373,12 +460,14 @@ export function ExamQuestionScreen({
   };
 
   const handlePrevious = () => {
+    if (answersLocked()) return;
     settleCurrentAnswer();
     setCurrentIndex((i) => Math.max(i - 1, 0)); // never go below the first question
     onPrevious?.();
   };
 
   const handleNext = () => {
+    if (answersLocked()) return;
     if (nextBlocked) return; // in-order exams: this question has to be answered first
     settleCurrentAnswer();
     setCurrentIndex((i) => Math.min(i + 1, fetchedQuestions.length - 1)); // never go past the last question
@@ -392,8 +481,8 @@ export function ExamQuestionScreen({
     return q.type === "coding" ? 0 : changeTrackerRef.current.count(q.id, answerValueOf(q));
   };
 
-  function buildAnswers(): SubmittedAnswer[] {
-    const times = getTimes(); // seconds per question id, including the stretch running right now
+  function buildAnswers(asOf?: number): SubmittedAnswer[] {
+    const times = getTimes(asOf);
     return fetchedQuestions.map((q) => ({
       question_id: q.poolDrawId ? null : q.id, // real question id; none for a pooled question
       pool_draw_id: q.poolDrawId, // the draw id for a pooled question, otherwise null
@@ -411,17 +500,45 @@ export function ExamQuestionScreen({
 
   const handleOnSubmit = async () => {
     try {
-      await submitAndLeave();
+      if (!savedExam) await submitAndLeave();
+      else if (Date.now() >= deadlineRef.current) await handleTimeExpired(deadlineRef.current);
+      else await saveSubmission("submitted", buildAnswers());
     } finally {
       setShowSubmitConfirm(false);
     }
   };
 
+  async function saveSubmission(status: OfflineSubmission["status"], answers: SubmittedAnswer[], requestedAt = Date.now()) {
+    if (pendingRef.current || closed.current) return;
+    const submission = {
+      status, answers,
+      draft: { ...captureDraft(), questionTimesMs: getTimesMs(requestedAt) },
+    };
+    pendingRef.current = submission;
+    setPendingSubmission(true);
+    // The recorder drains synchronously into the same local write queue before the submission.
+    await flushKeystrokes();
+    try {
+      await sync.enqueue({ kind: "submit", submission }, new Date(requestedAt).toISOString());
+      void sync.retry();
+    } catch {
+      // The queue keeps the frozen submission and retries the local write.
+    }
+  }
+
+  useEffect(() => {
+    if (legacySubmission) {
+      void saveSubmission(legacySubmission.status, legacySubmission.answers, Date.parse(legacySubmission.submittedAt));
+    }
+    // Import the previously graded submission when the attempt is first restored.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legacySubmission]);
+
   const submitAndLeave = async () => {
     if (!sessionId || submissionInFlightRef.current) return;
     submissionInFlightRef.current = true; 
     try {
-      await flushMovementEvents(1500); 
+      await Promise.all([flushMovementEvents(1500), flushKeystrokes()]);
       const result = await submitSession(
         sessionId,
         timedOutAnswersRef.current ? "timed_out" : "submitted",
@@ -431,17 +548,52 @@ export function ExamQuestionScreen({
         // Removal has its own screen. A failed status check must retain the exam too.
         try {
           const status = await getSessionStatus(sessionId);
-          if (status === "submitted" || status === "timed_out") { onSubmit?.(); navigateTo("examResult"); return; }
-          if (status === "removed") await checkIfRemoved(sessionId);
+          if (status === "submitted" || status === "timed_out") { finish("result"); return; }
+          if (status === "removed") {
+            if (savedExam) finish("removed");
+            else await checkIfRemoved(sessionId);
+          }
         } catch { /* the submission error stays visible */ }
         return;
       }
-      onSubmit?.();
-      navigateTo("examResult");
+      finish("result");
     } finally {
       submissionInFlightRef.current = false;
     }
   };
+
+  if (pendingSubmission) {
+    if (!sync.showLocalResult) {
+      return <div className="h-screen flex flex-col gap-3 items-center justify-center bg-white text-[#101828]" role="status">
+        <h1 className="text-2xl font-semibold">Submitting exam…</h1>
+        <p className="text-sm">Saving your submission and loading your result.</p>
+      </div>;
+    }
+    const localGrade = sync.submission;
+    const maxScore = fetchedQuestions.reduce((sum, question) => sum + question.maxPoints, 0);
+    return (
+      <div className="h-screen overflow-y-auto flex flex-col gap-5 items-center justify-center p-6 text-[#101828] bg-white">
+        <h1 className="text-2xl font-semibold">{localGrade ? "Exam submitted" : "Submitting exam"}</h1>
+        {localGrade && <section aria-label="Local exam result" className="w-full max-w-xl rounded-xl border border-stone-200 p-6">
+          <p className="text-sm">{examTitle} · Local score</p>
+          <p className="mt-3 text-5xl font-bold" role="status">{localGrade.totalScore}<span className="text-2xl"> / {maxScore}</span></p>
+          <table className="mt-6 w-full text-left text-sm">
+            <thead><tr className="border-b border-stone-200"><th className="pb-2">Question</th><th className="pb-2 text-right">Points</th></tr></thead>
+            <tbody>{fetchedQuestions.map((question, index) => {
+              const answer = localGrade.answers.find((answer) => (answer.pool_draw_id ?? answer.question_id) === question.id);
+              return <tr key={question.id} className="border-b border-stone-200"><td className="py-3">{question.title ?? `Question ${index + 1}`}</td><td className="py-3 text-right">{answer?.score ?? 0} / {question.maxPoints}</td></tr>;
+            })}</tbody>
+          </table>
+          {localGrade.overtimeDeduction > 0 && <p className="mt-3 text-sm">Overtime deduction: {localGrade.overtimeDeduction} points.</p>}
+        </section>}
+        <p role="status">{sync.gradeSaved ? "Pending sync" : submissionStored ? "Grading locally" : "Saving submission locally"}</p>
+        <p className="max-w-xl text-center text-sm">{sync.error ?? (sync.gradeSaved
+          ? "Your score and submission are saved on this device. Sync will retry automatically when you reconnect. Teacher adjustments will appear after sync."
+          : "Your exam is locked. Grading can finish without an internet connection.")}</p>
+        <button type="button" className="rounded-lg border border-[#101828] bg-white px-5 py-2.5 text-sm font-semibold text-[#101828] cursor-pointer transition-colors hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#101828]" onClick={() => void sync.retry()}>Retry sync</button>
+      </div>
+    );
+  }
 
   // A settings failure must not silently turn off sequential or other exam rules.
   if (!rulesLoaded) {
@@ -491,64 +643,32 @@ export function ExamQuestionScreen({
 
   const questionPane = (
     <section
-      className={`flex flex-col overflow-y-auto bg-[var(--bg-app)] min-w-0 ${isCoding ? "w-[420px] shrink-0 border-r border-[var(--border-primary)]" : "flex-1"}`}
+      className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-white"
     >
-      {/* Question header */}
-      <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
-        <div className="min-w-0">
-          {question.sectionTitle && (
-            <p className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-1 break-words">
-              {question.sectionTitle}
-            </p>
-          )}
-          <h2 className="text-[22px] font-semibold text-[var(--text-primary)] leading-tight">
-            {question.title}
-          </h2>
+      <div className="shrink-0 border-b border-stone-200 bg-[#f8f8f8] px-5 py-3 sm:px-6">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="rounded-md bg-[#e9eee3] px-2.5 py-1 text-xs font-semibold text-[#465a3b]">Question {question.number} of {question.totalQuestions}</span>
+          <button type="button" aria-label={question.isFlagged ? "Unflag question" : "Flag question"} aria-pressed={question.isFlagged ?? false}
+            title={question.isFlagged ? "Remove flag" : "Flag for review"} onClick={handleFlag}
+            className={"flex shrink-0 cursor-pointer items-center justify-center rounded-lg border p-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 " + (question.isFlagged ? 'border-red-400 bg-red-100 text-red-700' : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100')}>
+            <Flag size={14} aria-hidden="true" className={question.isFlagged ? "fill-current" : ""} />
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Flag question"
-          aria-pressed={question.isFlagged ?? false}
-          onClick={handleFlag}
-          className={`
-            flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer
-            transition-colors duration-150 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase bg-[var(--warning-primary)] hover:bg-[var(--warning-secondary)]
-            ${
-              question.isFlagged
-                ? "border-[var(--warning-icon)] text-[var(--warning-icon)] bg-[color:var(--warning-accent)]"
-                : "border-[var(--border-primary)] text-[var(--text-primary)] hover:border-[var(--text-secondary)] hover:text-[var(--text-secondary)]"
-            }
-          `}
-        >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={
-              question.isFlagged
-                ? "var(--warning-icon)"
-                : "var(--text-primary)"
-            }
-            strokeWidth="1.5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5"
-            />
-          </svg>
-        </button>
+        <p className="mb-1 break-words text-[11px] text-stone-500">
+          {question.sectionTitle && <>{question.sectionTitle} · </>}
+          {isCoding ? "Coding" : mcqQ ? "Multiple choice" : "Fill in the blank"}
+        </p>
+        <h2 className="break-words text-lg font-semibold leading-snug tracking-tight text-stone-900">{question.title}</h2>
       </div>
       {/* Question body */}
-      <div className="px-6 pb-4 min-w-0">
-        <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed mb-5 whitespace-pre-wrap wrap-break-word">
+      <div className="min-w-0 px-5 py-5 sm:px-6">
+        <p className="mb-5 whitespace-pre-wrap break-words text-sm leading-7 text-stone-700">
           {question.body}
         </p>
 
         {/* Coding: code snippet example */}
         {isCoding && codingQ?.codeSnippet && (
-          <div className="rounded-lg p-4 mb-5 font-mono text-[13px] leading-relaxed overflow-x-auto bg-[var(--bg-sidebar)] border border-[var(--border-primary)]">
+          <div className="rounded-lg p-4 mb-5 font-mono text-xs leading-relaxed overflow-x-auto bg-stone-50 border border-stone-200">
             {codingQ.codeSnippet.split("\n").map((line, i) => {
               const isComment = line.trim().startsWith("//");
               const isNote = line.trim().startsWith("(");
@@ -557,10 +677,10 @@ export function ExamQuestionScreen({
                   key={i}
                   className={
                     isComment
-                      ? "text-[#8c909f]"
+                      ? "text-stone-500"
                       : isNote
-                        ? "text-[#8c909f] italic"
-                        : "text-[#c2c6d6]"
+                        ? "text-stone-500 italic"
+                        : "text-stone-800"
                   }
                 >
                   {line || "\u00A0"}
@@ -597,13 +717,16 @@ export function ExamQuestionScreen({
     <section aria-label="Answer" className="min-w-0 overflow-y-auto border-t border-[var(--border-primary)] px-6 py-5 sm:border-t-0">
       {/* Fill in the blank: one text box */}
       {fitbQ && (
-        <div className="w-full min-w-0">
+        <div className="w-full min-w-0 rounded-xl border border-stone-200 bg-[#f8f8f8] p-4 sm:p-5">
           <label
             htmlFor="fitb-answer"
-            className="block font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-2"
+            className="mb-1 block text-sm font-semibold text-stone-900"
           >
             Your answer
           </label>
+          <p id="fitb-answer-help" className="mb-4 text-xs leading-relaxed text-stone-500">
+            Enter the missing word or phrase.
+          </p>
           <input
             id="fitb-answer"
             type="text"
@@ -611,14 +734,18 @@ export function ExamQuestionScreen({
             onChange={(e) => handleTextChange(e.target.value)}
             autoComplete="off"
             spellCheck={false}
+            aria-describedby="fitb-answer-help"
             placeholder="Type your answer"
-            className="w-full px-4 py-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-sidebar)] text-[var(--text-inverted)] text-[15px] outline-none focus:border-[var(--text-secondary)]"
+            className="w-full rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#465a3b] focus:outline-2 focus:outline-offset-2 focus:outline-[#465a3b]"
           />
         </div>
       )}
 
       {/* MCQ: options */}
       {mcqQ && (
+        <div className="mx-auto w-full max-w-3xl">
+          <h3 className="text-sm font-semibold text-stone-900">Your answer</h3>
+          <p className="mb-4 mt-1 text-xs text-stone-500">Select one option below.</p>
         <MultipleChoiceOptions
           options={mcqQ.options}
           className="mt-0"
@@ -626,6 +753,7 @@ export function ExamQuestionScreen({
           onSelect={handleOptionSelect}
           onClear={handleClearOption}
         />
+        </div>
       )}
     </section>
   );
@@ -661,6 +789,11 @@ export function ExamQuestionScreen({
             <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-inverted-secondary)]">
               {examTitle}
             </span>
+            {savedExam && (
+              <span role="status" className="text-xs text-[var(--text-inverted-secondary)]">
+                Offline ready
+              </span>
+            )}
           </div>
           {/* Progress */}
           <div className="flex flex-col items-center gap-1 flex-grow max-w-xs">
@@ -725,14 +858,10 @@ export function ExamQuestionScreen({
 
       {/* Body: sidebar and content */}
       <div className="flex flex-grow overflow-hidden">
-        {isCoding && codingQ ? (
-          <>
-            {questionPane}
-            {codePane}
-          </>
-        ) : (
-          <QuestionAnswerSplit question={questionPane} answer={answerPane} />
-        )}
+        <QuestionAnswerSplit
+          question={questionPane}
+          answer={isCoding && codingQ ? codePane : answerPane}
+        />
         {/* Right sidebar: question map */}
         <aside className="w-[105px] lg:w-[180px] flex-shrink-0 flex flex-col border-l border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
           <div className="p-2 lg:p-4 flex-grow">
@@ -763,6 +892,12 @@ export function ExamQuestionScreen({
           </div>
         </aside>
       </div>
+
+      {(draftError || sync.error) && (
+        <div role="alert" className="px-6 py-3 bg-[var(--bg-app)] text-[var(--text-primary)]">
+          {draftError ? "Could not save your draft to local MySQL. Retrying." : sync.error}
+        </div>
+      )}
 
       {submissionError && (
         <div role="alert" className="flex-shrink-0 flex items-center justify-between gap-4 px-6 py-3 bg-[var(--bg-app)] text-[var(--text-primary)]">
@@ -831,7 +966,7 @@ export function ExamQuestionScreen({
         <button
           onClick={isLastQuestion ? () => setShowSubmitConfirm(true) : handleNext}
           disabled={isSubmitting || (!isLastQuestion && nextBlocked)}
-          className={footerButtonClass}
+          className={isLastQuestion ? submitButtonClass : footerButtonClass}
         >
           {isLastQuestion ? (
             "Submit"
@@ -869,3 +1004,6 @@ export function ExamQuestionScreen({
     </div>
   );
 }
+
+const footerButtonClass =
+  "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer hover:bg-[#c5d7ff] hover:border-[#c5d7ff] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed";
