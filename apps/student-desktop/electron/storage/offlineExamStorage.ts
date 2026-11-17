@@ -1,33 +1,51 @@
 import { createPool, type Pool, type ResultSetHeader, type RowDataPacket } from "mysql2/promise";
+import { readFileSync } from "node:fs";
+import { parseEnv } from "node:util";
 import type { OfflineAttemptKey, OfflineExamDraft, OfflineExamSnapshot, OfflineOperation } from "../../src/types/offlineExam";
 
 const TIMEOUT_MS = 5_000;
 let pool: Pool | undefined;
+let configFile: string | undefined;
+
+export function setOfflineStorageConfigFile(file: string): void {
+  configFile = file;
+}
 
 function getPool(): Pool | undefined {
-  const user = process.env.CONTX_MYSQL_USER;
-  const password = process.env.CONTX_MYSQL_PASSWORD;
+  if (pool) return pool;
+
+  let config: NodeJS.Dict<string> = {};
+  if (configFile) {
+    try {
+      config = parseEnv(readFileSync(configFile, "utf8"));
+    } catch (error) {
+      if ((error as NodeJS.ErrnoException).code !== "ENOENT") {
+        throw new Error("Could not read the local MySQL configuration.");
+      }
+    }
+  }
+  const setting = (key: string) => process.env[key] ?? config[key];
+  const user = setting("CONTX_MYSQL_USER");
+  const password = setting("CONTX_MYSQL_PASSWORD");
   if (user === undefined && password === undefined) return undefined;
   if (!user || !password) {
     throw new Error("Set both the username and password for local exam storage.");
   }
 
-  if (!pool) {
-    const port = Number(process.env.CONTX_MYSQL_PORT ?? 3306);
-    if (!Number.isInteger(port) || port < 1 || port > 65535) {
-      throw new Error("The local MySQL port is invalid.");
-    }
-
-    pool = createPool({
-      host: "127.0.0.1",
-      port,
-      user,
-      password,
-      database: process.env.CONTX_MYSQL_DATABASE ?? "contx_offline",
-      connectTimeout: TIMEOUT_MS,
-      connectionLimit: 2,
-    });
+  const port = Number(setting("CONTX_MYSQL_PORT") ?? 3306);
+  if (!Number.isInteger(port) || port < 1 || port > 65535) {
+    throw new Error("The local MySQL port is invalid.");
   }
+
+  pool = createPool({
+    host: "127.0.0.1",
+    port,
+    user,
+    password,
+    database: setting("CONTX_MYSQL_DATABASE") ?? "contx_offline",
+    connectTimeout: TIMEOUT_MS,
+    connectionLimit: 2,
+  });
   return pool;
 }
 

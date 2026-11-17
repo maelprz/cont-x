@@ -1,15 +1,18 @@
-import { app, BrowserWindow, ipcMain } from "electron";
+import { app, BrowserWindow, dialog, ipcMain } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath, pathToFileURL } from "node:url";
 import { registerCompilerHandlers } from "./ipc/compilerHandlers";
 import { installEditorSandbox } from "./editorSandbox";
 import { registerOfflineExamHandlers } from "./ipc/offlineExamHandlers";
-import { closeOfflineExamStorage } from "./storage/offlineExamStorage";
+import { checkOfflineExamStorage, closeOfflineExamStorage, setOfflineStorageConfigFile } from "./storage/offlineExamStorage";
 import { startExamProcessMonitor } from "./native/examProcessMonitor";
 import { checkExamApps } from "./native/disallowedProcesses";
 import { autoCloseDisallowedApps } from "../shared/examAppPolicy";
 import { muteSystemAudio, unmuteSystemAudio } from "./native/audioControl"; // audio mute/unmute, sits next to keyboard-hook folder
 import path from "node:path";
+
+import { getRuntimePaths } from "./setup/runtimePaths";
+import { verifyDependencies } from "./setup/verifyDependencies";
 
 const require = createRequire(import.meta.url);
 const __dirname = path.dirname(fileURLToPath(import.meta.url));
@@ -37,10 +40,7 @@ let keyboardHook: {
 
 try {
   keyboardHook = require(
-    path.join(
-      process.env.APP_ROOT,
-      "electron/native/keyboard-hook/build/Release/keyboard_hook.node",
-    ),
+    getRuntimePaths(app.isPackaged, process.resourcesPath, process.env.APP_ROOT).keyboardHook,
   );
   console.log("[lockdown] keyboard hook loaded successfully");
 } catch (err) {
@@ -49,6 +49,7 @@ try {
 
 let win: BrowserWindow | null = null;
 let isExiting = false;
+let startupVerified = false;
 let stopProcessMonitor: (() => void) | undefined;
 let preflightScan: AbortController | undefined;
 let detectedApps: string[] = [];
@@ -123,6 +124,7 @@ function registerLockdown() {
     console.log("[lockdown] hook registered, taskbar hidden");
   } catch (err) {
     console.error("[lockdown] failed to register hook:", err);
+    throw err;
   }
 }
 
@@ -192,7 +194,7 @@ function createWindow() {
     kiosk: true, // covers the taskbar area at the OS level as a secondary layer
     frame: false, // removes the title bar and window controls
     webPreferences: {
-      preload: path.join(__dirname, "preload.mjs"),
+      preload: path.join(__dirname, "preload.cjs"),
       nodeIntegration: false,
       contextIsolation: true,
       sandbox: true,
@@ -265,41 +267,111 @@ ipcMain.on("exit-app", (event) => {
   app.quit(); // now the close event fires and isExiting = true lets it through
 });
 
-// last-resort cleanup if the process exits unexpectedly
-// restores the taskbar and audio even if unregisterLockdown() was never called
+// Avoid changing Windows state if startup verification never passed.
 process.on("exit", () => {
+  if (!startupVerified) return;
+
   try {
     keyboardHook?.stopHook();
     keyboardHook?.setTaskManagerDisabled(false);
     keyboardHook?.setLockWorkstationDisabled(false);
     keyboardHook?.setChangePasswordDisabled(false);
     keyboardHook?.setFastUserSwitchingDisabled(false);
-    keyboardHook?.setTaskbarVisible(true); // critical — stuck hidden taskbar is very bad UX
-    unmuteSystemAudio(); // critical — stuck muted audio is very bad UX
+    keyboardHook?.setTaskbarVisible(true);
+
+    unmuteSystemAudio();
   } catch {
-    // silently ignore — process is already exiting
+    // The process is already exiting.
   }
 });
 
 app.on("window-all-closed", () => {
   if (process.platform !== "darwin") {
-    // unregisterLockdown already called by exit-app — don't call again here
-    // just make sure the process actually exits
     app.quit();
     win = null;
   }
 });
 
 app.on("activate", () => {
-  if (BrowserWindow.getAllWindows().length === 0) {
+  if (
+    startupVerified &&
+    BrowserWindow.getAllWindows().length === 0
+  ) {
     createWindow();
   }
 });
 
-app.whenReady().then(() => {
-  registerOfflineExamHandlers(() => win);
-  cleanupStaleLockdownState(); // undo any restrictions left by a previous crash
-  createWindow();
-  registerLockdown(); // lockdown starts the moment the window is ready, comment this out for testing without restrictions
-  registerCompilerHandlers(() => win);
+// Verify dependencies before creating the kiosk window or applying lockdown.
+app.whenReady().then(async () => {
+  try {
+    if (process.platform !== "win32" || process.arch !== "x64") {
+      throw new Error("This application requires Windows x64.");
+    }
+
+    if (!keyboardHook) {
+      throw new Error(
+        "The keyboard-hook component could not be loaded.",
+      );
+    }
+
+    const mysqlConfigPath = path.join(app.getPath("userData"), "offline-mysql.env");
+    if (app.isPackaged) setOfflineStorageConfigFile(mysqlConfigPath);
+
+    await verifyDependencies();
+
+    // Test setup and exit before creating the exam window or lockdown.
+    if (process.argv.includes("--contx-check-setup")) {
+      let storageStatus: string;
+      let storageReady = false;
+      try {
+        storageReady = await checkOfflineExamStorage();
+        storageStatus = storageReady
+          ? "Local MySQL storage passed its schema check."
+          : "Local MySQL storage needs configuration.";
+      } catch {
+        storageStatus = "Local MySQL storage is unavailable. Check the local server, database, and credentials.";
+      }
+
+      dialog.showMessageBoxSync({
+        type: storageReady ? "info" : "warning",
+        title: storageReady ? "Cont/x setup verified" : "Cont/x offline setup needs attention",
+        message: "Compiler and native components passed their startup checks.",
+        detail:
+          "Keyboard-hook module loaded.\n" +
+          "Audio component loaded.\n" +
+          "Bundled C compilation and execution passed.\n\n" +
+          storageStatus + (storageReady ? "" : `\nConfiguration: ${mysqlConfigPath}`),
+      });
+
+      isExiting = true;
+      app.quit();
+      return;
+    }
+
+    startupVerified = true;
+
+    cleanupStaleLockdownState();
+    registerCompilerHandlers(() => win);
+    registerOfflineExamHandlers(() => win);
+    createWindow();
+    registerLockdown();
+  } catch (error) {
+    isExiting = true;
+
+    if (startupVerified) {
+      unregisterLockdown();
+    }
+
+    const details =
+      error instanceof Error ? error.message : String(error);
+
+    dialog.showErrorBox(
+      "Cont/x setup needs repair",
+      details +
+        "\n\nClose Cont/x and rerun the latest installer." +
+        "\nIf the problem continues, send this message to your teacher.",
+    );
+
+    app.quit();
+  }
 });
