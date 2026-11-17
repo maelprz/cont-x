@@ -1,7 +1,7 @@
 import { useRef, useState } from "react";
 import { Check, Plus, Search } from "lucide-react";
+import { QuestionBankFilters } from "../questionBank/questionBankFilters";
 import { TeacherSelect } from "../shared/teacherSelect";
-import { TeacherSwitch } from "../shared/teacherSwitch";
 import { ExamDialog, examField, examPrimary, examSecondary } from "../examLibrary/examDialog";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { getBankQuestionById, type BankQuestionSummary } from "../../services/questionBankService";
@@ -210,40 +210,41 @@ export function QuestionBankModal({
       <button type="button" className={examPrimary} onClick={handleSubmit} disabled={!canSubmit}>{submitLabel}</button>
     </>}>
       {isSpecified ? (
-        <>
-          <div className="mb-3 flex flex-wrap items-center gap-2">
-            <div className="flex min-w-44 flex-1 items-center gap-2 rounded-lg border border-[var(--color-base-300)] px-3 py-2 focus-within:outline-2 focus-within:outline-[#465a3b]">
-              <Search size={14} aria-hidden="true" className="shrink-0 text-stone-500" />
-              <input type="search" aria-label="Search bank questions" placeholder="Search bank questions" value={search}
-                onChange={(event) => { setSearch(event.target.value); changePage(1); }}
-                className="min-w-0 flex-1 bg-transparent text-sm outline-none" />
-            </div>
-            <button type="button" className={examSecondary} disabled={isSubmitting}
-              onClick={() => { onCreateNewQuestion("multiple-choice"); onClose(); }}>
-              <Plus size={14} aria-hidden="true" />
-              Create New
-            </button>
-          </div>
-          <div className="flex flex-wrap items-center gap-2">
-            <TeacherSelect label="Filter by question type" className="w-44 max-w-full"
-              value={typeFilter} onChange={(type) => { setTypeFilter(type); changePage(1); }}
-              options={[{ value: "all", label: "All types" }, ...typeOptions]} />
-            <TeacherSelect label="Filter by subject topic" className="w-44 max-w-full"
-              value={topicFilter?.id ?? ""} onChange={(id) => {
+        <div className="mb-3 flex flex-wrap items-center gap-2">
+          <label className="relative min-w-0 flex-[1_1_11rem]">
+            <Search size={15} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-500" />
+            <input type="search" aria-label="Search bank questions" placeholder="Search bank questions" value={search}
+              onChange={(event) => { setSearch(event.target.value); changePage(1); }}
+              className={`${examField} pl-9`} />
+          </label>
+          <QuestionBankFilters includeShared={includeShared} onSharedChange={handleSharedChange} disabled={isSubmitting}
+            fields={{
+              type: typeFilter,
+              topicId: topicFilter?.id ?? "",
+              topics: [{ value: "", label: "All topics" }, ...topicOptions.map(([value, label]) => ({ value, label }))],
+              onTypeChange: (type) => { setTypeFilter(type); changePage(1); },
+              onTopicChange: (id) => {
                 const topic = topicOptions.find(([optionId]) => optionId === id);
                 setTopicFilter(topic ? { id: topic[0], name: topic[1] } : null);
                 changePage(1);
-              }}
-              options={[{ value: "", label: "All topics" }, ...topicOptions.map(([value, label]) => ({ value, label }))]} />
-          </div>
-        </>
+              },
+            }} />
+          <button type="button" className={examSecondary} disabled={isSubmitting}
+            onClick={() => { onCreateNewQuestion("multiple-choice"); onClose(); }}>
+            <Plus size={14} aria-hidden="true" />
+            Create New
+          </button>
+        </div>
       ) : (
-        <div className="space-y-3">
-          <div>
-            <label htmlFor="pool-question-type" className="mb-1 block text-sm font-medium">Question type</label>
-            <TeacherSelect id="pool-question-type" label="Question type" value={poolType}
-              onChange={(type) => { setPoolType(type); setPoolTopics(new Map()); }}
-              className="w-56 max-w-full" placeholder="Select a question type" options={typeOptions} />
+        <div className="mb-3 space-y-3">
+          <div className="flex items-end justify-between gap-2">
+            <div className="min-w-0">
+              <label htmlFor="pool-question-type" className="mb-1 block text-sm font-medium">Question type</label>
+              <TeacherSelect id="pool-question-type" label="Question type" value={poolType}
+                onChange={(type) => { setPoolType(type); setPoolTopics(new Map()); }}
+                className="w-56 max-w-full" placeholder="Select a question type" options={typeOptions} />
+            </div>
+            <QuestionBankFilters includeShared={includeShared} onSharedChange={handleSharedChange} disabled={isSubmitting} />
           </div>
           {poolType && (
             <fieldset>
@@ -270,10 +271,6 @@ export function QuestionBankModal({
           )}
         </div>
       )}
-
-      <div className="my-3">
-        <TeacherSwitch label="Show shared questions" checked={includeShared} onChange={handleSharedChange} disabled={isSubmitting} />
-      </div>
 
       {isLoading && <p role="status" className="text-sm text-stone-600">Loading question bank...</p>}
       {bankError && (

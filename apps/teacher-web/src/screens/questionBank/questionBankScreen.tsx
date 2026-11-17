@@ -1,4 +1,6 @@
 import { useEffect, useRef, useState } from "react";
+import { Pagination } from "../../components/shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { ArrowLeft, LoaderCircle, Plus, Search } from "lucide-react";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
@@ -7,8 +9,8 @@ import { UnsavedChangesPrompt } from "../../components/examBuilder/unsavedChange
 import { ExamConfirmDialog, examField, examPrimary, examSecondary } from "../../components/examLibrary/examDialog";
 import { BankSharing } from "../../components/questionBank/bankVisibilitySelector";
 import { NewQuestionModal } from "../../components/questionBank/newQuestionModal";
+import { QuestionBankFilters } from "../../components/questionBank/questionBankFilters";
 import { TeacherSelect } from "../../components/shared/teacherSelect";
-import { TeacherSwitch } from "../../components/shared/teacherSwitch";
 import { useToast } from "../../hooks/useToast";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { useBankSubjects } from "../../hooks/useBankSubjects";
@@ -37,7 +39,7 @@ export function QuestionBankScreen() {
   const [search, setSearch] = useState("");
   const [topicId, setTopicId] = useState("");
   const [selectedTopicLabel, setSelectedTopicLabel] = useState("");
-  const [typeFilter, setTypeFilter] = useState("all");
+  const [typeFilter, setTypeFilter] = useState<"all" | QuestionType>("all");
   const [selectedQuestionId, setSelectedQuestionId] = useState<string | null>(null);
   const [showSharing, setShowSharing] = useState(false);
   const [showNewQuestion, setShowNewQuestion] = useState(false);
@@ -103,7 +105,8 @@ export function QuestionBankScreen() {
     (typeFilter === "all" || question.type === typeFilter) &&
     (!topicId || question.topics.some((topic) => topic.id === topicId)),
   );
-  const selectedQuestion = filteredQuestions.find((question) => question.id === selectedQuestionId) ?? filteredQuestions[0];
+  const questionPage = usePagination(filteredQuestions, 10, JSON.stringify([selectedSubject?.id, query, typeFilter, topicId, includeShared]));
+  const selectedQuestion = questionPage.items.find((question) => question.id === selectedQuestionId) ?? questionPage.items[0];
   const topicChoices = [{ value: "", label: "All topics" }, ...topicOptions.map((topic) => ({ value: topic.id, label: topic.name }))];
   if (topicId && !topicChoices.some((topic) => topic.value === topicId)) topicChoices.push({ value: topicId, label: selectedTopicLabel });
 
@@ -231,36 +234,37 @@ export function QuestionBankScreen() {
           </>
         ) : (
           <main className="flex min-h-0 flex-1 flex-col overflow-y-auto lg:overflow-hidden">
-            <div className="shrink-0 space-y-3 border-b border-[var(--color-base-300)] px-4 py-3 sm:px-6">
-              <h2 ref={bankHeading} tabIndex={-1} className="sr-only">Question Bank results</h2>
-              <div className="flex flex-wrap items-center gap-2">
-                {selectedSubject && (
+            <h2 ref={bankHeading} tabIndex={-1} className="sr-only">Question Bank results</h2>
+            <div role="group" aria-label="Question bank controls" className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-base-300)] px-4 py-3 sm:px-6">
+              {selectedSubject && (
+                <>
                   <TeacherSelect label="Subject bank" className="w-full sm:w-60" value={selectedSubject.id} onChange={chooseSubject}
                     options={subjects.map((subject) => ({ value: subject.id, label: subject.name }))} />
-                )}
-                <div className="ml-auto flex flex-wrap gap-2">
-                  <BankSharing subject={selectedSubject ?? null} settings={visibility.settings} isLoading={visibility.isLoading} isSaving={visibility.isSaving} error={visibility.error} isOpen={showSharing} onOpen={() => setShowSharing(true)} onClose={() => setShowSharing(false)} onMainChange={visibility.updateMainLevel} onSubjectChange={visibility.updateSubjectLevel} />
-                  {selectedSubject && (
-                    <button type="button" className={examPrimary} onClick={() => { openRequest.current += 1; setOpeningQuestionId(null); setShowNewQuestion(true); }}>
-                      <Plus size={16} aria-hidden="true" /> New question
-                    </button>
-                  )}
-                </div>
-              </div>
-              {selectedSubject && <>
-                <div className="flex flex-wrap gap-2">
-                  <label className="relative min-w-0 flex-[2_1_11rem] sm:max-w-xs">
+                  <label className="relative min-w-0 flex-[1_1_11rem] sm:max-w-xs">
                     <span className="sr-only">Search questions by title</span>
                     <Search size={15} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-500" />
                     <input type="search" className={`${examField} pl-9`} placeholder="Search by title" value={search} onChange={(event) => setSearch(event.target.value)} />
                   </label>
-                  <TeacherSelect label="Filter by topic" className="flex-[1_1_8rem] sm:max-w-52" value={topicId} options={topicChoices}
-                    onChange={(value) => { setTopicId(value); setSelectedTopicLabel(topicChoices.find((topic) => topic.value === value)?.label ?? ""); }} />
-                  <TeacherSelect label="Filter by type" className="flex-[1_1_8rem] sm:max-w-52" value={typeFilter} onChange={setTypeFilter}
-                    options={[{ value: "all", label: "All types" }, ...Object.entries(questionTypeLabels).map(([value, label]) => ({ value, label }))]} />
-                </div>
-                <TeacherSwitch label="Show shared questions" checked={includeShared} onChange={setIncludeShared} />
-              </>}
+                  <QuestionBankFilters includeShared={includeShared} onSharedChange={setIncludeShared} fields={{
+                    type: typeFilter,
+                    topicId,
+                    topics: topicChoices,
+                    onTypeChange: setTypeFilter,
+                    onTopicChange: (id) => {
+                      setTopicId(id);
+                      setSelectedTopicLabel(topicChoices.find((topic) => topic.value === id)?.label ?? "");
+                    },
+                  }} />
+                </>
+              )}
+              <div className="ml-auto flex flex-wrap gap-2">
+                <BankSharing subject={selectedSubject ?? null} settings={visibility.settings} isLoading={visibility.isLoading} isSaving={visibility.isSaving} error={visibility.error} isOpen={showSharing} onOpen={() => setShowSharing(true)} onClose={() => setShowSharing(false)} onMainChange={visibility.updateMainLevel} onSubjectChange={visibility.updateSubjectLevel} />
+                {selectedSubject && (
+                  <button type="button" className={examPrimary} onClick={() => { openRequest.current += 1; setOpeningQuestionId(null); setShowNewQuestion(true); }}>
+                    <Plus size={16} aria-hidden="true" /> New question
+                  </button>
+                )}
+              </div>
             </div>
             {subjectsLoading && <p role="status" className="px-4 py-3 text-sm text-stone-600">Loading subjects…</p>}
             {subjectsError && <div className="space-y-2 px-4 py-3"><p role="alert" className="text-sm text-red-700">{subjectsError}</p><button type="button" className={examSecondary} onClick={() => void refetchSubjects()}>Retry</button></div>}
@@ -274,7 +278,7 @@ export function QuestionBankScreen() {
                     : <>
                       <p role="status" className="mb-1 px-2 text-xs text-stone-600">{filteredQuestions.length} {filteredQuestions.length === 1 ? "question" : "questions"}</p>
                       <ul className="divide-y divide-[var(--color-base-300)]">
-                        {filteredQuestions.map((question) => (
+                        {questionPage.items.map((question) => (
                           <li key={question.id} className="py-1">
                             <button type="button" aria-pressed={question.id === selectedQuestion?.id}
                               className="flex w-full min-w-0 flex-wrap items-start justify-between gap-2 rounded-md px-3 py-2.5 text-left focus-visible:outline-2 focus-visible:outline-[#465a3b] hover:bg-stone-100 aria-pressed:bg-[#e9eee3]"
@@ -292,6 +296,11 @@ export function QuestionBankScreen() {
                           </li>
                         ))}
                       </ul>
+                      <Pagination label="Question bank pages" {...questionPage} onPageChange={(page) => {
+                        openRequest.current += 1;
+                        setOpeningQuestionId(null);
+                        questionPage.onPageChange(page);
+                      }} />
                     </>}
                 </section>
                 {selectedQuestion && (

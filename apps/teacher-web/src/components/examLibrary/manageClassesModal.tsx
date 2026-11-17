@@ -1,4 +1,6 @@
 import { Plus } from "lucide-react";
+import { Pagination } from "../shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { ExamDialog, examDanger, examPrimary, examSecondary } from "./examDialog";
 import type { ExamCard, ClassExamSummary } from "../../screens/examLibrary/examLibraryScreen.types";
 import { ClassExamStatusBadge } from "./statusBadge";
@@ -35,6 +37,7 @@ export function ManageClassesModal({
   onEditSettings: (classExamId: string) => void;
   onNavigate: (classExamId: string, targetScreen: "studentMonitoring" | "examResults") => void;
 }) {
+  const page = usePagination(exam?.classAttachments ?? [], 10, exam?.id ?? "");
   if (!isOpen || !exam) return null;
 
   const renderRowAction = (attachment: ClassExamSummary) => {
@@ -82,7 +85,7 @@ export function ManageClassesModal({
         </p>
       ) : (
         <div className="divide-y divide-stone-200 border-y border-stone-200">
-          {exam.classAttachments.map((attachment) => (
+          {page.items.map((attachment) => (
             <div
               key={attachment.classExamId}
               className="flex flex-wrap items-center justify-between gap-3 py-3"
@@ -147,6 +150,7 @@ export function ManageClassesModal({
           ))}
         </div>
       )}
+      <Pagination label="Manage classes pages" {...page} />
     </ExamDialog>
   );
 }

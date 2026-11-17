@@ -5,6 +5,8 @@ import { useStudentAttempts } from "../../hooks/useStudentAttempts";
 import type { MovementHistoryKind, MovementHistorySummary } from "../../screens/studentMonitoring/studentMonitoringScreen.types";
 import { ExamDialog, examSecondary } from "../examLibrary/examDialog";
 import { TeacherSelect } from "../shared/teacherSelect";
+import { Pagination } from "../shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
 
 const eventColors: Record<MovementHistoryKind, string> = {
   joined: "bg-stone-500",
@@ -37,6 +39,7 @@ export function MovementHistoryModal({ classExamId, studentId, studentName, onCl
   const activeSessionId = attempts.find((attempt) => attempt.sessionId === pickedSessionId)?.sessionId
     ?? attempts.at(-1)?.sessionId ?? null;
   const history = useMovementHistory(activeSessionId);
+  const page = usePagination(history.entries, 12, activeSessionId ?? "");
   const isRefreshing = attemptsState.isLoading || history.isLoading;
   const error = attemptsState.error ?? history.error;
 
@@ -76,7 +79,7 @@ export function MovementHistoryModal({ classExamId, studentId, studentName, onCl
         <>
           {!error && <p className="mb-3 text-xs text-stone-600">{summaryText(history.summary)}</p>}
           <ol aria-label="Movement events, newest first" className="divide-y divide-[var(--color-base-300)]">
-            {history.entries.map((entry) => (
+            {page.items.map((entry) => (
               <li key={entry.id} className="flex items-start gap-2.5 py-2.5">
                 <span aria-hidden="true" className={`mt-1.5 size-2 shrink-0 rounded-full ${eventColors[entry.kind]}`} />
                 <div className="min-w-0 flex-1 wrap-anywhere">
@@ -89,6 +92,7 @@ export function MovementHistoryModal({ classExamId, studentId, studentName, onCl
               </li>
             ))}
           </ol>
+          <Pagination label="Movement history pages" {...page} />
         </>
       )}
       {history.isTruncated && <p className="mt-3 text-xs text-stone-600">Showing the newest 500 events.</p>}

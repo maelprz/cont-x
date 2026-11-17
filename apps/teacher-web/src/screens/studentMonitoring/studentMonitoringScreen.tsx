@@ -4,6 +4,8 @@ import { examSecondary } from "../../components/examLibrary/examDialog";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { MovementHistoryModal } from "../../components/studentMonitoring/movementHistoryModal";
+import { Pagination } from "../../components/shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { useStudentMonitoring } from "../../hooks/useStudentMonitoring";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useViolationMonitoringStore } from "../../store/useViolationMonitoringStore";
@@ -59,6 +61,7 @@ export function StudentMonitoringScreen() {
   const returnLabel = returnScreen === "dashboard" ? "Dashboard" : "Exam Library";
   const { rows, header, isLoading, error, refetch, lastRefreshedAt, summary } = useStudentMonitoring(classExamId);
   const [historyTarget, setHistoryTarget] = useState<{ studentId: string; studentName: string } | null>(null);
+  const rosterPage = usePagination(rows, 10, classExamId ?? "");
   const hasRoster = classExamId !== null && rows.length > 0;
   const emptyMessage = classExamId === null
     ? "No class exam selected. Open Student Monitoring from a class exam."
@@ -116,14 +119,14 @@ export function StudentMonitoringScreen() {
             <section aria-labelledby="class-roster-heading" className="@container min-w-0 overflow-hidden rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)]">
               <h2 id="class-roster-heading" className="border-b border-[var(--color-base-300)] px-4 py-3 text-sm font-semibold">Class roster</h2>
               {hasRoster ? (
-                <table role="table" aria-labelledby="class-roster-heading" className="block w-full border-collapse @min-[46rem]:table">
+                <><table role="table" aria-labelledby="class-roster-heading" className="block w-full border-collapse @min-[46rem]:table">
                   <thead role="rowgroup" className="sr-only @min-[46rem]:not-sr-only @min-[46rem]:table-header-group">
                     <tr role="row" className="border-b border-[var(--color-base-300)] text-left text-xs text-stone-600">
                       {rosterColumns.map((label) => <th key={label} scope="col" role="columnheader" className="px-3 py-2 font-medium">{label}</th>)}
                     </tr>
                   </thead>
                   <tbody role="rowgroup" className="block divide-y divide-[var(--color-base-300)] @min-[46rem]:table-row-group">
-                    {rows.map((row) => {
+                    {rosterPage.items.map((row) => {
                       const showPosition = row.status === "in_progress" || row.status === "offline";
                       const status = statusStyles[row.status];
                       return (
@@ -158,7 +161,7 @@ export function StudentMonitoringScreen() {
                       );
                     })}
                   </tbody>
-                </table>
+                </table><Pagination label="Student roster pages" {...rosterPage} /></>
               ) : emptyMessage && <p role="status" className="px-4 py-5 text-sm text-stone-600">{emptyMessage}</p>}
             </section>
           </div>

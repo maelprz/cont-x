@@ -3,6 +3,8 @@ import { ArrowLeft, RefreshCw } from "lucide-react";
 import { ExamConfirmDialog, ExamDialog, examSecondary } from "../../components/examLibrary/examDialog";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
+import { Pagination } from "../../components/shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { useViolationMonitoring } from "../../hooks/useViolationMonitoring";
 import { useRouterLogic } from "../../router/routerLogic";
 import { CLASS_LOG_LIMIT, formatTimestamp } from "../../services/violationService";
@@ -72,6 +74,7 @@ function ViolationDetailDialog({ session, isLoading, error, violations, onClose 
   violations: ViolationDetailRow[];
   onClose: () => void;
 }) {
+  const page = usePagination(violations);
   return (
     <ExamDialog title="Violation details" subtitle={session && `${session.studentName} · Attempt ${session.attemptNumber}`}
       onClose={onClose} dismissOnBackdrop wide
@@ -79,8 +82,8 @@ function ViolationDetailDialog({ session, isLoading, error, violations, onClose 
       {isLoading && <p role="status" className="text-sm text-stone-600">Loading violations…</p>}
       {error && <p role="alert" className="text-sm text-red-700">{error}</p>}
       {!isLoading && !error && (violations.length > 0 ? (
-        <ul aria-label="Recorded violations" className="divide-y divide-[var(--color-base-300)]">
-          {violations.map((violation) => (
+        <><ul aria-label="Recorded violations" className="divide-y divide-[var(--color-base-300)]">
+          {page.items.map((violation) => (
             <li key={violation.id} className="flex flex-wrap items-start justify-between gap-x-4 gap-y-1 py-2.5 first:pt-0 last:pb-0">
               <div className="min-w-0 text-sm wrap-anywhere">
                 <h3 className="font-semibold">{violationLabels[violation.violationType]}</h3>
@@ -90,7 +93,7 @@ function ViolationDetailDialog({ session, isLoading, error, violations, onClose 
               <span className="shrink-0 text-xs text-stone-600 tabular-nums">{violation.loggedAt}</span>
             </li>
           ))}
-        </ul>
+        </ul><Pagination label="Violation detail pages" {...page} /></>
       ) : <p role="status" className="text-sm text-stone-600">No violations were logged for this attempt.</p>)}
     </ExamDialog>
   );
@@ -108,6 +111,8 @@ export function ViolationMonitoringScreen() {
   } = useViolationMonitoring(classExamId);
 
   const selectedSession = sessions.find((session) => session.id === selectedSessionId);
+  const attemptsPage = usePagination(sessions, 10, classExamId ?? "");
+  const logPage = usePagination(logEntries, 10, classExamId ?? "");
   const activeRows = activeTab === "attempts" ? sessions : logEntries;
   const hasRows = classExamId !== null && activeRows.length > 0;
   const emptyMessage = classExamId === null
@@ -175,8 +180,8 @@ export function ViolationMonitoringScreen() {
                 className="@container min-w-0 overflow-hidden rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] focus-visible:outline-2 focus-visible:outline-[#465a3b]">
                 {activeTab === id && (hasRows ? (
                   id === "attempts" ? (
-                    <AttemptTable label={label} columns={["Student", "Status", "Joined", "Submitted", "Violations", "Actions"]}>
-                      {sessions.map((session) => {
+                    <><AttemptTable label={label} columns={["Student", "Status", "Joined", "Submitted", "Violations", "Actions"]}>
+                      {attemptsPage.items.map((session) => {
                         const status = attemptStatuses[session.status];
                         const attemptLabel = `${session.studentName}, attempt ${session.attemptNumber}`;
                         return (
@@ -204,10 +209,10 @@ export function ViolationMonitoringScreen() {
                           </tr>
                         );
                       })}
-                    </AttemptTable>
+                    </AttemptTable><Pagination label="Violation attempt pages" {...attemptsPage} /></>
                   ) : (
-                    <AttemptTable label={label} columns={["Time", "Student", "Event", "Details", "Question"]}>
-                      {logEntries.map((entry) => (
+                    <><AttemptTable label={label} columns={["Time", "Student", "Event", "Details", "Question"]}>
+                      {logPage.items.map((entry) => (
                         <tr key={entry.id} role="row" className={rowClass}>
                           <AttemptCell label="Time"><time dateTime={entry.occurredAt}>{formatTimestamp(entry.occurredAt)}</time></AttemptCell>
                           <AttemptStudent name={entry.studentName} detail={entry.attemptNumber > 0 ? `Attempt ${entry.attemptNumber}` : ""} />
@@ -220,7 +225,7 @@ export function ViolationMonitoringScreen() {
                           <AttemptCell label="Question">{entry.questionTitle ?? DASH}</AttemptCell>
                         </tr>
                       ))}
-                    </AttemptTable>
+                    </AttemptTable><Pagination label="Activity log pages" {...logPage} /></>
                   )
                 ) : emptyMessage && <p role="status" className="px-4 py-5 text-sm text-stone-600">{emptyMessage}</p>)}
               </section>
@@ -234,7 +239,7 @@ export function ViolationMonitoringScreen() {
       </div>
 
       {selectedSessionId !== null && (
-        <ViolationDetailDialog session={selectedSession} isLoading={isViolationsLoading} error={violationsError}
+        <ViolationDetailDialog key={selectedSessionId} session={selectedSession} isLoading={isViolationsLoading} error={violationsError}
           violations={violations} onClose={closeViolationModal} />
       )}
 

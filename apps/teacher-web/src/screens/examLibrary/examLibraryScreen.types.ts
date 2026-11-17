@@ -12,6 +12,7 @@ export interface ClassExamSummary {
   status: ClassExamStatus;
   startsAt: string | null;
   endedAt: string | null;
+  resultsUpdatedAt: string | null;
   studentCount: number; // students enrolled in the attached class
 }
 

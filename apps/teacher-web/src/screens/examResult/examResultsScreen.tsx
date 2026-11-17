@@ -1,455 +1,304 @@
-import { useState } from "react";
-import { Search, Download, FileText, Check, X } from "lucide-react"; // Clock removed, no partial status
-import type {
-  ExamResultsScreenProps,
-  StudentResultRow,
-} from "./examResultsScreen.types";
+import { useId, useRef, useState, type ReactNode } from "react";
+import { ArrowLeft, Download, Ellipsis, Pencil, Search, List } from "lucide-react";
+import { ExamDialog, examField, examPrimary, examSecondary } from "../../components/examLibrary/examDialog";
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
-import { useExamResults } from "../../hooks/useExamResults";
-import { useExamResultsStore } from "../../store/useExamResultsStore";
+import { Pagination } from "../../components/shared/pagination";
 import { AdjustScoreModal } from "../../components/examResult/adjustScoreModal";
 import { KeystrokeCsvButton } from "../../components/examResult/keystrokeCsvButton";
-import { computeQuestionPerformance } from "../../lib/resultsAnalytics.ts";
-import { formatOvertime } from "../../lib/overtime.ts";
-import { collectPoolColumns } from "../../lib/resultsPools.ts";
-import {
-  buildResultsCsv,
-  downloadCsv,
-  safeFileName,
-  scorePercent,
-} from "../../lib/resultsCsv";
+import { useExamResults } from "../../hooks/useExamResults";
+import { usePagination } from "../../hooks/usePagination";
+import { computeQuestionPerformance } from "../../lib/resultsAnalytics";
+import { buildResultsCsv, downloadCsv, safeFileName, scorePercent } from "../../lib/resultsCsv";
+import { collectPoolColumns } from "../../lib/resultsPools";
+import { formatOvertime } from "../../lib/overtime";
+import { useRouterLogic } from "../../router/routerLogic";
+import { useExamResultsStore } from "../../store/useExamResultsStore";
+import type { ExamResultsScreenProps, StudentResultRow } from "./examResultsScreen.types";
 
-// picks an icon and color for a question cell based on its status
-function StatusIcon({
-  status,
-}: {
-  status: StudentResultRow["questionScores"][number]["status"];
-}) {
-  if (status === "correct") {
-    return <Check size={13} style={{ color: "var(--color-success)" }} />;
-  }
-  return <X size={13} style={{ color: "var(--color-error)" }} />;
+const tabs = [{ id: "attempts", label: "Student attempts" }, { id: "questions", label: "Question performance" }] as const;
+const panel = "@container min-w-0 rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)]";
+const rowClass = "grid grid-cols-2 gap-2 px-4 py-3 @min-[42rem]:table-row";
+const cellClass = "block min-w-0 text-sm wrap-anywhere @min-[42rem]:table-cell @min-[42rem]:px-3 @min-[42rem]:py-2.5 @min-[42rem]:align-middle";
+const menuItem = "flex w-full items-center gap-2 rounded-md px-2.5 py-2 text-left text-sm hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-[#465a3b] disabled:opacity-50";
+const points = (value: number) => Math.round(value * 10) / 10;
+
+function ResultsTable({ label, columns, children }: { label: string; columns: string[]; children: ReactNode }) {
+  return (
+    <table role="table" aria-label={label} className="block w-full border-collapse @min-[42rem]:table">
+      <thead role="rowgroup" className="sr-only @min-[42rem]:not-sr-only @min-[42rem]:table-header-group">
+        <tr role="row" className="border-b border-[var(--color-base-300)] text-left text-xs text-stone-600">
+          {columns.map((column) => <th scope="col" role="columnheader" key={column} className="px-3 py-2 font-medium">{column}</th>)}
+        </tr>
+      </thead>
+      <tbody role="rowgroup" className="block divide-y divide-[var(--color-base-300)] @min-[42rem]:table-row-group">{children}</tbody>
+    </table>
+  );
 }
 
-// one row of the Question Performance table; fixed and pooled questions share the same look
-function PerformanceRow({
-  label,
-  title,
-  note,
-  averageScore,
-  maxPoints,
-  averagePercent,
-  fullMarksPercent,
-  zeroPercent,
-  isHardest,
-}: {
-  label: string;
-  title: string;
-  note?: string; // small grey text after the title, e.g. which pool a question came from
-  averageScore: number;
-  maxPoints: number;
-  averagePercent: number;
-  fullMarksPercent: number;
-  zeroPercent: number;
-  isHardest: boolean;
-}) {
+function ResultCell({ label, children }: { label: string; children: ReactNode }) {
   return (
-    <tr className="border-b border-[var(--color-base-300)] last:border-0">
-      <td className="px-4 py-3">
-        <span className="font-medium">{label}</span>
-        <span className="opacity-60"> {title}</span>
-        {note && <span className="ml-2 text-[11px] opacity-60">{note}</span>}
-        {isHardest && (
-          <span
-            className="ml-2 text-[11px] font-medium"
-            style={{ color: "var(--color-error)" }}
-          >
-            Hardest
-          </span>
-        )}
-      </td>
-      <td className="px-4 py-3">
-        {Math.round(averageScore * 10) / 10}/{Math.round(maxPoints * 10) / 10}
-      </td>
-      <td className="px-4 py-3">
-        <div className="flex items-center gap-2">
-          <div className="h-2 flex-1 rounded-full bg-[var(--color-base-300)]">
-            <div
-              className="h-2 rounded-full bg-[var(--color-primary)]"
-              style={{ width: `${Math.min(100, Math.max(0, averagePercent))}%` }}
-            />
-          </div>
-          <span className="w-10 text-right">{Math.round(averagePercent)}%</span>
+    <td role="cell" className={cellClass}>
+      <span aria-hidden="true" className="block text-xs text-stone-600 @min-[42rem]:hidden">{label}</span>
+      {children}
+    </td>
+  );
+}
+
+function AttemptActions({ row, classExamId, examTitle, className, onBreakdown, onAdjust }: {
+  row: StudentResultRow;
+  classExamId: string;
+  examTitle: string;
+  className: string;
+  onBreakdown: () => void;
+  onAdjust: () => void;
+}) {
+  const id = useId();
+  const trigger = useRef<HTMLButtonElement>(null);
+  const menu = useRef<HTMLDivElement>(null);
+
+  function positionMenu() {
+    const anchor = trigger.current;
+    const popup = menu.current;
+    if (!anchor || !popup) return;
+    const rect = anchor.getBoundingClientRect();
+    const width = Math.min(208, window.innerWidth - 16);
+    const below = window.innerHeight - rect.bottom - 14;
+    const above = rect.top - 14;
+    const flip = below < 132 && above > below;
+    Object.assign(popup.style, {
+      width: width + "px",
+      left: Math.max(8, Math.min(rect.right - width, window.innerWidth - width - 8)) + "px",
+      top: flip ? "auto" : rect.bottom + 6 + "px",
+      bottom: flip ? window.innerHeight - rect.top + 6 + "px" : "auto",
+      maxHeight: Math.max(0, flip ? above : below) + "px",
+    });
+  }
+
+  return (
+    <>
+      <button type="button" ref={trigger} popoverTarget={id} aria-controls={id} className={examSecondary}
+        aria-label={`Actions for ${row.studentName}, attempt ${row.attemptNumber}`}>
+        <Ellipsis size={16} aria-hidden="true" />
+      </button>
+      <div ref={menu} id={id} popover="auto" role="group" aria-label="Attempt actions" onBeforeToggle={positionMenu}
+        className="fixed inset-auto m-0 overflow-y-auto rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-100)] p-1 text-[var(--color-base-content)] shadow-lg">
+        <button type="button" className={menuItem} onClick={() => { menu.current?.hidePopover(); onBreakdown(); }}>
+          <List size={14} aria-hidden="true" /> Breakdown
+        </button>
+        <button type="button" className={menuItem} onClick={() => { menu.current?.hidePopover(); onAdjust(); }}>
+          <Pencil size={14} aria-hidden="true" /> Adjust score
+        </button>
+        <KeystrokeCsvButton row={row} classExamId={classExamId} examTitle={examTitle} className={className} buttonClassName={menuItem} />
+      </div>
+    </>
+  );
+}
+
+function ScoreBreakdown({ row, poolLabels, onClose }: {
+  row: StudentResultRow;
+  poolLabels: Map<string, string>;
+  onClose: () => void;
+}) {
+  const items = [
+    ...row.questionScores.map((q) => ({ key: q.questionId, label: q.label + " · " + q.title, score: `${points(q.score)} / ${points(q.maxPoints)}`, detail: undefined })),
+    ...row.poolScores.map((pool) => ({
+      key: "pool-" + pool.poolKey, label: (poolLabels.get(pool.poolKey) ?? "Pool") + " · " + pool.title,
+      score: `${points(pool.score)} / ${points(pool.maxPoints)}`,
+      detail: pool.questions.map((question) => `${question.title} · ${points(question.score)} / ${points(question.maxPoints)}`).join(" · "),
+    })),
+  ];
+  const page = usePagination(items);
+  return (
+    <ExamDialog title="Score breakdown" subtitle={`${row.studentName} · Attempt ${row.attemptNumber}`} onClose={onClose} dismissOnBackdrop wide
+      footer={<button type="button" className={examSecondary} onClick={onClose}>Close</button>}>
+      <p className="text-sm font-semibold tabular-nums">Total {points(row.totalScore)} / {points(row.maxScore)}</p>
+      <ul className="mt-3 divide-y divide-[var(--color-base-300)] border-t border-[var(--color-base-300)] text-sm">
+        {page.items.map((item) => (
+          <li key={item.key} className="flex justify-between gap-3 py-2.5">
+            <div className="min-w-0 wrap-anywhere">
+              <p>{item.label}</p>
+              {item.detail && <p className="mt-0.5 text-xs text-stone-600">{item.detail}</p>}
+            </div>
+            <span className="shrink-0 tabular-nums">{item.score}</span>
+          </li>
+        ))}
+      </ul>
+      <Pagination label="Score breakdown pages" {...page} />
+      {row.overtimeSeconds > 0 && (
+        <p className="border-t border-[var(--color-base-300)] pt-2 text-sm text-stone-700">
+          Overtime {formatOvertime(row.overtimeSeconds)} · −{points(row.overtimeDeduction ?? 0)} points
+        </p>
+      )}
+      {row.scoreAdjustment !== 0 && (
+        <div className="border-t border-[var(--color-base-300)] py-2 text-sm">
+          <p>Score adjustment {row.scoreAdjustment > 0 ? "+" : ""}{points(row.scoreAdjustment)}</p>
+          {row.adjustmentReason && <p className="text-xs text-stone-600 wrap-anywhere">{row.adjustmentReason}</p>}
         </div>
-      </td>
-      <td className="px-4 py-3">{Math.round(fullMarksPercent)}%</td>
-      <td className="px-4 py-3">{Math.round(zeroPercent)}%</td>
-    </tr>
+      )}
+    </ExamDialog>
   );
 }
 
 export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
-  const [search, setSearch] = useState(""); // search box text, local only
+  const classExamId = useExamResultsStore((state) => state.currentClassExamId);
+  const { data, isLoading, error, refetch } = useExamResults(classExamId);
+  const navigateTo = useRouterLogic((state) => state.navigateTo);
+  const [search, setSearch] = useState("");
+  const [tab, setTab] = useState<"attempts" | "questions">("attempts");
+  const [dialog, setDialog] = useState<{ kind: "breakdown" | "adjust"; row: StudentResultRow } | null>(null);
+  const tabId = useId();
 
-  // reads which class's results to show, set when a card or a Manage Classes row was clicked
-  const currentClassExamId = useExamResultsStore(
-    (state) => state.currentClassExamId,
-  );
-  const { data, isLoading, error, refetch } = useExamResults(currentClassExamId);
-  const [adjustingRow, setAdjustingRow] = useState<StudentResultRow | null>(null); // attempt being adjusted
-
-  // uses real fetched rows unless a prop override was passed in (e.g. for testing)
   const rows = rowsProp ?? data?.rows ?? [];
-
   const examTitle = data?.examTitle ?? "";
-  const examCode = data?.examCode ?? "";
   const className = data?.className ?? "";
-  const durationMinutes = data?.durationMinutes ?? 0;
-  const passMark = data?.passMark ?? null; // percent; null means no minimum was set
-
-  // filters rows by student name, case-insensitive
-  const filtered = rows.filter((row) =>
-    row.studentName.toLowerCase().includes(search.toLowerCase()),
-  );
-
-  // derived stats from real rows; the pass mark is a percent, so compare percents
-  const classAverage =
-    rows.length > 0
-      ? Math.round(
-          rows.reduce((sum, r) => sum + scorePercent(r), 0) / rows.length,
-        )
-      : 0;
-  const passCount =
-    passMark === null
-      ? 0
-      : rows.filter((r) => scorePercent(r) >= passMark).length;
-  const highestScore =
-    rows.length > 0 ? Math.max(...rows.map((r) => r.totalScore)) : 0;
-  // students draw different pooled questions, so show the maximum of whoever scored highest
-  const highestRow = rows.find((r) => r.totalScore === highestScore);
-  const maxScore = highestRow?.maxScore ?? 0;
-
-  const performance = computeQuestionPerformance(rows); // every question's stats: fixed first, then each pooled question
-  const hasPerformance = performance.fixed.length > 0 || performance.pooled.length > 0;
-
-  // exports every attempt (not just the searched ones) as the full results sheet
-  const handleExportCsv = () => {
-    downloadCsv(
-      safeFileName(examTitle, className, "results"),
-      buildResultsCsv(rows, passMark),
-    );
-  };
-
-  // question column headers, taken from the first row's shape
-  const questionColumns = rows[0]?.questionScores ?? [];
-  const poolColumns = collectPoolColumns(rows); // one column per random pool, in exam order
-
-  // shown while no exam has been selected yet (e.g. direct navigation without a card click)
-  if (!currentClassExamId) {
-    return (
-      <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
-        <TeacherSidebar activeItem="examResultsList" />
-        <div className="flex-1 flex flex-col overflow-hidden">
-          <TeacherHeader />
-          <main className="flex-1 flex items-center justify-center">
-            <p className="text-sm opacity-60">No exam selected.</p>
-          </main>
-        </div>
-      </div>
-    );
-  }
+  const passMark = data?.passMark ?? null;
+  const query = search.trim().toLowerCase();
+  const filtered = rows.filter((row) => row.studentName.toLowerCase().includes(query));
+  const attemptsPage = usePagination(filtered, 10, JSON.stringify([classExamId, query]));
+  const classAverage = rows.length ? Math.round(rows.reduce((sum, row) => sum + scorePercent(row), 0) / rows.length) : 0;
+  const passCount = passMark === null ? 0 : rows.filter((row) => scorePercent(row) >= passMark).length;
+  const highest = rows.reduce<StudentResultRow | null>((best, row) => !best || row.totalScore > best.totalScore ? row : best, null);
+  const performance = computeQuestionPerformance(rows);
+  const questionRows = [
+    ...performance.fixed.map((stat) => ({ ...stat, key: "fixed-" + stat.questionId, note: "" })),
+    ...performance.pooled.map((stat) => ({ ...stat, label: stat.poolLabel, note: stat.poolTitle })),
+  ];
+  const questionsPage = usePagination(questionRows, 10, classExamId ?? "");
+  const poolLabels = new Map(collectPoolColumns(rows).map((pool) => [pool.poolKey, pool.label]));
+  const showingResults = classExamId !== null && !isLoading && !error;
 
   return (
-    <div className="flex h-screen overflow-hidden bg-[var(--color-base-200)]">
+    <div className="flex h-dvh overflow-hidden bg-[var(--color-base-200)] text-[var(--color-base-content)]">
       <TeacherSidebar activeItem="examResultsList" />
-
-      <div className="flex-1 flex flex-col overflow-hidden">
-        <TeacherHeader />
-
-        <main
-          className="flex-1 overflow-y-auto px-8 py-6"
-          style={{ color: "var(--color-base-content)" }}
-        >
-          <p className="text-xs opacity-60 mb-2">
-            Teacher Portal &gt; Exam Library &gt; Results
-          </p>
-
-          {/* shows while the real data is being fetched */}
-          {isLoading && (
-            <p className="text-sm opacity-60">Loading results...</p>
-          )}
-
-          {/* shows if the fetch failed */}
-          {error && (
-            <p
-              className="text-[13px] mb-4"
-              style={{ color: "var(--color-error)" }}
-            >
-              {error}
-            </p>
-          )}
-
-          {!isLoading && !error && (
-            <>
-              <div className="flex items-start justify-between gap-6 mb-6">
+      <div className="flex min-w-0 flex-1 flex-col overflow-hidden">
+        <TeacherHeader title="Exam Results" />
+        <main className="min-h-0 flex-1 overflow-y-auto">
+          <div className="mx-auto flex max-w-7xl flex-col gap-4 px-4 py-5 sm:px-8 sm:py-6">
+            <div className="flex flex-wrap items-center justify-between gap-2">
+              <button type="button" className={examSecondary} onClick={() => navigateTo("examResultsList")}>
+                <ArrowLeft size={15} aria-hidden="true" /> Back to results
+              </button>
+              {showingResults && <button type="button" className={examPrimary} disabled={!rows.length}
+                onClick={() => downloadCsv(safeFileName(examTitle, className, "results"), buildResultsCsv(rows, passMark))}>
+                <Download size={15} aria-hidden="true" /> Export CSV
+              </button>}
+            </div>
+            {classExamId === null ? <p role="status" className="text-sm text-stone-600">No class exam selected.</p>
+              : isLoading ? <p role="status" className="text-sm text-stone-600">Loading results…</p>
+              : error ? <div className="flex flex-wrap items-center gap-3">
+                <p role="alert" className="text-sm text-red-700">{error}</p>
+                <button type="button" className={examSecondary} onClick={refetch}>Retry</button>
+              </div>
+              : <>
                 <div>
-                  <h1 className="text-2xl font-bold mb-1">
-                    Exam Results: {examTitle}
-                  </h1>
-                  <p className="text-sm opacity-70">
-                    {examCode} &middot; {className} &middot; {durationMinutes} min
-                    &middot; pass mark{" "}
-                    {passMark === null ? "none" : `${passMark}%`}
-                    &middot; {rows.length} sessions
-                  </p>
+                  <h2 className="text-lg font-semibold wrap-anywhere">{examTitle || "Class exam"}</h2>
+                  {data && <p className="mt-0.5 text-sm text-stone-600 wrap-anywhere">
+                    {className} · {data.examCode} · {data.durationMinutes} min · Pass mark {passMark === null ? "not set" : passMark + "%"}
+                  </p>}
                 </div>
-
-                <div className="flex gap-2 shrink-0">
-                  <button
-                    type="button"
-                    onClick={handleExportCsv}
-                    disabled={rows.length === 0}
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-base-300)] text-[13px] font-medium bg-[var(--color-base-100)] hover:opacity-70 disabled:opacity-40"
-                  >
-                    <Download size={14} />
-                    Export CSV
-                  </button>
-                  <button
-                    type="button"
-                    className="flex items-center gap-1.5 px-3 py-2 rounded-lg border border-[var(--color-base-300)] text-[13px] font-medium bg-[var(--color-base-100)] hover:opacity-70"
-                  >
-                    <FileText size={14} />
-                    Export PDF
-                  </button>
+                <dl className="grid grid-cols-3 divide-x divide-[var(--color-base-300)] rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] tabular-nums">
+                  {[
+                    ["Class average", rows.length ? classAverage + "%" : "—"],
+                    ["Passed", passMark === null ? "—" : passCount + " / " + rows.length],
+                    ["Highest score", highest ? points(highest.totalScore) + " / " + points(highest.maxScore) : "—"],
+                  ].map(([label, value]) => (
+                    <div className="min-w-0 px-2 py-2 sm:px-4 sm:py-3" key={label}>
+                      <dt className="text-xs text-stone-600">{label}</dt>
+                      <dd className="mt-1 text-lg font-semibold wrap-anywhere sm:text-xl">{value}</dd>
+                    </div>
+                  ))}
+                </dl>
+                <div role="tablist" aria-label="Results view" className="flex flex-wrap gap-4 border-b border-[var(--color-base-300)]">
+                  {tabs.map(({ id, label }) => (
+                    <button type="button" role="tab" key={id} id={tabId + "-" + id} aria-selected={tab === id}
+                      aria-controls={tabId + "-" + id + "-panel"} tabIndex={tab === id ? 0 : -1} onClick={() => setTab(id)}
+                      onKeyDown={(event) => {
+                        if (!["ArrowLeft", "ArrowRight", "Home", "End"].includes(event.key)) return;
+                        event.preventDefault();
+                        const next = event.key === "Home" ? "attempts" : event.key === "End" ? "questions" : id === "attempts" ? "questions" : "attempts";
+                        setTab(next);
+                        document.getElementById(tabId + "-" + next)?.focus();
+                      }}
+                      className="min-h-10 cursor-pointer border-b-2 border-transparent px-1.5 pb-2 text-sm text-stone-600 focus-visible:outline-2 focus-visible:outline-[#465a3b] aria-selected:border-[#465a3b] aria-selected:font-semibold aria-selected:text-[#465a3b]">
+                      {label}
+                    </button>
+                  ))}
                 </div>
-              </div>
-
-              <div className="grid grid-cols-3 gap-4 mb-6">
-                <div className="rounded-xl p-4 bg-[var(--color-base-100)] border border-[var(--color-base-300)]">
-                  <p className="text-xs opacity-60 mb-1">Class Average</p>
-                  <p className="text-2xl font-bold">{classAverage}%</p>
-                </div>
-                <div className="rounded-xl p-4 bg-[var(--color-base-100)] border border-[var(--color-base-300)]">
-                  <p className="text-xs opacity-60 mb-1">Pass Rate</p>
-                  <p
-                    className="text-2xl font-bold"
-                    style={{ color: "var(--color-success)" }}
-                  >
-                    {passMark === null
-                      ? "No pass mark"
-                      : `${passCount} of ${rows.length}`}
-                  </p>
-                </div>
-                <div className="rounded-xl p-4 bg-[var(--color-base-100)] border border-[var(--color-base-300)]">
-                  <p className="text-xs opacity-60 mb-1">Highest Score</p>
-                  <p className="text-2xl font-bold">
-                    {highestScore}/{maxScore}
-                  </p>
-                </div>
-              </div>
-
-              {hasPerformance && (
-                <div className="rounded-xl mb-6 overflow-x-auto bg-[var(--color-base-100)] border border-[var(--color-base-300)]">
-                  <div className="px-4 pt-4 pb-2">
-                    <h2 className="text-lg font-bold">Question Performance</h2>
-                    <p className="text-xs opacity-60">
-                      Based on {rows.length} {rows.length === 1 ? "attempt" : "attempts"}. Full
-                      marks means the student earned every point on the question.
-                      {performance.pooled.length > 0 &&
-                        " A random-pool question only counts the attempts that drew it."}
-                    </p>
-                  </div>
-                  <table className="w-full text-[13px]">
-                    <thead>
-                      <tr className="border-b border-[var(--color-base-300)]">
-                        <th className="text-left px-4 py-3 font-medium opacity-60">Question</th>
-                        <th className="text-left px-4 py-3 font-medium opacity-60">Average</th>
-                        <th className="text-left px-4 py-3 font-medium opacity-60 w-[200px]">
-                          Average %
-                        </th>
-                        <th className="text-left px-4 py-3 font-medium opacity-60">Full marks</th>
-                        <th className="text-left px-4 py-3 font-medium opacity-60">Zero</th>
-                      </tr>
-                    </thead>
-                    <tbody>
-                      {performance.fixed.map((stat) => (
-                        <PerformanceRow
-                          key={stat.questionId}
-                          label={stat.label}
-                          title={stat.title}
-                          averageScore={stat.averageScore}
-                          maxPoints={stat.maxPoints}
-                          averagePercent={stat.averagePercent}
-                          fullMarksPercent={stat.fullMarksPercent}
-                          zeroPercent={stat.zeroPercent}
-                          isHardest={stat.isHardest}
-                        />
-                      ))}
-                      {performance.pooled.map((stat) => (
-                        <PerformanceRow
-                          key={stat.key}
-                          label={stat.poolLabel}
-                          title={stat.title}
-                          note={`random pool "${stat.poolTitle}", drawn in ${stat.attempts} of ${rows.length} ${rows.length === 1 ? "attempt" : "attempts"}`}
-                          averageScore={stat.averageScore}
-                          maxPoints={stat.maxPoints}
-                          averagePercent={stat.averagePercent}
-                          fullMarksPercent={stat.fullMarksPercent}
-                          zeroPercent={stat.zeroPercent}
-                          isHardest={stat.isHardest}
-                        />
-                      ))}
-                    </tbody>
-                  </table>
-                </div>
-              )}
-
-              <div className="flex items-center justify-between mb-3">
-                <h2 className="text-lg font-bold">Detailed Breakdown</h2>
-                <div className="flex items-center gap-2 px-3 py-2 rounded-lg border w-[240px] border-[var(--color-base-300)] bg-[var(--color-base-100)]">
-                  <Search size={14} style={{ opacity: 0.5 }} />
-                  <input
-                    type="text"
-                    placeholder="Search student name"
-                    value={search}
-                    onChange={(e) => setSearch(e.target.value)}
-                    className="flex-grow text-[13px] outline-none bg-transparent border-none"
-                  />
-                </div>
-              </div>
-
-              {/* shows every session as its own row — multiple rows per student if they retried */}
-              <div className="rounded-lg px-3 py-2 mb-3 text-xs bg-[var(--color-base-100)] border border-[var(--color-base-300)] opacity-70">
-                Showing one row per attempt — students with multiple attempts
-                appear more than once.
-              </div>
-
-              <div className="rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] overflow-x-auto">
-                <table className="w-full text-sm">
-                  <thead>
-                    <tr className="border-b border-[var(--color-base-300)]">
-                      <th className="text-left px-4 py-3 font-medium opacity-60">
-                        Student
-                      </th>
-                      <th className="text-left px-4 py-3 font-medium opacity-60">
-                        Attempt
-                      </th>
-                      <th className="text-left px-4 py-3 font-medium opacity-60">
-                        Total
-                      </th>
-                      {questionColumns.map((q) => (
-                        <th
-                          key={q.questionId}
-                          className="text-left px-4 py-3 font-medium opacity-60"
-                        >
-                          {q.label} ({q.maxPoints})
-                        </th>
-                      ))}
-                      {poolColumns.map((pool) => (
-                        <th
-                          key={pool.poolKey}
-                          className="text-left px-4 py-3 font-medium opacity-60"
-                        >
-                          {pool.label} {pool.title}
-                        </th>
-                      ))}
-                      <th className="text-left px-4 py-3 font-medium opacity-60">
-                        Actions
-                      </th>
-                    </tr>
-                  </thead>
-                  <tbody>
-                    {filtered.map((row) => (
-                      <tr
-                        key={row.sessionId}
-                        className="border-b border-[var(--color-base-300)] last:border-0"
-                      >
-                        <td className="px-4 py-3">{row.studentName}</td>
-                        <td className="px-4 py-3">
-                          #{row.attemptNumber}
-                          {row.overtimeSeconds > 0 && (
-                            <span
-                              className="ml-2 text-[11px] font-medium"
-                              style={{ color: "var(--color-warning)" }}
-                            >
-                              {formatOvertime(row.overtimeSeconds)} (−{row.overtimeDeduction ?? 0} points)
-                            </span>
-                          )}
-                        </td>
-                        <td className="px-4 py-3 font-bold">
-                          {row.totalScore}/{row.maxScore}
-                          {row.scoreAdjustment !== 0 && (
-                            <span
-                              title={row.adjustmentReason ?? "Adjusted by the teacher"}
-                              className="ml-1.5 text-[11px] font-medium opacity-60"
-                            >
-                              ({row.scoreAdjustment > 0 ? "+" : ""}
-                              {row.scoreAdjustment} adj.)
-                            </span>
-                          )}
-                        </td>
-                        {row.questionScores.map((q) => (
-                          <td key={q.questionId} className="px-4 py-3">
-                            <span className="flex items-center gap-1">
-                              <StatusIcon status={q.status} />
-                              {q.score}
-                            </span>
-                          </td>
-                        ))}
-                        {poolColumns.map((pool) => {
-                          const cell = row.poolScores.find((c) => c.poolKey === pool.poolKey);
-                          return (
-                            <td key={pool.poolKey} className="px-4 py-3">
-                              {cell ? `${cell.score}/${cell.maxPoints}` : "-"}
-                            </td>
-                          );
-                        })}
-                        <td className="px-4 py-3">
-                          <div className="flex flex-wrap items-center gap-2">
-                            <button
-                              type="button"
-                              className="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] hover:opacity-70"
-                            >
-                              View Answers
-                            </button>
-                            <button
-                              type="button"
-                              onClick={() => setAdjustingRow(row)}
-                              className="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] hover:opacity-70"
-                            >
-                              Adjust Score
-                            </button>
-                            <KeystrokeCsvButton
-                              row={row}
-                              classExamId={currentClassExamId}
-                              examTitle={examTitle}
-                              className={className}
-                            />
-                          </div>
-                        </td>
-                      </tr>
-                    ))}
-                  </tbody>
-                </table>
-              </div>
-
-              <p className="text-xs opacity-60 mt-3">
-                Showing {filtered.length} of {rows.length} sessions
-              </p>
-            </>
-          )}
+                <section role="tabpanel" id={tabId + "-attempts-panel"} aria-labelledby={tabId + "-attempts"} hidden={tab !== "attempts"}>
+                  {tab === "attempts" && <div className="space-y-3">
+                    {rows.length > 0 && (
+                      <label className="relative block max-w-xs">
+                        <Search size={15} aria-hidden="true" className="pointer-events-none absolute top-1/2 left-3 -translate-y-1/2 text-stone-500" />
+                        <input type="search" aria-label="Search students" placeholder="Search students" value={search}
+                          onChange={(event) => setSearch(event.target.value)} className={examField + " pl-9"} />
+                      </label>
+                    )}
+                    <div className={panel}>
+                      {filtered.length ? (
+                        <>
+                          <ResultsTable label="Student attempts" columns={["Student", "Total", "Overtime", "Actions"]}>
+                            {attemptsPage.items.map((row) => (
+                              <tr key={row.sessionId} role="row" className={rowClass}>
+                                <th scope="row" role="rowheader" className={"col-span-2 text-left font-semibold " + cellClass}>
+                                  {row.studentName}
+                                  <span className="block text-xs font-normal text-stone-600">
+                                    Attempt {row.attemptNumber}{row.studentIdNumber ? " · " + row.studentIdNumber : ""}
+                                  </span>
+                                </th>
+                                <ResultCell label="Total">
+                                  <strong className="tabular-nums">{points(row.totalScore)} / {points(row.maxScore)}</strong>
+                                  <span className="block text-xs text-stone-600">
+                                    {Math.round(scorePercent(row))}%{passMark !== null ? (scorePercent(row) >= passMark ? " · Passed" : " · Below pass mark") : ""}
+                                  </span>
+                                  {row.scoreAdjustment !== 0 && <span className="block text-xs text-stone-600">{row.scoreAdjustment > 0 ? "+" : ""}{points(row.scoreAdjustment)} adjustment</span>}
+                                </ResultCell>
+                                <ResultCell label="Overtime">
+                                  {row.overtimeSeconds > 0 ? formatOvertime(row.overtimeSeconds) + " · −" + points(row.overtimeDeduction ?? 0) + " points" : "—"}
+                                </ResultCell>
+                                <ResultCell label="Actions">
+                                  <AttemptActions row={row} classExamId={classExamId} examTitle={examTitle} className={className}
+                                    onBreakdown={() => setDialog({ kind: "breakdown", row })} onAdjust={() => setDialog({ kind: "adjust", row })} />
+                                </ResultCell>
+                              </tr>
+                            ))}
+                          </ResultsTable>
+                          <Pagination label="Student attempt pages" {...attemptsPage} />
+                        </>
+                      ) : <p role="status" className="p-4 text-sm text-stone-600">{query ? "No students match your search." : "No graded attempts yet."}</p>}
+                    </div>
+                  </div>}
+                </section>
+                <section role="tabpanel" id={tabId + "-questions-panel"} aria-labelledby={tabId + "-questions"} hidden={tab !== "questions"} tabIndex={0}>
+                  {tab === "questions" && <div className={panel}>
+                    {questionRows.length ? (
+                      <>
+                        <ResultsTable label="Question performance" columns={["Question", "Average", "Full marks", "Zero points", "Graded attempts"]}>
+                          {questionsPage.items.map((stat) => (
+                            <tr key={stat.key} role="row" className={rowClass}>
+                              <th scope="row" role="rowheader" className={"col-span-2 text-left font-semibold " + cellClass}>
+                                {stat.label} · {stat.title}
+                                {stat.note && <span className="block text-xs font-normal text-stone-600">{stat.note}</span>}
+                                {stat.isHardest && <span className="block text-xs font-medium text-red-700">Hardest</span>}
+                              </th>
+                              <ResultCell label="Average">{points(stat.averageScore)} / {points(stat.maxPoints)} <span className="block text-xs text-stone-600">{Math.round(stat.averagePercent)}%</span></ResultCell>
+                              <ResultCell label="Full marks">{Math.round(stat.fullMarksPercent)}%</ResultCell>
+                              <ResultCell label="Zero points">{Math.round(stat.zeroPercent)}%</ResultCell>
+                              <ResultCell label="Graded attempts">{stat.attempts}</ResultCell>
+                            </tr>
+                          ))}
+                        </ResultsTable>
+                        <Pagination label="Question performance pages" {...questionsPage} />
+                      </>
+                    ) : <p role="status" className="p-4 text-sm text-stone-600">No question performance data yet.</p>}
+                  </div>}
+                </section>
+              </>}
+          </div>
         </main>
       </div>
-
-      {adjustingRow && (
-        <AdjustScoreModal
-          key={adjustingRow.sessionId} // fresh form state for each attempt
-          row={adjustingRow}
-          onClose={() => setAdjustingRow(null)}
-          onSaved={refetch}
-        />
-      )}
+      {dialog?.kind === "breakdown" && <ScoreBreakdown key={dialog.row.sessionId} row={dialog.row} poolLabels={poolLabels} onClose={() => setDialog(null)} />}
+      {dialog?.kind === "adjust" && <AdjustScoreModal key={dialog.row.sessionId} row={dialog.row} onClose={() => setDialog(null)} onSaved={refetch} />}
     </div>
   );
 }

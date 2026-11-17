@@ -1,4 +1,6 @@
 import { Trash2, Plus, CircleDot, Code2, TextCursorInput, X } from "lucide-react";
+import { Pagination } from "../shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
 import type { BuilderPool } from "../../screens/examBuilder/examBuilderScreen.types";
 
 // Edits how many questions students draw and which bank questions they can draw.
@@ -16,6 +18,7 @@ export function PoolEditorPanel({
   onAddQuestions: () => void;
 }) {
   const itemCount = pool.items.length;
+  const page = usePagination(pool.items, 10, pool.id);
   const pointValues = new Set(pool.items.map((item) => item.points));
 
   const inputClass =
@@ -85,7 +88,7 @@ export function PoolEditorPanel({
         </div>
 
         <div className="flex flex-col gap-2">
-          {pool.items.map((item) => (
+          {page.items.map((item) => (
             <div
               key={item.bankQuestionId}
               className="flex items-center gap-3 px-4 py-2.5 rounded-lg border border-[var(--color-base-300)]"
@@ -130,6 +133,7 @@ export function PoolEditorPanel({
             </p>
           )}
         </div>
+        <Pagination label="Random pool question pages" {...page} />
       </div>
 
       {!readOnly && (

@@ -3,6 +3,8 @@ import { ArrowRight, FileText, Plus, Search, Trash2, Users } from "lucide-react"
 import { TeacherHeader } from "../../components/layout/teacherHeader";
 import { ExamSubjectFilter } from "../../components/examLibrary/examSubjectFilter";
 import { TeacherSidebar } from "../../components/layout/teacherSidebar";
+import { Pagination } from "../../components/shared/pagination";
+import { usePagination } from "../../hooks/usePagination";
 import { ExamStatusFilter, type ExamStatusFilters } from "../../components/examLibrary/examStatusFilter";
 import { ClassExamStatusBadge, StatusBadge } from "../../components/examLibrary/statusBadge";
 import { ExamConfirmDialog, examField, examPrimary, examSecondary } from "../../components/examLibrary/examDialog";
@@ -187,7 +189,11 @@ export function ExamLibraryScreen() {
     (statusFilters.delivery.length === 0 || exam.classAttachments.some((attachment) => statusFilters.delivery.includes(attachment.status))) &&
     (exam.title.toLowerCase().includes(query) || exam.code.toLowerCase().includes(query)),
   );
-  const selectedExam = filtered.find((exam) => exam.id === selectedExamId) ?? filtered[0];
+  const selectedIndex = filtered.findIndex((exam) => exam.id === selectedExamId);
+  const examPage = usePagination(filtered, 10, JSON.stringify([selectedSubjectId, query, statusFilters]),
+    Math.floor(Math.max(selectedIndex, 0) / 10) + 1);
+  const selectedExam = examPage.items.find((exam) => exam.id === selectedExamId) ?? examPage.items[0];
+  const classPage = usePagination(selectedExam?.classAttachments ?? [], 10, selectedExam?.id ?? "");
   const selectedExamIsSaving = !!backgroundSave && selectedExam?.id === backgroundSave.examId;
   const selectedExamSubject = subjects.find((subject) => subject.id === selectedExam?.subjectId);
   const canCreate = selectedSubject ? selectedSubject.isAssigned : subjects.some((subject) => subject.isAssigned);
@@ -220,8 +226,8 @@ export function ExamLibraryScreen() {
                 {isLoading ? <p role="status" className="p-3 text-sm text-stone-600">Loading exams…</p>
                   : loadError && !exams.length ? <p role="alert" className="p-3 text-sm text-red-700">{loadError}</p>
                   : filtered.length ? (
-                    <ul className="divide-y divide-stone-200">
-                      {filtered.map((exam) => {
+                    <><ul className="divide-y divide-stone-200">
+                      {examPage.items.map((exam) => {
                         const subject = subjects.find((item) => item.id === exam.subjectId);
                         const deliveryStatuses = visibleDeliveryStatuses.filter((status) => exam.classAttachments.some((item) => item.status === status));
                         const selected = selectedExam?.id === exam.id;
@@ -245,7 +251,7 @@ export function ExamLibraryScreen() {
                           </li>
                         );
                       })}
-                    </ul>
+                    </ul><Pagination label="Exam library pages" {...examPage} /></>
                   ) : (
                     <p className="p-3 text-sm text-stone-600">
                       {hasStatusFilters ? "No exams match your filters." : query ? `No exams match “${search.trim()}”.` : selectedSubject ? "No exams in this subject yet." : "No exams yet."}
@@ -282,12 +288,13 @@ export function ExamLibraryScreen() {
                     <div className="mt-5 border-t border-[var(--color-base-300)] pt-4">
                       <h3 className="text-sm font-semibold">Class Delivery</h3>
                       <ul className="mt-2 divide-y divide-stone-200">
-                        {selectedExam.classAttachments.map((item) => (
+                        {classPage.items.map((item) => (
                           <li key={item.classExamId} className="flex items-center justify-between gap-3 py-2 text-sm">
                             <span className="min-w-0 break-words">{item.className}</span><ClassExamStatusBadge status={item.status} subtle />
                           </li>
                         ))}
                       </ul>
+                      <Pagination label="Class delivery pages" {...classPage} />
                     </div>
                   )}
                   <div className="mt-5 flex flex-wrap gap-2 border-t border-[var(--color-base-300)] pt-4">
