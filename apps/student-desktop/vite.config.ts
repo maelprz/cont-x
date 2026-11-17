@@ -19,7 +19,7 @@ export default defineConfig({
           build: {
             rollupOptions: {
               // keep these as real require() calls instead of bundling them
-              external: ['win-audio', 'events'],
+              external: ['win-audio', 'events', 'mysql2/promise'],
             },
           },
         },

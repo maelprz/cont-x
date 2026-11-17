@@ -1,5 +1,6 @@
 import { ipcRenderer, contextBridge } from "electron";
 import type { ViolationEvent } from "../src/types/violationEvent";
+import type { OfflineExamSnapshot } from "../src/types/offlineExam";
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld("ipcRenderer", {
@@ -38,4 +39,8 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
   checkExamApps: (closeApps: boolean): Promise<string[]> =>
     ipcRenderer.invoke("check-exam-apps", closeApps),
   endExamAppCheck: () => ipcRenderer.send("end-exam-app-check"),
+  checkOfflineExamStorage: (): Promise<boolean> =>
+    ipcRenderer.invoke("check-offline-exam-storage"),
+  saveOfflineExam: (snapshot: OfflineExamSnapshot): Promise<void> =>
+    ipcRenderer.invoke("save-offline-exam", snapshot),
 });
