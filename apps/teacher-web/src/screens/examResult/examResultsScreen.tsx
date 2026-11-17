@@ -9,6 +9,7 @@ import { TeacherSidebar } from "../../components/layout/teacherSidebar";
 import { useExamResults } from "../../hooks/useExamResults";
 import { useExamResultsStore } from "../../store/useExamResultsStore";
 import { AdjustScoreModal } from "../../components/examResult/adjustScoreModal";
+import { KeystrokeCsvButton } from "../../components/examResult/keystrokeCsvButton";
 import { computeQuestionPerformance } from "../../lib/resultsAnalytics.ts";
 import { formatOvertime } from "../../lib/overtime.ts";
 import { collectPoolColumns } from "../../lib/resultsPools.ts";
@@ -324,7 +325,7 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                 appear more than once.
               </div>
 
-              <div className="rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] overflow-hidden">
+              <div className="rounded-xl border border-[var(--color-base-300)] bg-[var(--color-base-100)] overflow-x-auto">
                 <table className="w-full text-sm">
                   <thead>
                     <tr className="border-b border-[var(--color-base-300)]">
@@ -405,7 +406,7 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                           );
                         })}
                         <td className="px-4 py-3">
-                          <div className="flex items-center gap-2">
+                          <div className="flex flex-wrap items-center gap-2">
                             <button
                               type="button"
                               className="text-[12px] font-medium px-3 py-1.5 rounded-lg border border-[var(--color-base-300)] hover:opacity-70"
@@ -419,6 +420,12 @@ export function ExamResultsScreen({ rows: rowsProp }: ExamResultsScreenProps) {
                             >
                               Adjust Score
                             </button>
+                            <KeystrokeCsvButton
+                              row={row}
+                              classExamId={currentClassExamId}
+                              examTitle={examTitle}
+                              className={className}
+                            />
                           </div>
                         </td>
                       </tr>
