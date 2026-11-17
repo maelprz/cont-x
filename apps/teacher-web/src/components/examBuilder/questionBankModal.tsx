@@ -1,7 +1,8 @@
 import { useRef, useState } from "react";
 import { Check, Plus, Search } from "lucide-react";
-import { QuestionBankFilters } from "../questionBank/questionBankFilters";
+import { CheckboxFilters, QuestionBankFilters } from "../questionBank/questionBankFilters";
 import { TeacherSelect } from "../shared/teacherSelect";
+import { TeacherSwitch } from "../shared/teacherSwitch";
 import { ExamDialog, examField, examPrimary, examSecondary } from "../examLibrary/examDialog";
 import { useQuestionBank } from "../../hooks/useQuestionBank";
 import { getBankQuestionById, type BankQuestionSummary } from "../../services/questionBankService";
@@ -55,12 +56,12 @@ export function QuestionBankModal({
   const { questions, isLoading, error: bankError, refetch } = useQuestionBank(subjectId, includeShared);
   const [search, setSearch] = useState("");
   const [selected, setSelected] = useState<Map<string, BankQuestionSummary>>(new Map());
-  const [typeFilter, setTypeFilter] = useState<"all" | QuestionType>("all");
-  const [topicFilter, setTopicFilter] = useState<{ id: string; name: string } | null>(null);
+  const [typeFilters, setTypeFilters] = useState<QuestionType[]>([]);
+  const [topicFilters, setTopicFilters] = useState<Map<string, string>>(new Map());
   const [requestedPage, setRequestedPage] = useState(1);
   const questionList = useRef<HTMLDivElement>(null);
   const [destination, setDestination] = useState(defaultPoolId ? `pool:${defaultPoolId}` : SPECIFIED);
-  const [poolType, setPoolType] = useState<QuestionType | null>(null);
+  const [poolTypes, setPoolTypes] = useState<QuestionType[]>([]);
   const [poolTopics, setPoolTopics] = useState<Map<string, string>>(new Map());
   const [pickCount, setPickCount] = useState("1");
   const [isSubmitting, setIsSubmitting] = useState(false);
@@ -79,20 +80,20 @@ export function QuestionBankModal({
   const query = search.trim().toLowerCase();
   const filteredQuestions = isSpecified ? questions.filter((question) =>
     question.title.toLowerCase().includes(query) &&
-    (typeFilter === "all" || question.type === typeFilter) &&
-    (!topicFilter || question.topics.some((topic) => topic.id === topicFilter.id)),
+    (typeFilters.length === 0 || typeFilters.includes(question.type)) &&
+    (topicFilters.size === 0 || question.topics.some((topic) => topicFilters.has(topic.id))),
   ) : [];
   const topicOptions = isSpecified
-    ? getTopicOptions(questions, new Map(topicFilter ? [[topicFilter.id, topicFilter.name]] : []))
+    ? getTopicOptions(questions, topicFilters)
     : [];
   const pageCount = Math.max(1, Math.ceil(filteredQuestions.length / PAGE_SIZE));
   const page = Math.min(requestedPage, pageCount);
   const pageStart = (page - 1) * PAGE_SIZE;
 
-  const matchingType = !isSpecified && poolType ? questions.filter((question) => question.type === poolType) : [];
-  const poolTopicOptions = getTopicOptions(matchingType, poolTopics);
+  const typeMatches = !isSpecified ? questions.filter((question) => poolTypes.includes(question.type)) : [];
+  const poolTopicOptions = getTopicOptions(typeMatches, poolTopics);
   const existingIds = new Set(targetPool?.items.map((item) => item.bankQuestionId));
-  const topicMatches = matchingType.filter((question) => question.topics.some((topic) => poolTopics.has(topic.id)));
+  const topicMatches = typeMatches.filter((question) => question.topics.some((topic) => poolTopics.has(topic.id)));
   const candidates = topicMatches.filter((question) => !existingIds.has(question.id) &&
     !fixedSourceIds.has(question.id) && !legacyFixedKeys.has(questionKey(question.type, question.title, question.prompt)));
   const excludedCount = topicMatches.length - candidates.length;
@@ -219,13 +220,13 @@ export function QuestionBankModal({
           </label>
           <QuestionBankFilters includeShared={includeShared} onSharedChange={handleSharedChange} disabled={isSubmitting}
             fields={{
-              type: typeFilter,
-              topicId: topicFilter?.id ?? "",
-              topics: [{ value: "", label: "All topics" }, ...topicOptions.map(([value, label]) => ({ value, label }))],
-              onTypeChange: (type) => { setTypeFilter(type); changePage(1); },
-              onTopicChange: (id) => {
-                const topic = topicOptions.find(([optionId]) => optionId === id);
-                setTopicFilter(topic ? { id: topic[0], name: topic[1] } : null);
+              mode: "multiple",
+              types: typeFilters,
+              topicIds: [...topicFilters.keys()],
+              topics: topicOptions.map(([value, label]) => ({ value, label })),
+              onTypeChange: (types) => { setTypeFilters(types); changePage(1); },
+              onTopicChange: (ids) => {
+                setTopicFilters(new Map(topicOptions.filter(([id]) => ids.includes(id))));
                 changePage(1);
               },
             }} />
@@ -237,16 +238,13 @@ export function QuestionBankModal({
         </div>
       ) : (
         <div className="mb-3 space-y-3">
-          <div className="flex items-end justify-between gap-2">
-            <div className="min-w-0">
-              <label htmlFor="pool-question-type" className="mb-1 block text-sm font-medium">Question type</label>
-              <TeacherSelect id="pool-question-type" label="Question type" value={poolType}
-                onChange={(type) => { setPoolType(type); setPoolTopics(new Map()); }}
-                className="w-56 max-w-full" placeholder="Select a question type" options={typeOptions} />
-            </div>
-            <QuestionBankFilters includeShared={includeShared} onSharedChange={handleSharedChange} disabled={isSubmitting} />
+          <div className="flex flex-wrap items-end justify-between gap-x-4 gap-y-2">
+            <CheckboxFilters label="Question types" options={typeOptions} selected={poolTypes} onChange={setPoolTypes}
+              disabled={isSubmitting} optionsClassName="flex flex-wrap gap-x-2" />
+            <TeacherSwitch label="Show shared questions" checked={includeShared}
+              onChange={handleSharedChange} disabled={isSubmitting} />
           </div>
-          {poolType && (
+          {poolTypes.length > 0 && (
             <fieldset>
               <legend className="mb-1 text-sm font-medium">Topics</legend>
               {poolTopicOptions.length > 0 ? (
@@ -259,7 +257,7 @@ export function QuestionBankModal({
                     </label>
                   ))}
                 </div>
-              ) : !isLoading && !bankError && <p className="text-sm text-stone-600">No topics have questions of this type.</p>}
+              ) : !isLoading && !bankError && <p className="text-sm text-stone-600">No topics have questions of the selected types.</p>}
             </fieldset>
           )}
           {isNewPool && (
@@ -325,9 +323,9 @@ export function QuestionBankModal({
         </>
       ) : (
         <div role="status" className="rounded-lg bg-stone-100 px-3 py-2 text-sm text-stone-700">
-          {!poolType || poolTopics.size === 0 ? "Choose a question type and at least one topic." : (
+          {poolTypes.length === 0 || poolTopics.size === 0 ? "Choose at least one question type and one topic." : (
             <>
-              <p>{candidates.length} {candidates.length === 1 ? "question matches" : "questions match"} the selected type and any selected topic.</p>
+              <p>{candidates.length} {candidates.length === 1 ? "question matches" : "questions match"} any selected question type and any selected topic.</p>
               {isNewPool && candidates.length < 2 && <p>A new random pool needs at least two matching questions.</p>}
               {isNewPool && candidates.length >= 2 && !validPick && <p>Enter a whole number from 1 to {candidates.length}.</p>}
               {excludedCount > 0 && <p>Excluded {excludedCount} already in this exam’s Always included list{targetPool ? " or this pool" : ""}.</p>}
