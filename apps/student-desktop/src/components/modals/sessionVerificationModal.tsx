@@ -108,7 +108,8 @@ export function SessionVerificationModal({
     }
 
     try {
-      if (offlineStorageAvailable && !studentId) throw new Error('Sign in again before starting the exam.');
+      if (!offlineStorageAvailable) throw new Error('Configure local MySQL storage before starting a locally graded exam.');
+      if (!studentId) throw new Error('Sign in again before starting the exam.');
 
       const sessionId = verifiedSessionId.current ?? (await verifySessionCode(examId, code)).sessionId;
       verifiedSessionId.current = sessionId;

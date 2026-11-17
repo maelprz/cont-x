@@ -63,7 +63,6 @@ export function ExamQuestionScreen({
   onPrevious,
   onNext,
   onSubmit,
-  queueGradedRun,
   onExamTimingRefreshed,
 }: ExamQuestionScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
@@ -74,8 +73,6 @@ export function ExamQuestionScreen({
   const savedTiming = useRef(savedExam ? { timing: savedExam.timing, receivedAt: savedExam.timingReceivedAt } : null);
   const closed = useRef(false);
   const [waitingForServer, setWaitingForServer] = useState(false);
-  const [runNotice, setRunNotice] = useState<string | null>(null);
-  const queuedRunId = useRef<string | null>(null);
   const removed = useExamSessionStore((state) => state.removed); // stop reporting once the teacher removed this student
   const questionIdRef = useRef<string | null>(null);
   useViolationLogger(sessionId, questionIdRef); 
@@ -85,10 +82,10 @@ export function ExamQuestionScreen({
     isLoading,
     error,
   } = useExamQuestions(sessionId, savedExam?.questions);
-  const { submitSession, isSubmitting, error: submissionError, clearError: clearSubmissionError } = useSubmitExamSession();
+  const { submitSession, isSubmitting, error: submissionError, clearError: clearSubmissionError, submissionLocked } = useSubmitExamSession();
   const submissionInFlightRef = useRef(false);
   const timedOutAnswersRef = useRef<SubmittedAnswer[] | null>(null);
-  const answersLocked = () => submissionInFlightRef.current || timedOutAnswersRef.current !== null;
+  const answersLocked = () => submissionLocked || submissionInFlightRef.current || timedOutAnswersRef.current !== null;
 
   const finish = (status: "result" | "removed") => {
     if (closed.current) return;
@@ -103,11 +100,11 @@ export function ExamQuestionScreen({
 
   // Retain exactly the answers present at the deadline if the network requires a retry.
   const handleTimeExpired = async () => {
-    if (restoredOffline && Object.keys(answeredAtRef.current).length === 0) {
+    if (restoredOffline && !savedExam?.gradingState?.submission && Object.keys(answeredAtRef.current).length === 0) {
       setWaitingForServer(true);
       return;
     }
-    timedOutAnswersRef.current = buildAnswers();
+    timedOutAnswersRef.current = savedExam?.gradingState?.submission?.answers ?? buildAnswers();
     setShowSubmitConfirm(false);
     await submitAndLeave();
   };
@@ -150,7 +147,6 @@ export function ExamQuestionScreen({
     runError,
     handleRunTests: runTests,
     handleRunCode: runCode,
-    setRunError,
     clearResults,
   } = useCodeExecution();
 
@@ -318,8 +314,6 @@ export function ExamQuestionScreen({
         ? (codeByQuestion[currentQuestionId] ?? question.starterCode ?? "") // what the student already wrote, or the starter code the first time
         : "",
     );
-    setRunNotice(null);
-    queuedRunId.current = null;
     clearResults(); // NEW - don't show the previous question's Run Tests/Run Code output
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately keyed to the question id only (see above)
   }, [currentQuestionId, hasQuestion]);
@@ -376,8 +370,6 @@ export function ExamQuestionScreen({
     if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding") return; // guard, only coding questions can run tests
-    setRunNotice(null);
-    queuedRunId.current = null;
     runTests(
       raw.id,
       localCode,
@@ -393,26 +385,6 @@ export function ExamQuestionScreen({
     if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding" || !sessionId) return; // guard, needs a real session to attribute the answer to
-    setRunNotice(null);
-    if (savedExam && queueGradedRun) {
-      clearResults();
-      const request = {
-        studentId: savedExam.studentId, sessionId, operationId: crypto.randomUUID(),
-        questionId: raw.poolDrawId ? null : raw.id, poolDrawId: raw.poolDrawId,
-        requestedAt: new Date().toISOString(), code: localCode,
-      };
-      queuedRunId.current = request.operationId;
-      void queueGradedRun(request).then(() => {
-        if (queuedRunId.current === request.operationId) setRunNotice("Graded run queued.");
-      }).catch(() => {
-        if (queuedRunId.current === request.operationId) setRunError("Could not queue the graded run. Try again.");
-      });
-      return;
-    }
-    if (savedExam && !navigator.onLine) {
-      setRunError("Graded runs are available when the connection returns.");
-      return;
-    }
     runCode(
       sessionId,
       raw.id,
@@ -526,6 +498,13 @@ export function ExamQuestionScreen({
       submissionInFlightRef.current = false;
     }
   };
+
+  const resumedSubmission = useRef(false);
+  useEffect(() => {
+    if (!savedExam?.gradingState?.submission || resumedSubmission.current) return;
+    resumedSubmission.current = true;
+    void submitAndLeave();
+  }, [savedExam]);
 
   if (waitingForServer) {
     return (
@@ -701,7 +680,6 @@ export function ExamQuestionScreen({
 
   const codePane = codingQ && (
     <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
-      {runNotice && <p role="status" className="px-4 py-2 text-sm">{runNotice}</p>}
       <CodeEditor
         code={localCode}
         language={codingQ.language ?? "c"}

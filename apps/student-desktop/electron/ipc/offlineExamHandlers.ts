@@ -1,6 +1,8 @@
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
 import type { OfflineAttemptKey, OfflineExamSnapshot } from "../../src/types/offlineExam";
 import { checkOfflineExamStorage, deleteOfflineExam, loadOfflineExam, saveOfflineExam, updateOfflineTiming } from "../storage/offlineExamStorage";
+import { gradeLocalSubmission, runLocalCode } from '../localGradingService';
+import type { SubmittedAnswer } from '../../src/services/examService';
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -59,5 +61,19 @@ export function registerOfflineExamHandlers(getWindow: () => BrowserWindow | nul
   ipcMain.handle("delete-offline-exam", (event, key: OfflineAttemptKey) => {
     checkAttempt(event, key);
     return deleteOfflineExam(key);
+  });
+  ipcMain.handle('run-local-code', (event, key: OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean) => {
+    checkAttempt(event, key);
+    if (typeof questionId !== 'string' || typeof code !== 'string' || typeof visibleOnly !== 'boolean') throw new Error('Invalid coding request.');
+    return runLocalCode(key, questionId, code, visibleOnly);
+  });
+  ipcMain.handle('grade-local-submission', (event, key: OfflineAttemptKey, status: 'submitted' | 'timed_out', answers: SubmittedAnswer[]) => {
+    checkAttempt(event, key);
+    if (!['submitted', 'timed_out'].includes(status) || !Array.isArray(answers) || answers.some((answer) =>
+      !answer || typeof answer.answer_text !== 'string' ||
+      (answer.change_count !== undefined && (!Number.isFinite(answer.change_count) || answer.change_count < 0)) ||
+      (answer.time_spent_seconds !== undefined && (!Number.isFinite(answer.time_spent_seconds) || answer.time_spent_seconds < 0)) ||
+      (answer.answered_at != null && !Number.isFinite(Date.parse(answer.answered_at))))) throw new Error('Invalid submission.');
+    return gradeLocalSubmission(key, status, answers);
   });
 }

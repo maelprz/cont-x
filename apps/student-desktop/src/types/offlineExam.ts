@@ -4,6 +4,7 @@ import type {
   SessionTiming,
 } from "../services/examService";
 import type { VisibleTestCase } from "../services/codeExecutionService";
+import type { LocalRubric, LocalGradingState } from './localGrading';
 
 export interface OfflineAttemptKey {
   studentId: string;
@@ -11,6 +12,8 @@ export interface OfflineAttemptKey {
 }
 
 export interface OfflineExamSnapshot extends OfflineAttemptKey {
+  gradingMaterial?: Record<string, LocalRubric>;
+  gradingState?: LocalGradingState;
   examId?: string;
   title?: string;
   visibleTests?: Record<string, VisibleTestCase[]>;

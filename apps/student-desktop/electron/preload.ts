@@ -1,9 +1,16 @@
 import { ipcRenderer, contextBridge } from "electron";
 import type { ViolationEvent } from "../src/types/violationEvent";
 import type { OfflineAttemptKey, OfflineExamSnapshot } from "../src/types/offlineExam";
+import type { SubmittedAnswer } from '../src/services/examService';
+import type { LocalSubmission } from '../src/types/localGrading';
+import type { RunOutcome } from '../src/services/codeExecutionService';
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld("ipcRenderer", {
+  runLocalCode: (key: OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean): Promise<RunOutcome> =>
+    ipcRenderer.invoke('run-local-code', key, questionId, code, visibleOnly),
+  gradeLocalSubmission: (key: OfflineAttemptKey, status: LocalSubmission['status'], answers: SubmittedAnswer[]): Promise<LocalSubmission> =>
+    ipcRenderer.invoke('grade-local-submission', key, status, answers),
   invoke(channel: string, payload: unknown) {
     if (channel !== "run-test-cases") throw new Error("IPC channel is not allowed.");
     return ipcRenderer.invoke(channel, payload);

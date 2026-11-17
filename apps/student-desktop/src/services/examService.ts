@@ -1,4 +1,5 @@
 import { supabase } from "./supabaseClient"; // shared Supabase client, never create a new one
+import { useExamSessionStore } from '../stores/useExamSessionStore';
 
 // Shape of the exam row we get back after a successful lookup.
 export interface ExamLookupResult {
@@ -329,11 +330,17 @@ export async function submitExamSession(
   sessionId: string, // which session to close out
   status: "submitted" | "timed_out", // how it ended
   answers: SubmittedAnswer[], // the student's answers to all questions
+  onLocallyGraded?: () => void,
 ): Promise<SubmitExamSessionResult> {
-  const { data, error } = await supabase.rpc("submit_exam_session", {
+  const exam = useExamSessionStore.getState().offlineExam;
+  if (!exam?.gradingMaterial || exam.sessionId !== sessionId) throw new Error('Local grading materials are unavailable.');
+  const submission = await window.ipcRenderer.gradeLocalSubmission(
+    { studentId: exam.studentId, sessionId }, status, answers,
+  );
+  onLocallyGraded?.();
+  const { data, error } = await supabase.rpc("sync_local_exam_submission", {
     p_session_id: sessionId, // matches the SQL function's first parameter
-    p_status: status, // matches the second parameter
-    p_answers: answers, // matches the third parameter, sent as JSON
+    p_submission: submission,
   });
 
   if (error) throw new Error(error.message);

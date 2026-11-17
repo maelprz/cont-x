@@ -9,7 +9,7 @@ interface TestCasePayload {
   timeLimitMs: number;
 }
 
-interface RunTestCasesPayload {
+export interface RunTestCasesPayload {
   code: string;
   programType: 'cFunction' | 'cProgram';
   mainCode?: string;
@@ -41,6 +41,11 @@ export function registerCompilerHandlers(getWindow: () => BrowserWindow | null) 
           typeof test.expectedOutput !== 'string' || !Number.isFinite(test.timeLimitMs) || test.timeLimitMs <= 0)) {
       throw new Error('Invalid compilation request.');
     }
+    return executeTestCases(payload);
+  });
+}
+
+export async function executeTestCases(payload: RunTestCasesPayload) {
     const source = buildSource(payload.code, payload.programType, payload.mainCode);
     const compileResult = compileSource(source);
 
@@ -48,6 +53,7 @@ export function registerCompilerHandlers(getWindow: () => BrowserWindow | null) 
       return { compileError: compileResult.stderr, results: [] };
     }
 
+    try {
     const results = [];
     for (const testCase of payload.testCases) {
       const runResult = await runBinary(
@@ -73,7 +79,6 @@ export function registerCompilerHandlers(getWindow: () => BrowserWindow | null) 
       });
     }
 
-    cleanupDir(dirname(compileResult.binaryPath));
     return { compileError: null, results };
-  });
+    } finally { cleanupDir(dirname(compileResult.binaryPath)); }
 }

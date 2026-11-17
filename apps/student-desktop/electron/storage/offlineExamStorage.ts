@@ -55,6 +55,8 @@ export async function saveOfflineExam(snapshot: OfflineExamSnapshot): Promise<vo
   const questions = snapshot.questions.map(({ mainCode, ...question }) =>
     question.programType === "cFunction" ? { ...question, mainCode } : question);
   const payload = JSON.stringify({
+    gradingMaterial: snapshot.gradingMaterial,
+    gradingState: snapshot.gradingState,
     examId: snapshot.examId,
     title: snapshot.title,
     visibleTests: snapshot.visibleTests,
@@ -67,7 +69,8 @@ export async function saveOfflineExam(snapshot: OfflineExamSnapshot): Promise<vo
   await db.execute({
     sql: `INSERT INTO offline_exam_snapshots (student_id, session_id, snapshot)
       VALUES (?, ?, ?) AS incoming
-      ON DUPLICATE KEY UPDATE snapshot = incoming.snapshot`,
+      ON DUPLICATE KEY UPDATE snapshot = JSON_SET(incoming.snapshot, '$.gradingState',
+        COALESCE(JSON_EXTRACT(offline_exam_snapshots.snapshot, '$.gradingState'), JSON_OBJECT('runs', JSON_OBJECT())))`,
     timeout: TIMEOUT_MS,
   }, [snapshot.studentId, snapshot.sessionId, payload]);
 }
@@ -79,7 +82,18 @@ export async function loadOfflineExam(key: OfflineAttemptKey): Promise<OfflineEx
     sql: "SELECT snapshot FROM offline_exam_snapshots WHERE student_id = ? AND session_id = ?",
     timeout: TIMEOUT_MS,
   }, [key.studentId, key.sessionId]);
-  return rows[0] ? { ...rows[0].snapshot, ...key } : null;
+  if (!rows[0]) return null;
+  const snapshot = typeof rows[0].snapshot === 'string' ? JSON.parse(rows[0].snapshot) : rows[0].snapshot;
+  return { ...snapshot, ...key };
+}
+
+export async function saveLocalGradingState(key: OfflineAttemptKey, state: OfflineExamSnapshot['gradingState']): Promise<void> {
+  const db = getPool();
+  if (!db) throw new Error('Local exam storage is not configured.');
+  await db.execute({
+    sql: "UPDATE offline_exam_snapshots SET snapshot = JSON_SET(snapshot, '$.gradingState', CAST(? AS JSON)) WHERE student_id = ? AND session_id = ?",
+    timeout: TIMEOUT_MS,
+  }, [JSON.stringify(state), key.studentId, key.sessionId]);
 }
 
 export async function updateOfflineTiming(
