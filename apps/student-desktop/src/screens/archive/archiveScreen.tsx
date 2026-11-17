@@ -61,21 +61,20 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
 
   return (
     <div className="flex flex-col h-screen overflow-y-auto bg-[var(--bg-app)]">
-      <AppHeader />
+      <AppHeader title="Archive" />
 
-      <div className="flex items-start justify-between gap-4 px-8 pt-8">
+      <div className="flex flex-wrap items-start justify-between gap-4 px-4 sm:px-8 pt-8">
         <div>
-          <h1 className="font-[var(--font-headline)] text-[var(--text-primary)] text-2xl mb-2">
+          <h2 className="font-[var(--font-headline)] text-[var(--text-primary)] text-xl font-semibold mb-2">
             Previous Assessments
-          </h1>
+          </h2>
           <p className="text-sm text-[var(--text-secondary)] max-w-[460px]">
-            Access detailed reports and performance metrics for all completed
-            examinations.
+            Review completed exams, scores, and available answers.
           </p>
         </div>
 
         {/* total exam count card */}
-        <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-xl px-5 py-3 text-center shrink-0">
+        <div className="bg-[var(--bg-card)] border border-stone-200 rounded-xl px-5 py-3 text-center shrink-0">
           <span className="block font-[var(--font-label)] text-[10px] uppercase tracking-wide text-[var(--text-secondary)] mb-1">
             Total Exams
           </span>
@@ -85,9 +84,10 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
         </div>
       </div>
 
-      <main className="px-8 py-6 flex flex-col gap-4">
+      <main className="px-4 sm:px-8 py-6 flex flex-col gap-4">
         {/* filter and sort controls */}
-        <div className="flex gap-3">
+        <div className="flex flex-wrap items-end gap-3 rounded-xl border border-stone-200 bg-[#f8f8f8] p-4">
+          <label className="flex flex-col gap-1.5 text-xs font-medium text-stone-600">Result
           <select
             value={statusFilter}
             onChange={(e) =>
@@ -95,35 +95,38 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                 e.target.value as "all" | "passed" | "failed",
               )
             }
-            className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)]"
+            className="max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:outline-2 focus:outline-offset-2 focus:outline-[#465a3b]"
           >
             <option value="all">Status: All</option>
             <option value="passed">Status: Passed</option>
             <option value="failed">Status: Failed</option>
           </select>
 
+          </label>
+          <label className="flex flex-col gap-1.5 text-xs font-medium text-stone-600">Order
           <select
             value={sortOrder}
             onChange={(e) =>
               handleSortOrderChange(e.target.value as "asc" | "desc")
             }
-            className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-lg px-3 py-2 text-sm text-[var(--text-primary)]"
+            className="max-w-full rounded-lg border border-stone-300 bg-white px-3 py-2 text-sm text-stone-900 focus:outline-2 focus:outline-offset-2 focus:outline-[#465a3b]"
           >
             <option value="desc">Sort: Date (Newest First)</option>
             <option value="asc">Sort: Date (Oldest First)</option>
           </select>
+          </label>
         </div>
 
         {/* loading state */}
         {isLoading && (
-          <div className="text-[var(--text-secondary)] text-sm py-8 text-center">
+          <div role="status" className="text-[var(--text-secondary)] text-sm py-8 text-center">
             Loading exam history...
           </div>
         )}
 
         {/* error state */}
         {error && (
-          <div className="text-red-400 text-sm py-8 text-center">{error}</div>
+          <div role="alert" className="text-red-700 text-sm py-8 text-center">{error}</div>
         )}
 
         {/* empty state */}
@@ -136,68 +139,69 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
         {/* table — only renders when data is ready */}
         {!isLoading && !error && examHistory.length > 0 && (
           <>
-            <div className="bg-[var(--bg-card)] border border-[var(--border-subtle)] rounded-2xl shadow-[0_8px_32px_rgba(0,0,0,0.25)] overflow-hidden">
-              <table className="w-full border-collapse">
+            <div className="bg-[var(--bg-card)] border border-stone-200 rounded-xl overflow-x-auto">
+              <table className="min-w-[700px] w-full border-collapse">
                 <thead>
-                  <tr className="bg-white/[0.02]">
-                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                  <tr className="bg-stone-100/70">
+                    <th className="text-left font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
                       Exam Name
                     </th>
-                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                    <th className="text-left font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
                       Date
                     </th>
-                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                    <th className="text-left font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
                       Score
                     </th>
-                    <th className="text-left font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                    <th className="text-left font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
                       Status
                     </th>
-                    <th className="text-center font-[var(--font-label)] text-[11px] uppercase tracking-wide text-[var(--text-secondary)] py-3.5 px-5 border-b border-[var(--border-subtle)]">
+                    <th className="text-center font-medium text-xs text-[var(--text-secondary)] py-3.5 px-5 border-b border-stone-200">
                       Actions
                     </th>
                   </tr>
                 </thead>
                 <tbody>
+                  {sorted.length === 0 && <tr><td colSpan={5} className="px-5 py-10 text-center text-sm text-stone-500">No exams match this filter.</td></tr>}
                   {paginated.map((entry, index) => {
                     const isLastRow = index === paginated.length - 1;
                     return (
                       <tr
                         key={entry.id}
                         onClick={() => handleViewResult(entry.id)}
-                        className="hover:bg-white/[0.02] cursor-pointer"
+                        className="hover:bg-stone-50 cursor-pointer"
                       >
                         {/* exam name + code */}
                         <td
-                          className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
+                          className={`py-4 px-5 ${isLastRow ? "" : "border-b border-stone-200"}`}
                         >
                           <span className="block text-[var(--text-primary)] text-sm font-medium">
                             {entry.examTitle}
                           </span>
-                          <span className="block font-[var(--font-label)] text-xs text-[var(--text-secondary)] mt-0.5">
+                          <span className="block text-xs text-[var(--text-secondary)] mt-0.5">
                             {entry.examCode}
                           </span>
                         </td>
 
                         {/* submitted date */}
                         <td
-                          className={`py-4 px-5 text-sm text-[var(--text-primary)] ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
+                          className={`py-4 px-5 text-sm text-[var(--text-primary)] ${isLastRow ? "" : "border-b border-stone-200"}`}
                         >
                           {entry.submittedAt}
                         </td>
 
                         {/* score out of max */}
                         <td
-                          className={`py-4 px-5 text-sm text-[var(--text-primary)] font-medium ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
+                          className={`py-4 px-5 text-sm text-[var(--text-primary)] font-medium ${isLastRow ? "" : "border-b border-stone-200"}`}
                         >
                           {entry.totalScore}/{entry.maxScore}
                         </td>
 
                         {/* pass/fail badge */}
                         <td
-                          className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}
+                          className={`py-4 px-5 ${isLastRow ? "" : "border-b border-stone-200"}`}
                         >
                           <span
-                            className={`font-[var(--font-label)] text-xs px-2.5 py-1 rounded-full ${
+                            className={`text-xs px-2.5 py-1 rounded-full ${
                               entry.passed
                                 ? "bg-[var(--accent-green)]/15 text-[var(--accent-green)]"
                                 : "bg-[rgba(239,68,68,0.15)] text-[#ef4444]"
@@ -206,7 +210,7 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                             {entry.passed ? "Pass" : "Fail"}
                           </span>
                         </td>
-                        <td className={`py-4 px-5 ${isLastRow ? "" : "border-b border-[var(--border-subtle)]"}`}>
+                        <td className={`py-4 px-5 ${isLastRow ? "" : "border-b border-stone-200"}`}>
                           <div className="flex flex-wrap justify-center gap-2">
                             <button
                               type="button"
@@ -229,7 +233,7 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
             </div>
 
             {/* pagination controls */}
-            <div className="flex items-center justify-between mt-2">
+            <div className="flex flex-wrap items-center justify-between gap-3 mt-2">
               <span className="text-[var(--text-secondary)] text-xs">
                 Showing{" "}
                 {Math.min((currentPage - 1) * ROWS_PER_PAGE + 1, sorted.length)}
@@ -242,8 +246,9 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                 <button
                   type="button"
                   onClick={() => setCurrentPage((p) => Math.max(1, p - 1))}
+                  aria-label="Previous page"
                   disabled={currentPage === 1} // grayed out on first page
-                  className="text-[var(--text-secondary)] p-1.5 rounded-md hover:bg-white/5 disabled:opacity-30"
+                  className="text-[var(--text-secondary)] p-1.5 rounded-md hover:bg-stone-200 disabled:opacity-30"
                 >
                   <ChevronLeft size={14} />
                 </button>
@@ -254,11 +259,12 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                     <button
                       key={pageNumber}
                       type="button"
+                      aria-current={pageNumber === currentPage ? "page" : undefined}
                       onClick={() => setCurrentPage(pageNumber)} // jumps to that page
                       className={`text-xs w-7 h-7 rounded-md ${
                         pageNumber === currentPage
-                          ? "bg-[var(--accent-blue)] text-white"
-                          : "text-[var(--text-secondary)] hover:bg-white/5"
+                          ? "bg-[#e9eee3] font-semibold text-[#465a3b]"
+                          : "text-[var(--text-secondary)] hover:bg-stone-200"
                       }`}
                     >
                       {pageNumber}
@@ -272,8 +278,9 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                   onClick={() =>
                     setCurrentPage((p) => Math.min(totalPages, p + 1))
                   }
+                  aria-label="Next page"
                   disabled={currentPage === totalPages} // grayed out on last page
-                  className="text-[var(--text-secondary)] p-1.5 rounded-md hover:bg-white/5 disabled:opacity-30"
+                  className="text-[var(--text-secondary)] p-1.5 rounded-md hover:bg-stone-200 disabled:opacity-30"
                 >
                   <ChevronRight size={14} />
                 </button>

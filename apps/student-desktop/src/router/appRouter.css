@@ -5,6 +5,7 @@
 }
 
 .app-shell-content {
+  min-width: 0;
   flex: 1; /* takes up all remaining width after the sidebar */
   background-color: var(
     --bg-app
