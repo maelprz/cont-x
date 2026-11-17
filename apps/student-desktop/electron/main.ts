@@ -201,7 +201,7 @@ function createWindow() {
 
   // keeps the app above all other windows at the highest z-order level
   installEditorSandbox(win, VITE_DEV_SERVER_URL || pathToFileURL(path.join(RENDERER_DIST, "index.html")).href);
-  //win.setAlwaysOnTop(true, "screen-saver"); //comment this out for testing without restrictions
+  win.setAlwaysOnTop(true, "screen-saver"); //comment this out for testing without restrictions
 
   // if somehow minimized (e.g. via a hotkey we didn't catch), restore immediately
   win.on("minimize", () => {
@@ -290,6 +290,6 @@ app.whenReady().then(() => {
   registerOfflineExamHandlers(() => win);
   cleanupStaleLockdownState(); // undo any restrictions left by a previous crash
   createWindow();
-  //registerLockdown(); // lockdown starts the moment the window is ready, comment this out for testing without restrictions
+  registerLockdown(); // lockdown starts the moment the window is ready, comment this out for testing without restrictions
   registerCompilerHandlers(() => win); // only the app's main frame can request compilation
 });
