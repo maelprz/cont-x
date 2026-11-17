@@ -1,8 +1,8 @@
 /// <reference types="vite/client" />
 interface Window {
   ipcRenderer: {
-    runLocalCode: (key: import('./types/offlineExam').OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean) => Promise<import('./services/codeExecutionService').RunOutcome>;
-    gradeLocalSubmission: (key: import('./types/offlineExam').OfflineAttemptKey, status: 'submitted' | 'timed_out', answers: import('./services/examService').SubmittedAnswer[]) => Promise<import('./types/localGrading').LocalSubmission>;
+    runLocalCode: (key: import('./types/offlineExam').OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean, operationId?: string) => Promise<import('./services/codeExecutionService').RunOutcome>;
+    gradeLocalSubmission: (key: import('./types/offlineExam').OfflineAttemptKey, status: 'submitted' | 'timed_out', answers: import('./services/examService').SubmittedAnswer[], requestedAt?: string) => Promise<import('./types/localGrading').LocalSubmission>;
     invoke: (...args: any[]) => any;
     exitApp: () => void; // sends 'exit-app' to the main process on logout
     setExamProcessMonitoring: (enabled: boolean) => void;

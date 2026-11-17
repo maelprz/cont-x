@@ -81,7 +81,6 @@ export function useCodeExecution() {
     handleRunTests,
     handleRunCode,
     setRunError,
-    setCodeResult,
     clearResults,
   };
 }

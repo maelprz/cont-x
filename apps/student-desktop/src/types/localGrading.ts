@@ -50,5 +50,6 @@ export interface LocalExecutionLog {
 export interface LocalGradingState {
   runs: Record<string, LocalRunState>;
   executionLogs?: LocalExecutionLog[];
+  replayedRuns?: Record<string, RunOutcome>;
   submission?: LocalSubmission;
 }

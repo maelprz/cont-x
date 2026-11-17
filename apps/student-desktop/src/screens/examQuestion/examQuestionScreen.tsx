@@ -83,12 +83,10 @@ export function ExamQuestionScreen({
   const deadlineRef = useRef(localDeadline(savedExam));
   const savedTiming = useRef(savedExam ? { timing: savedExam.timing, receivedAt: savedExam.timingReceivedAt } : null);
   const closed = useRef(false);
-  const [waitingForServer, setWaitingForServer] = useState(false);
-  const [pendingSubmission, setPendingSubmission] = useState(Boolean(savedExam?.pendingSubmission));
+  const legacySubmission = savedExam?.pendingSubmission ? undefined : savedExam?.gradingState?.submission;
+  const [pendingSubmission, setPendingSubmission] = useState(Boolean(savedExam?.pendingSubmission || legacySubmission));
   const [submissionStored, setSubmissionStored] = useState(Boolean(savedExam?.pendingSubmission));
   const pendingRef = useRef<OfflineSubmission | null>(savedExam?.pendingSubmission ?? null);
-  const [runNotice, setRunNotice] = useState<string | null>(null);
-  const queuedRunId = useRef<string | null>(null);
   const removed = useExamSessionStore((state) => state.removed); // stop reporting once the teacher removed this student
   const questionIdRef = useRef<string | null>(null);
   useRemovalWatcher(savedExam ? null : sessionId);
@@ -97,10 +95,9 @@ export function ExamQuestionScreen({
     isLoading,
     error,
   } = useExamQuestions(sessionId, savedExam?.questions);
-  const { submitSession, isSubmitting, error: submissionError, clearError: clearSubmissionError, submissionLocked } = useSubmitExamSession();
+  const { submitSession, isSubmitting, error: submissionError, clearError: clearSubmissionError } = useSubmitExamSession();
   const submissionInFlightRef = useRef(false);
   const timedOutAnswersRef = useRef<SubmittedAnswer[] | null>(null);
-  const answersLocked = () => submissionLocked || submissionInFlightRef.current || timedOutAnswersRef.current !== null;
   const answersLocked = () => closed.current || Boolean(pendingRef.current) ||
     submissionInFlightRef.current || timedOutAnswersRef.current !== null || Date.now() >= deadlineRef.current;
 
@@ -116,14 +113,8 @@ export function ExamQuestionScreen({
   };
 
   // Retain exactly the answers present at the deadline if the network requires a retry.
-  const handleTimeExpired = async () => {
-    if (restoredOffline && !savedExam?.gradingState?.submission && Object.keys(answeredAtRef.current).length === 0) {
-      setWaitingForServer(true);
-      return;
-    }
-    timedOutAnswersRef.current = savedExam?.gradingState?.submission?.answers ?? buildAnswers();
   const handleTimeExpired = async (deadlineLocalMs: number) => {
-    if (savedExam && (closed.current || pendingRef.current)) return;
+    if (savedExam && (closed.current || pendingRef.current || pendingSubmission)) return;
     timedOutAnswersRef.current = buildAnswers(deadlineLocalMs);
     setShowSubmitConfirm(false);
     if (savedExam) await saveSubmission("timed_out", timedOutAnswersRef.current, deadlineLocalMs);
@@ -168,7 +159,6 @@ export function ExamQuestionScreen({
     runError,
     handleRunTests: runTests,
     handleRunCode: runCode,
-    setCodeResult,
     clearResults,
   } = useCodeExecution();
 
@@ -181,11 +171,6 @@ export function ExamQuestionScreen({
     timedOutAnswersRef.current = null;
     setPendingSubmission(false);
     setSubmissionStored(false);
-  }, (id, result) => {
-    if (queuedRunId.current !== id) return;
-    queuedRunId.current = null;
-    setRunNotice(null);
-    setCodeResult(result);
   }, () => setSubmissionStored(true));
   const queueOffline = savedExam ? sync.enqueue : undefined;
   useViolationLogger(pendingSubmission ? null : sessionId, questionIdRef, queueOffline);
@@ -295,7 +280,7 @@ export function ExamQuestionScreen({
     const shared = {
       number: currentIndex + 1, // 1-based display number
       totalQuestions: fetchedQuestions.length, // real count of loaded questions
-      title: raw.title,
+      title: raw.title || `Question ${currentIndex + 1}`,
       body: raw.prompt,
       isFlagged: flaggedIds.has(raw.id),
       sectionTitle: raw.sectionTitle ?? undefined, // shown above the title when the exam has sections
@@ -431,26 +416,6 @@ export function ExamQuestionScreen({
     if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding" || !sessionId) return; // guard, needs a real session to attribute the answer to
-    setRunNotice(null);
-    if (savedExam) {
-      clearResults();
-      const request = {
-        studentId: savedExam.studentId, sessionId, operationId: crypto.randomUUID(),
-        questionId: raw.poolDrawId ? null : raw.id, poolDrawId: raw.poolDrawId,
-        requestedAt: new Date().toISOString(), code: localCode,
-      };
-      queuedRunId.current = request.operationId;
-      const queued = queueGradedRun ? queueGradedRun(request) : sync.enqueue({
-        kind: "graded", questionId: request.questionId, poolDrawId: request.poolDrawId, code: request.code,
-      }, request.requestedAt, request.operationId);
-      setRunNotice("Saving graded run...");
-      void queued.then(() => {
-        if (queuedRunId.current === request.operationId) setRunNotice("Graded run queued.");
-      }).catch(() => {
-        if (queuedRunId.current === request.operationId) setRunNotice("Retrying local save for the graded run.");
-      });
-      return;
-    }
     runCode(
       sessionId,
       raw.id,
@@ -561,6 +526,14 @@ export function ExamQuestionScreen({
     }
   }
 
+  useEffect(() => {
+    if (legacySubmission) {
+      void saveSubmission(legacySubmission.status, legacySubmission.answers, Date.parse(legacySubmission.submittedAt));
+    }
+    // Import the previously graded submission when the attempt is first restored.
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [legacySubmission]);
+
   const submitAndLeave = async () => {
     if (!sessionId || submissionInFlightRef.current) return;
     submissionInFlightRef.current = true; 
@@ -589,19 +562,13 @@ export function ExamQuestionScreen({
     }
   };
 
-  const resumedSubmission = useRef(false);
-  useEffect(() => {
-    if (!savedExam?.gradingState?.submission || resumedSubmission.current) return;
-    resumedSubmission.current = true;
-    void submitAndLeave();
-  }, [savedExam]);
-
-  if (waitingForServer) {
   if (pendingSubmission) {
     return (
       <div className="h-screen flex flex-col gap-4 items-center justify-center text-[var(--text-inverted)] bg-[var(--bg-sidebar)]">
-        <p role="status">{submissionStored ? "Pending sync" : "Saving submission locally"}</p>
-        <p>{sync.error ?? "Your exam is locked. The official result will open after the server confirms submission."}</p>
+        <p role="status">{sync.gradeSaved ? "Pending sync" : submissionStored ? "Grading locally" : "Saving submission locally"}</p>
+        <p>{sync.error ?? (sync.gradeSaved
+          ? "Your grade is saved on this device. The official result will open after the server confirms submission."
+          : "Your exam is locked. Grading can finish without an internet connection.")}</p>
         <button type="button" className={footerButtonClass} onClick={() => void sync.retry()}>Retry sync</button>
       </div>
     );

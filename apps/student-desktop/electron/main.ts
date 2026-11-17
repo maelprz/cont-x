@@ -301,5 +301,5 @@ app.whenReady().then(() => {
   cleanupStaleLockdownState(); // undo any restrictions left by a previous crash
   createWindow();
   registerLockdown(); // lockdown starts the moment the window is ready, comment this out for testing without restrictions
-  registerCompilerHandlers(); // sets up the run-test-cases IPC channel
+  registerCompilerHandlers(() => win);
 });

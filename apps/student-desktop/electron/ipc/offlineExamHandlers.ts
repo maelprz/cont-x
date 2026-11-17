@@ -1,6 +1,4 @@
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
-import type { OfflineAttemptKey, OfflineExamSnapshot } from "../../src/types/offlineExam";
-import { checkOfflineExamStorage, deleteOfflineExam, loadOfflineExam, saveOfflineExam, updateOfflineTiming } from "../storage/offlineExamStorage";
 import { gradeLocalSubmission, runLocalCode } from '../localGradingService';
 import type { SubmittedAnswer } from '../../src/services/examService';
 import type { OfflineAttemptKey, OfflineExamDraft, OfflineExamSnapshot, OfflineOperation } from "../../src/types/offlineExam";
@@ -64,21 +62,22 @@ export function registerOfflineExamHandlers(getWindow: () => BrowserWindow | nul
     checkAttempt(event, key);
     return deleteOfflineExam(key);
   });
-<<<<<<< Updated upstream
-  ipcMain.handle('run-local-code', (event, key: OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean) => {
+  ipcMain.handle('run-local-code', (event, key: OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean, operationId?: string) => {
     checkAttempt(event, key);
     if (typeof questionId !== 'string' || typeof code !== 'string' || typeof visibleOnly !== 'boolean') throw new Error('Invalid coding request.');
-    return runLocalCode(key, questionId, code, visibleOnly);
+    if (operationId !== undefined && (visibleOnly || !UUID.test(operationId))) throw new Error('Invalid coding operation.');
+    return runLocalCode(key, questionId, code, visibleOnly, operationId);
   });
-  ipcMain.handle('grade-local-submission', (event, key: OfflineAttemptKey, status: 'submitted' | 'timed_out', answers: SubmittedAnswer[]) => {
+  ipcMain.handle('grade-local-submission', (event, key: OfflineAttemptKey, status: 'submitted' | 'timed_out', answers: SubmittedAnswer[], requestedAt?: string) => {
     checkAttempt(event, key);
     if (!['submitted', 'timed_out'].includes(status) || !Array.isArray(answers) || answers.some((answer) =>
       !answer || typeof answer.answer_text !== 'string' ||
       (answer.change_count !== undefined && (!Number.isFinite(answer.change_count) || answer.change_count < 0)) ||
       (answer.time_spent_seconds !== undefined && (!Number.isFinite(answer.time_spent_seconds) || answer.time_spent_seconds < 0)) ||
       (answer.answered_at != null && !Number.isFinite(Date.parse(answer.answered_at))))) throw new Error('Invalid submission.');
-    return gradeLocalSubmission(key, status, answers);
-=======
+    if (requestedAt !== undefined && !Number.isFinite(Date.parse(requestedAt))) throw new Error('Invalid submission time.');
+    return gradeLocalSubmission(key, status, answers, requestedAt);
+  });
   ipcMain.handle("save-offline-draft", (event, key: OfflineAttemptKey, draft: OfflineExamDraft) => {
     checkAttempt(event, key);
     return saveOfflineDraft(key, draft);
@@ -100,6 +99,5 @@ export function registerOfflineExamHandlers(getWindow: () => BrowserWindow | nul
       throw new Error("Invalid offline operation.");
     }
     return acknowledgeOfflineOperation(key, operation);
->>>>>>> Stashed changes
   });
 }

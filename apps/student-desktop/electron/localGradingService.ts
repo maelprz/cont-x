@@ -34,10 +34,12 @@ function stateOf(exam: OfflineExamSnapshot): LocalGradingState {
   return exam.gradingState ?? { runs: {} };
 }
 
-export function runLocalCode(key: OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean) {
+export function runLocalCode(key: OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean, operationId?: string) {
   return withAttemptLock(key, async () => {
     const exam = await readAttempt(key);
     const state = stateOf(exam);
+    const replayed = operationId && state.replayedRuns?.[operationId];
+    if (replayed) return replayed;
     if (state.submission) throw new Error('This attempt has already been graded for submission.');
     const rubric = exam.gradingMaterial![questionId];
     if (!rubric) throw new Error('Question does not belong to this attempt.');
@@ -51,14 +53,15 @@ export function runLocalCode(key: OfflineAttemptKey, questionId: string, code: s
       state.runs[questionId] = { code, outcome, pointDeduction: deduction,
         checkAttempts: (previous?.checkAttempts ?? rubric.checkAttempts) + 1,
         score: codingScore(passed, outcome.results.length, rubric.maxPoints, deduction) };
-      await saveLocalGradingState(key, state);
     }
+    if (operationId) (state.replayedRuns ??= {})[operationId] = outcome;
+    if (operationId || (!visibleOnly && !outcome.compileError)) await saveLocalGradingState(key, state);
     return outcome;
   });
 }
 
 // Grade the final answers once; retries return the same durable submission.
-export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmission['status'], answers: SubmittedAnswer[]) {
+export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmission['status'], answers: SubmittedAnswer[], requestedAt?: string) {
   return withAttemptLock(key, async () => {
     const exam = await readAttempt(key);
     const state = stateOf(exam);
@@ -68,9 +71,11 @@ export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmis
       q.poolDrawId ? answer.pool_draw_id === q.id && !answer.question_id : answer.question_id === q.id && !answer.pool_draw_id))) {
       throw new Error('Submission contains invalid or duplicate questions.');
     }
-    const now = Date.parse(exam.timing.serverNow) + Math.max(0, Date.now() - exam.timingReceivedAt);
+    const localTime = requestedAt ? Date.parse(requestedAt) : Date.now();
+    const now = Date.parse(exam.timing.serverNow) + localTime - exam.timingReceivedAt;
     const overtimeSeconds = exam.timing.allowOvertime ? Math.max(0, Math.ceil((Math.min(now, Date.parse(exam.timing.hardDeadline)) - Date.parse(exam.timing.normalDeadline)) / 1000)) : 0;
     const graded: LocalSubmission['answers'] = [];
+    const executionLogs = [...(state.executionLogs ?? [])];
     for (const question of exam.questions) {
       const rubric = exam.gradingMaterial![question.id];
       if (!rubric) throw new Error('Grading materials are incomplete.');
@@ -84,7 +89,7 @@ export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmis
         // It adds no extra check attempt or penalty.
         const result = previous?.code === answer.answer_text ? previous.outcome : await run(rubric, answer.answer_text);
         if (previous?.code !== answer.answer_text && !result.compileError) {
-          (state.executionLogs ??= []).push({ questionId: question.id, executedAt: new Date(now).toISOString(), outcome: result });
+          executionLogs.push({ questionId: question.id, executedAt: new Date(now).toISOString(), outcome: result });
         }
         if (!result.compileError) score = codingScore(result.results.filter((r) => r.passed).length, result.results.length, rubric.maxPoints, deduction);
       } else if (rubric.type !== 'coding') {
@@ -99,7 +104,7 @@ export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmis
     state.submission = { version: 1, status: now >= Date.parse(exam.timing.hardDeadline) ? 'timed_out' : status,
       submittedAt: new Date(now).toISOString(), answers: graded, overtimeSeconds, overtimeDeduction,
       totalScore: Math.max(0, graded.reduce((sum, answer) => sum + answer.score, 0) - overtimeDeduction),
-      executionLogs: state.executionLogs ?? [] };
+      executionLogs };
     await saveLocalGradingState(key, state);
     return state.submission;
   });

@@ -1,20 +1,22 @@
 import { useCallback, useEffect, useRef, useState } from "react";
-import type { RunOutcome } from "../services/codeExecutionService";
-import { syncOfflineAttempt, type OfflineSyncOutcome } from "../services/offlineSyncService";
+import { prepareLocalSync, syncOfflineAttempt, type OfflineSyncOutcome } from "../services/offlineSyncService";
+import type { LocalSubmission } from "../types/localGrading";
 import type { OfflineEnqueue, OfflineExamSnapshot, OfflineOperation } from "../types/offlineExam";
 
 export function useOfflineSync(
   exam: OfflineExamSnapshot | null,
   onOutcome: (outcome: OfflineSyncOutcome) => void,
-  onGraded: (id: string, result: RunOutcome) => void,
   onSubmissionStored: () => void,
 ) {
   const [error, setError] = useState<string | null>(null);
+  const [gradeSaved, setGradeSaved] = useState(Boolean(exam?.gradingState?.submission));
+  const pending = useRef(exam?.pendingSubmission);
+  const receipt = useRef<LocalSubmission | null>(exam?.gradingState?.submission ?? null);
   const writes = useRef(new Map<string, OfflineOperation>());
   const saving = useRef<Promise<void> | null>(null);
   const syncing = useRef(false);
-  const callbacks = useRef({ onOutcome, onGraded, onSubmissionStored });
-  callbacks.current = { onOutcome, onGraded, onSubmissionStored };
+  const callbacks = useRef({ onOutcome, onSubmissionStored });
+  callbacks.current = { onOutcome, onSubmissionStored };
 
   const flush = useCallback(async () => {
     if (!exam) return;
@@ -25,7 +27,10 @@ export function useOfflineSync(
           for (const [id, operation] of writes.current) {
             await window.ipcRenderer.enqueueOfflineOperation(key, operation);
             writes.current.delete(id);
-            if (operation.kind === "submit") callbacks.current.onSubmissionStored();
+            if (operation.kind === "submit") {
+              pending.current = { ...operation.submission, requestedAt: operation.occurredAt };
+              callbacks.current.onSubmissionStored();
+            }
           }
         })().finally(() => { saving.current = null; });
       }
@@ -56,15 +61,24 @@ export function useOfflineSync(
     try {
       await flush();
       setError(null);
+      if (!navigator.onLine && (!pending.current || receipt.current)) return;
+      const local = await prepareLocalSync(exam, pending.current, receipt.current);
+      receipt.current = local.receipt;
+      setGradeSaved(Boolean(local.receipt));
       if (!navigator.onLine) return;
-      const operations = await window.ipcRenderer.listOfflineOperations({
-        studentId: exam.studentId, sessionId: exam.sessionId,
-      });
+      const operations = local.operations;
       if (!operations.length) return;
-      const outcome = await syncOfflineAttempt(exam, operations, callbacks.current.onGraded);
+      const outcome = await syncOfflineAttempt(exam, operations, receipt.current);
+      if (outcome === "extended") {
+        pending.current = undefined;
+        receipt.current = null;
+        setGradeSaved(false);
+      }
       if (outcome) callbacks.current.onOutcome(outcome);
     } catch {
-      setError("Exam sync will retry. Check the connection and local MySQL.");
+      setError(pending.current && !receipt.current
+        ? "Local grading could not finish. Your submission is saved and grading will retry."
+        : "Exam sync will retry. Check the connection and local MySQL.");
     } finally {
       syncing.current = false;
     }
@@ -82,5 +96,5 @@ export function useOfflineSync(
     };
   }, [exam, retry]);
 
-  return { enqueue, retry, error };
+  return { enqueue, retry, error, gradeSaved };
 }

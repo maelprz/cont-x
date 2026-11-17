@@ -48,6 +48,7 @@ export interface OfflineSubmission {
   status: "submitted" | "timed_out";
   answers: SubmittedAnswer[];
   draft: OfflineExamDraft;
+  requestedAt?: string;
 }
 
 export type OfflineOperationPayload =
@@ -73,11 +74,3 @@ export type OfflineEnqueue = (
   occurredAt?: string,
   id?: string,
 ) => Promise<void>;
-
-export interface OfflineGradedRunRequest extends OfflineAttemptKey {
-  operationId: string;
-  requestedAt: string;
-  questionId: string | null;
-  poolDrawId: string | null;
-  code: string;
-}

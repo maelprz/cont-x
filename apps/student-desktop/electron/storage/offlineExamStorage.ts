@@ -69,7 +69,6 @@ export async function saveOfflineExam(snapshot: OfflineExamSnapshot): Promise<vo
     question.programType === "cFunction" ? { ...question, mainCode } : question);
   const payload = JSON.stringify({
     gradingMaterial: snapshot.gradingMaterial,
-    gradingState: snapshot.gradingState,
     examId: snapshot.examId,
     title: snapshot.title,
     visibleTests: snapshot.visibleTests,
@@ -82,8 +81,6 @@ export async function saveOfflineExam(snapshot: OfflineExamSnapshot): Promise<vo
   await db.execute({
     sql: `INSERT INTO offline_exam_snapshots (student_id, session_id, snapshot)
       VALUES (?, ?, ?) AS incoming
-      ON DUPLICATE KEY UPDATE snapshot = JSON_SET(incoming.snapshot, '$.gradingState',
-        COALESCE(JSON_EXTRACT(offline_exam_snapshots.snapshot, '$.gradingState'), JSON_OBJECT('runs', JSON_OBJECT())))`,
       ON DUPLICATE KEY UPDATE snapshot = JSON_MERGE_PATCH(offline_exam_snapshots.snapshot, incoming.snapshot)`,
     timeout: TIMEOUT_MS,
   }, [snapshot.studentId, snapshot.sessionId, payload]);
@@ -101,7 +98,12 @@ export async function loadOfflineExam(key: OfflineAttemptKey): Promise<OfflineEx
   }, [key.studentId, key.sessionId]);
   if (!rows[0]) return null;
   const snapshot = typeof rows[0].snapshot === 'string' ? JSON.parse(rows[0].snapshot) : rows[0].snapshot;
-  return { ...snapshot, ...key };
+  const queued = rows[0].submission;
+  const operation = typeof queued === "string" ? JSON.parse(queued) : queued;
+  const pendingSubmission = operation ? {
+    ...operation.submission, requestedAt: operation.occurredAt,
+  } : undefined;
+  return { ...snapshot, ...key, draft: pendingSubmission?.draft ?? snapshot.draft, pendingSubmission };
 }
 
 export async function saveLocalGradingState(key: OfflineAttemptKey, state: OfflineExamSnapshot['gradingState']): Promise<void> {
@@ -111,10 +113,6 @@ export async function saveLocalGradingState(key: OfflineAttemptKey, state: Offli
     sql: "UPDATE offline_exam_snapshots SET snapshot = JSON_SET(snapshot, '$.gradingState', CAST(? AS JSON)) WHERE student_id = ? AND session_id = ?",
     timeout: TIMEOUT_MS,
   }, [JSON.stringify(state), key.studentId, key.sessionId]);
-  const row = rows[0];
-  if (!row) return null;
-  const pendingSubmission = row.submission?.submission;
-  return { ...row.snapshot, ...key, draft: pendingSubmission?.draft ?? row.snapshot.draft, pendingSubmission };
 }
 
 export async function saveOfflineDraft(key: OfflineAttemptKey, draft: OfflineExamDraft): Promise<void> {
@@ -144,7 +142,11 @@ export async function listOfflineOperations(key: OfflineAttemptKey): Promise<Off
   if (!db) throw new Error("Local exam storage is unavailable.");
   const [rows] = await db.execute<RowDataPacket[]>({
     sql: `SELECT operation FROM offline_exam_queue WHERE student_id = ? AND session_id = ?
-      ORDER BY (slot = 'submit'), sequence_id LIMIT 50`,
+      ORDER BY CASE
+        WHEN slot = 'submit' THEN 2
+        WHEN JSON_UNQUOTE(JSON_EXTRACT(operation, '$.kind')) = 'graded' THEN 0
+        ELSE 1
+      END, sequence_id LIMIT 50`,
     timeout: TIMEOUT_MS,
   }, [key.studentId, key.sessionId]);
   return rows.map((row) => row.operation);
@@ -154,8 +156,33 @@ export async function acknowledgeOfflineOperation(key: OfflineAttemptKey, operat
   const db = getPool();
   if (!db) throw new Error("Local exam storage is unavailable.");
   const slot = operation.kind === "live" || operation.kind === "submit" ? operation.kind : operation.id;
-  // A confirmed deadline extension reopens the frozen draft before removing the submission.
-  if (operation.kind === "submit") await saveOfflineDraft(key, operation.submission.draft);
+  if (operation.kind === "submit") {
+    // Remove the provisional grade and reopen the frozen draft together.
+    const connection = await db.getConnection();
+    try {
+      await connection.beginTransaction();
+      const [deleted] = await connection.execute<ResultSetHeader>({
+        sql: `DELETE FROM offline_exam_queue WHERE student_id = ? AND session_id = ? AND slot = 'submit'
+          AND JSON_UNQUOTE(JSON_EXTRACT(operation, '$.id')) = ?`,
+        timeout: TIMEOUT_MS,
+      }, [key.studentId, key.sessionId, operation.id]);
+      if (deleted.affectedRows) {
+        await connection.execute({
+          sql: `UPDATE offline_exam_snapshots
+            SET snapshot = JSON_REMOVE(JSON_SET(snapshot, '$.draft', CAST(? AS JSON)), '$.gradingState.submission')
+            WHERE student_id = ? AND session_id = ?`,
+          timeout: TIMEOUT_MS,
+        }, [JSON.stringify(operation.submission.draft), key.studentId, key.sessionId]);
+      }
+      await connection.commit();
+    } catch (error) {
+      await connection.rollback();
+      throw error;
+    } finally {
+      connection.release();
+    }
+    return;
+  }
   await db.execute({
     sql: `DELETE FROM offline_exam_queue WHERE student_id = ? AND session_id = ? AND slot = ?
       AND JSON_UNQUOTE(JSON_EXTRACT(operation, '$.id')) = ?`,

@@ -1,18 +1,42 @@
-import { runAllTestsAndScore, type RunOutcome } from "./codeExecutionService";
-import { getSessionTiming } from "./examService";
-import { supabase } from "./supabaseClient";
+import { getSessionTiming, syncLocalExamSubmission } from "./examService";
 import { logKeystrokeBatch } from "./keystrokeService";
 import { reportLiveState } from "./liveStateService";
 import { insertMovementEvents } from "./movementEventService";
 import { logViolation } from "./violationService";
-import type { OfflineExamSnapshot, OfflineOperation } from "../types/offlineExam";
+import type { OfflineExamSnapshot, OfflineOperation, OfflineSubmission } from "../types/offlineExam";
+import type { LocalSubmission } from "../types/localGrading";
 
 export type OfflineSyncOutcome = "result" | "removed" | "extended";
+
+export async function prepareLocalSync(
+  exam: OfflineExamSnapshot,
+  pending: OfflineSubmission | undefined,
+  receipt: LocalSubmission | null,
+) {
+  const key = { studentId: exam.studentId, sessionId: exam.sessionId };
+  const ipc = window.ipcRenderer;
+  let operations = await ipc.listOfflineOperations(key);
+  let gradedRuns = operations.filter((operation) => operation.kind === "graded");
+  while (gradedRuns.length) {
+    for (const operation of gradedRuns) {
+      const questionId = operation.poolDrawId ?? operation.questionId;
+      if (!questionId) throw new Error("Queued coding question is unavailable.");
+      await ipc.runLocalCode(key, questionId, operation.code, false, operation.id);
+      await ipc.acknowledgeOfflineOperation(key, operation);
+    }
+    operations = await ipc.listOfflineOperations(key);
+    gradedRuns = operations.filter((operation) => operation.kind === "graded");
+  }
+  if (pending && !receipt) {
+    receipt = await ipc.gradeLocalSubmission(key, pending.status, pending.answers, pending.requestedAt);
+  }
+  return { operations, receipt };
+}
 
 export async function syncOfflineAttempt(
   exam: OfflineExamSnapshot,
   operations: OfflineOperation[],
-  onGraded: (id: string, result: RunOutcome) => void,
+  graded: LocalSubmission | null,
 ): Promise<OfflineSyncOutcome | undefined> {
   const timing = await getSessionTiming(exam.sessionId, AbortSignal.timeout(8_000));
   if (timing.sessionStatus === "removed") return "removed";
@@ -27,27 +51,20 @@ export async function syncOfflineAttempt(
         await window.ipcRenderer.acknowledgeOfflineOperation(key, operation);
         return "extended";
       }
-      // The submit RPC locks the attempt and uses server timing for the official outcome.
-      const { error } = await supabase.rpc("submit_offline_exam_session", {
-        p_operation_id: operation.id,
-        p_session_id: exam.sessionId,
-        p_requested_at: operation.occurredAt,
-        p_status: operation.submission.status,
-        p_answers: operation.submission.answers,
-      }).abortSignal(AbortSignal.timeout(15_000));
-      if (error) throw error;
+      if (!graded) throw new Error("The local grade is still pending.");
+      await syncLocalExamSubmission(exam.sessionId, graded, AbortSignal.timeout(15_000));
       return "result";
     }
 
-    await uploadOperation(exam, operation, onGraded);
+    if (operation.kind === "graded") throw new Error("Local coding runs are still pending.");
+    await uploadOperation(exam, operation);
     await window.ipcRenderer.acknowledgeOfflineOperation(key, operation);
   }
 }
 
 async function uploadOperation(
   exam: OfflineExamSnapshot,
-  operation: Exclude<OfflineOperation, { kind: "submit" }>,
-  onGraded: (id: string, result: RunOutcome) => void,
+  operation: Exclude<OfflineOperation, { kind: "submit" | "graded" }>,
 ): Promise<void> {
   let saved: boolean;
   switch (operation.kind) {
@@ -64,16 +81,6 @@ async function uploadOperation(
     case "live":
       saved = await reportLiveState(exam.sessionId, operation.state);
       break;
-    case "graded": {
-      const question = exam.questions.find((item) =>
-        operation.poolDrawId ? item.poolDrawId === operation.poolDrawId : item.id === operation.questionId);
-      if (question?.type !== "coding") throw new Error("Queued coding question is unavailable.");
-      const result = await runAllTestsAndScore(exam.sessionId, question.id, operation.code,
-        question.programType ?? "cProgram", question.mainCode ?? undefined, question.maxPoints,
-        question.checkPenaltyPerAttempt ?? 0, Boolean(question.poolDrawId), operation);
-      onGraded(operation.id, result);
-      return;
-    }
   }
   if (!saved) throw new Error("An exam activity upload is still pending.");
 }

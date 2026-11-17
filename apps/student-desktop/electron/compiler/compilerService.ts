@@ -1,5 +1,5 @@
 import { spawn, spawnSync } from 'child_process';
-import { writeFileSync, mkdtempSync, rmSync, existsSync, cpSync } from 'fs';
+import { writeFileSync, mkdtempSync, rmSync, existsSync, cpSync, readdirSync } from 'fs';
 import { join } from 'path';
 import { tmpdir } from 'os';
 
@@ -29,33 +29,38 @@ const MINGW_COPY_DIR = join(tmpdir(), 'contx-mingw-copy');
 // invoked, and chokes on spaces in that path — this sidesteps the
 // problem entirely instead of trying to shorten the original path.
 function ensureMingwCopy(): string {
-  const gccInCopy = join(MINGW_COPY_DIR, 'bin', 'gcc.exe');
-
-  if (existsSync(gccInCopy)) {
-    return gccInCopy; // already copied in a previous run, reuse it
-  }
-
   const realMingwDir = join(
     process.env.APP_ROOT ?? '',
     'electron',
     'native',
     'mingw'
   );
+  const gcc = join(realMingwDir, 'bin', 'gcc.exe');
+  const compilerDir = join('libexec', 'gcc', 'x86_64-w64-mingw32');
+  const bundledCompiler = existsSync(join(realMingwDir, compilerDir))
+    ? readdirSync(join(realMingwDir, compilerDir)).find((version) =>
+        existsSync(join(realMingwDir, compilerDir, version, 'cc1.exe')))
+    : undefined;
+  if (!existsSync(gcc) || !bundledCompiler) throw new Error('The bundled C compiler is incomplete.');
+  if (!/\s/.test(realMingwDir)) return gcc;
 
-  cpSync(realMingwDir, MINGW_COPY_DIR, { recursive: true }); // one-time copy
+  const gccInCopy = join(MINGW_COPY_DIR, 'bin', 'gcc.exe');
+  const cc1InCopy = join(MINGW_COPY_DIR, compilerDir, bundledCompiler, 'cc1.exe');
+  if (!existsSync(gccInCopy) || !existsSync(cc1InCopy)) {
+    cpSync(realMingwDir, MINGW_COPY_DIR, { recursive: true });
+  }
   return gccInCopy;
 }
 
 // Compiles a single C source string into a binary
 // Enforces C11 with all warnings treated as errors
 export function compileSource(sourceCode: string): CompileResult {
+  const gccPath = ensureMingwCopy();
   const workDir = mkdtempSync(join(tmpdir(), 'contx-'));
   const sourcePath = join(workDir, 'submission.c');
   const binaryPath = join(workDir, 'submission.exe');
 
   writeFileSync(sourcePath, sourceCode, 'utf-8');
-
-  const gccPath = ensureMingwCopy(); // space-free path, guaranteed
 
   const proc = spawnSync(
     gccPath,
@@ -67,6 +72,9 @@ export function compileSource(sourceCode: string): CompileResult {
     cleanupDir(workDir);
     const stderr = proc.stderr || proc.error?.message ||
       `GCC stopped before producing a program (${proc.signal ?? proc.status ?? "unknown error"}).`;
+    if (proc.error || proc.signal || /gcc(?:\.exe)?: fatal error: cannot execute/i.test(stderr)) {
+      throw new Error(`The local C compiler could not run. ${stderr.trim()}`);
+    }
     return { success: false, stderr };
   }
 
