@@ -25,6 +25,8 @@ import type { BuilderQuestion, QuestionType } from "../examBuilder/examBuilderSc
 export function QuestionBankScreen() {
   const selectedSubjectId = useQuestionBankStore((state) => state.selectedSubjectId);
   const setSelectedSubjectId = useQuestionBankStore((state) => state.setSelectedSubjectId);
+  const setEditingQuestionId = useQuestionBankStore((state) => state.setEditingQuestionId);
+  const restoreQuestionId = useRef(useQuestionBankStore.getState().editingQuestionId);
   const setResetHandler = useQuestionBankStore((state) => state.setResetHandler);
   const { subjects, isLoading: subjectsLoading, error: subjectsError, refetch: refetchSubjects } = useBankSubjects();
   const selectedSubject = subjects.find((subject) => subject.id === selectedSubjectId) ?? subjects[0];
@@ -82,6 +84,7 @@ export function QuestionBankScreen() {
         openRequest.current += 1;
         setOpeningQuestionId(null);
         setEditingQuestion(null);
+        setEditingQuestionId(null);
         setSelectedSubjectId(null);
         setSelectedQuestionId(null);
         setSearch("");
@@ -93,7 +96,7 @@ export function QuestionBankScreen() {
       else reset();
     });
     return () => setResetHandler(null);
-  }, [hasUnsavedChanges, setResetHandler, setSelectedSubjectId]);
+  }, [hasUnsavedChanges, setResetHandler, setSelectedSubjectId, setEditingQuestionId]);
 
   useEffect(() => () => { openRequest.current += 1; }, []);
 
@@ -123,6 +126,8 @@ export function QuestionBankScreen() {
 
   function openEditor(question: BuilderQuestion, saved: BuilderQuestion | null) {
     clearSaveError();
+    setSelectedSubjectId(selectedSubject?.id ?? null);
+    setEditingQuestionId(saved?.id ?? null);
     setEditingQuestion(question);
     setSavedQuestion(saved);
     requestAnimationFrame(() => editorHeading.current?.focus());
@@ -141,6 +146,17 @@ export function QuestionBankScreen() {
       if (openRequest.current === request) setOpeningQuestionId(null);
     }
   }
+
+  useEffect(() => {
+    const id = restoreQuestionId.current;
+    if (!id || subjectsLoading || isLoading) return;
+    restoreQuestionId.current = null;
+    if (questions.some((question) => question.id === id && question.isOwn)) {
+      void editQuestion(id);
+    } else {
+      setEditingQuestionId(null);
+    }
+  }, [subjectsLoading, isLoading, questions]);
 
   function createQuestion(type: QuestionType) {
     openRequest.current += 1;
@@ -202,7 +218,7 @@ export function QuestionBankScreen() {
         <TeacherHeader title={editingQuestion ? (savedQuestion ? "Edit question" : "New question") : "Question Bank"} />
         {editingQuestion ? (
           <>
-            <div ref={editorHeading} tabIndex={-1} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-base-300)] bg-[var(--color-base-100)] px-4 py-3 sm:px-7">
+            <div ref={editorHeading} tabIndex={-1} className="flex shrink-0 flex-wrap items-center gap-2 border-b border-[var(--color-base-300)] bg-[var(--color-base-100)] px-4 py-3 outline-none sm:px-7">
               <button type="button" className={examSecondary} disabled={operation !== null} onClick={() => hasUnsavedChanges ? setPendingLeave(() => returnToBank) : returnToBank()}>
                 <ArrowLeft size={15} aria-hidden="true" /> Question Bank
               </button>
