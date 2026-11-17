@@ -10,9 +10,10 @@ interface KeystrokeCsvButtonProps {
   classExamId: string;
   examTitle: string;
   className: string;
+  buttonClassName?: string;
 }
 
-export function KeystrokeCsvButton({ row, classExamId, examTitle, className }: KeystrokeCsvButtonProps) {
+export function KeystrokeCsvButton({ row, classExamId, examTitle, className, buttonClassName }: KeystrokeCsvButtonProps) {
   const [isExporting, setIsExporting] = useState(false);
   const { showToast } = useToast();
   const attempt = `${row.studentName}, attempt ${row.attemptNumber}`;
@@ -41,7 +42,7 @@ export function KeystrokeCsvButton({ row, classExamId, examTitle, className }: K
       disabled={isExporting}
       aria-busy={isExporting}
       aria-label={`Keystroke CSV for ${attempt}`}
-      className="inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-info)]/20 px-3 py-1.5 text-[12px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-info)]/35 disabled:opacity-50"
+      className={buttonClassName ?? "inline-flex items-center gap-1.5 whitespace-nowrap rounded-lg border border-[var(--color-primary)]/30 bg-[var(--color-info)]/20 px-3 py-1.5 text-[12px] font-medium text-[var(--color-primary)] hover:bg-[var(--color-info)]/35 disabled:opacity-50"}
     >
       <Download size={14} aria-hidden="true" />
       {isExporting ? "Preparing CSV…" : "Keystroke CSV"}

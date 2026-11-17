@@ -151,7 +151,7 @@ export function DashboardScreen() {
   function openClassExam({ exam, attachment }: ClassExam) {
     const navigation = getClassExamNavigation(attachment.status);
     if (navigation?.targetScreen === "studentMonitoring") {
-      setProgressClass(attachment.classExamId);
+      setProgressClass(attachment.classExamId, "dashboard");
       navigateTo(navigation.targetScreen);
     } else if (navigation?.targetScreen === "examResults") {
       setResultsClass(attachment.classExamId);

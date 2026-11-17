@@ -4,7 +4,7 @@ import type { ExamCard } from "../screens/examLibrary/examLibraryScreen.types";
 import { useAuthStore } from "../store/useAuthStore";
 import { useExamBuilderStore } from "../store/useExamBuilderStore";
 
-export function useExamLibrary() {
+export function useExamLibrary(includeResultsUpdates = false) {
   const [exams, setExams] = useState<ExamCard[]>([]);
   const [isLoading, setIsLoading] = useState(true);
   const [error, setError] = useState<string | null>(null);
@@ -20,7 +20,7 @@ export function useExamLibrary() {
 
     async function loadExams(id: string) {
       try {
-        const result = await getExamsByTeacherId(id);
+        const result = await getExamsByTeacherId(id, includeResultsUpdates);
         if (isActive) {
           setExams(result);
           setError(null);
@@ -37,7 +37,7 @@ export function useExamLibrary() {
     return () => {
       isActive = false; // prevents stale updates if teacher changes or unmounts
     };
-  }, [teacherId, isSavingExam, refresh]);
+  }, [teacherId, isSavingExam, includeResultsUpdates, refresh]);
 
   // re-runs the fetch, used after publish/end/delete to refresh the list
   const refetch = () => setRefresh((value) => value + 1);
