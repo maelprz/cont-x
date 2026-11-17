@@ -1,7 +1,8 @@
 import { app, BrowserWindow, ipcMain } from "electron";
 import { createRequire } from "node:module";
-import { fileURLToPath } from "node:url";
+import { fileURLToPath, pathToFileURL } from "node:url";
 import { registerCompilerHandlers } from "./ipc/compilerHandlers";
+import { installEditorSandbox } from "./editorSandbox";
 import { registerOfflineExamHandlers } from "./ipc/offlineExamHandlers";
 import { closeOfflineExamStorage } from "./storage/offlineExamStorage";
 import { startExamProcessMonitor } from "./native/examProcessMonitor";
@@ -171,10 +172,17 @@ function createWindow() {
     frame: false, // removes the title bar and window controls
     webPreferences: {
       preload: path.join(__dirname, "preload.mjs"),
+      nodeIntegration: false,
+      contextIsolation: true,
+      sandbox: true,
+      webSecurity: true,
+      webviewTag: false,
+      devTools: !app.isPackaged,
     },
   });
 
   // keeps the app above all other windows at the highest z-order level
+  installEditorSandbox(win, VITE_DEV_SERVER_URL || pathToFileURL(path.join(RENDERER_DIST, "index.html")).href);
   win.setAlwaysOnTop(true, "screen-saver"); //comment this out for testing without restrictions
 
   // if somehow minimized (e.g. via a hotkey we didn't catch), restore immediately
@@ -218,7 +226,8 @@ function createWindow() {
 }
 
 // called when the student clicks logout — the only valid exit path
-ipcMain.on("exit-app", () => {
+ipcMain.on("exit-app", (event) => {
+  if (!win || event.senderFrame !== win.webContents.mainFrame) return;
   isExiting = true; // tell the close handler to allow the next close
   endExamAppCheck();
   unregisterLockdown(); // restore taskbar, remove hooks, re-enable task manager, unmute audio
@@ -264,5 +273,5 @@ app.whenReady().then(() => {
   cleanupStaleLockdownState(); // undo any restrictions left by a previous crash
   createWindow();
   registerLockdown(); // lockdown starts the moment the window is ready, comment this out for testing without restrictions
-  registerCompilerHandlers(); // sets up the run-test-cases IPC channel
+  registerCompilerHandlers(() => win); // only the app's main frame can request compilation
 });

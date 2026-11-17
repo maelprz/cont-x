@@ -1,6 +1,7 @@
 import { useRef, useState } from 'react';
 import type { HTMLAttributes, PointerEvent as ReactPointerEvent } from 'react';
 import Editor from '@monaco-editor/react';
+import { CircleX, Terminal, LoaderCircle } from 'lucide-react';
 import type { RunOutcome } from '../../services/codeExecutionService';
 
 // Props for the code editor pane
@@ -23,55 +24,29 @@ const DEFAULT_PANEL_HEIGHT = 220; // the old fixed size, also what a double-clic
 const MIN_PANEL_HEIGHT = 80; // never smaller than this, so results stay readable
 const MAX_PANEL_RATIO = 0.7; // never taller than 70% of the editor column, so the code stays visible
 
-// NEW — one row in the output panel showing a single test case's outcome
-function TestCaseRow({
-  index,
-  passed,
-  actualOutput,
-  timedOut,
-}: {
+function TestCaseRow({ index, passed, actualOutput, timedOut }: {
   index: number;
   passed: boolean;
   actualOutput: string;
   timedOut: boolean;
 }) {
   return (
-    <div
-      className={`flex items-start gap-2 px-3 py-2 rounded-md border text-[12px] font-mono ${
-        passed
-          ? 'border-[var(--accent-green)]/30 bg-[var(--accent-green)]/10'
-          : 'border-[#ef4444]/30 bg-[rgba(239,68,68,0.08)]'
-      }`}
-    >
-      <span
-        className={`flex-shrink-0 font-bold ${
-          passed ? 'text-[var(--accent-green)]' : 'text-[#ef4444]'
-        }`}
-      >
-        {passed ? 'PASS' : 'FAIL'}
-      </span>
-      <div className="min-w-0 flex-1">
-        <span className="text-[var(--text-secondary)]">Test {index + 1}</span>
-        {timedOut ? (
-          <p className="text-[#ef4444] mt-0.5">Timed out</p>
-        ) : (
-          // CHANGED — was text-[var(--text-primary)], rendered as unreadable
-          // dark blue against the dark output panel background. Switched to
-          // a light near-white so actual output is always legible.
-          <p className="text-black mt-0.5 break-words whitespace-pre-wrap">
-            {actualOutput || '(no output)'}
-          </p>
-        )}
+    <div className="rounded-lg border border-stone-200 bg-stone-50 p-3">
+      <div className="flex items-center justify-between gap-3">
+        <span className="text-sm font-medium text-stone-700">Test {index + 1}</span>
+        <span className={`rounded px-2 py-0.5 text-[10px] font-semibold tracking-wide ${passed ? 'bg-[#e9eee3] text-[#465a3b]' : 'bg-red-100 text-red-700'}`}>{passed ? 'PASS' : 'FAIL'}</span>
       </div>
+      {timedOut ? <p className="mt-2 text-sm text-red-700">Timed out</p> : (
+        <pre className="mt-2 whitespace-pre-wrap break-words rounded-md border border-stone-200 bg-white px-3 py-2 font-mono text-xs leading-relaxed text-stone-800">{actualOutput || '(no output)'}</pre>
+      )}
     </div>
   );
 }
 
-// NEW — the output panel itself, shown below the editor. Collapsible, and
-// switches its content based on whichever run happened most recently.
+// Always-visible results with a draggable divider.
 function OutputPanel({
-  isOpen,
-  onToggle,
+  onRunTests,
+  onRunCode,
   isRunning,
   testsResult,
   codeResult,
@@ -80,8 +55,8 @@ function OutputPanel({
   resizeHandleProps,
   onResetHeight,
 }: {
-  isOpen: boolean;
-  onToggle: () => void;
+  onRunTests?: () => void;
+  onRunCode?: () => void;
   isRunning?: boolean;
   testsResult?: RunOutcome | null;
   codeResult?: RunOutcome | null;
@@ -94,56 +69,53 @@ function OutputPanel({
   const activeLabel = codeResult ? 'Run Code Result' : testsResult ? 'Run Tests Result' : null;
 
   return (
-    <div className="border-t border-[var(--border-subtle)] bg-[var(--bg-sidebar)] flex-shrink-0">
+    <div className="bg-white flex-shrink-0">
       {/* Drag handle: drag up or down to resize the output panel, double-click to reset it */}
-      {isOpen && (
-        <div
+      <div
           {...resizeHandleProps}
           onDoubleClick={onResetHeight}
           title="Drag to resize"
-          className="group relative z-10 h-1 w-full flex items-center justify-center cursor-row-resize select-none touch-none bg-[var(--bg-sidebar)]"
+          className="group relative z-10 h-2 w-full flex items-center justify-center cursor-row-resize select-none touch-none bg-stone-100"
         >
-          {/* Invisible, taller grab area so the thin handle is still easy to hit */}
-          <span className="absolute inset-x-0 -top-2 -bottom-0.5" />
-          <span className="h-[2px] w-8 rounded-full bg-[var(--text-inverted-secondary)] opacity-40 group-hover:opacity-100 transition-opacity duration-150" />
+          <span className="h-[2px] w-8 rounded-full bg-stone-400 opacity-40 group-hover:opacity-100 transition-opacity duration-150" />
         </div>
-      )}
-      {/* CHANGED — toggle bar no longer shows the label text, just the
-          running state (if active) and the expand/collapse arrow */}
-      <button
-        type="button"
-        onClick={onToggle}
-        className="w-full flex items-center justify-between px-4 py-1 text-[11px] font-mono font-medium text-[var(--text-inverted)] cursor-pointer bg-[var(--bg-sidebar)] hover:bg-white/5 transition-colors duration-150"
-      >
-        <span className="text-[10px] ml-auto">{isOpen ? '▾' : '▸'}</span>
-      </button>
+      <div className="flex shrink-0 flex-wrap items-center gap-2 border-y border-stone-200 bg-[#f8f8f8] px-4 py-1.5">
+        <button type="button" onClick={onRunTests} disabled={isRunning}
+          className="cursor-pointer rounded-lg border border-[var(--border-primary)] bg-transparent px-2.5 py-1 text-xs font-medium text-[var(--text-secondary)] hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] focus-visible:outline-2 focus-visible:outline-[#465a3b] disabled:cursor-not-allowed disabled:opacity-50">
+          Run Tests
+        </button>
+        <button type="button" onClick={onRunCode} disabled={isRunning}
+          className="cursor-pointer rounded-lg border border-[var(--border-subtle)] bg-[image:var(--button-gradient)] px-2.5 py-1 text-xs font-semibold text-[var(--button-gradient-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#465a3b] disabled:cursor-not-allowed disabled:opacity-50">
+          Run Code
+        </button>
+      </div>
 
-      {isOpen && (
-        <div
+      <div
           style={{ height }}
-          className="px-4 pb-4 pt-3 border-t border-[#d1d5db] bg-white overflow-y-auto flex flex-col gap-2"
+          aria-live="polite"
+          aria-busy={isRunning ?? false}
+          className="px-4 pb-4 pt-3 border-t border-stone-200 bg-white overflow-y-auto flex flex-col gap-2"
         >
           {isRunning && (
-            <p className="text-[12px] font-mono text-black">
+            <p className="flex items-center gap-2 text-sm text-stone-600">
+              <LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true" />
               Compiling and running...
             </p>
           )}
 
           {!isRunning && runError && (
-            <p className="text-[12px] font-mono text-[#ef4444]">{runError}</p>
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3 text-sm text-red-800"><p className="mb-1 flex items-center gap-2 font-semibold"><CircleX size={16} aria-hidden="true" />Could not run code</p><p className="whitespace-pre-wrap break-words">{runError}</p></div>
           )}
 
           {!isRunning && !runError && activeResult?.compileError && (
-            <pre className="text-[12px] font-mono text-[#ef4444] whitespace-pre-wrap break-words">
-              {activeResult.compileError}
-            </pre>
+            <div className="rounded-lg border border-red-200 bg-red-50 p-3"><p className="mb-2 flex items-center gap-2 text-sm font-semibold text-red-800"><CircleX size={16} aria-hidden="true" />Compilation failed</p><pre className="text-xs font-mono leading-relaxed text-red-800 whitespace-pre-wrap break-words">{activeResult.compileError}</pre></div>
           )}
 
           {!isRunning && !runError && activeResult && !activeResult.compileError && (
             <>
-              {/* NEW — label now shown here, above the results, instead of in the toggle bar */}
               {activeLabel && (
-                <p className="text-[11px] font-mono font-semibold text-black mb-1">
+                <p className="flex items-center gap-2 text-sm font-semibold text-stone-800 mb-1">
+                  <Terminal size={16} className="text-stone-500" aria-hidden="true" />
                   {activeLabel}
                 </p>
               )}
@@ -165,12 +137,9 @@ function OutputPanel({
           )}
 
           {!isRunning && !runError && !activeResult && (
-            <p className="text-[12px] font-mono text-black">
-              Run Tests or Run Code to see output here.
-            </p>
+            <div className="flex items-start gap-3 rounded-lg border border-dashed border-stone-200 bg-stone-50 px-4 py-4"><Terminal size={18} className="mt-0.5 shrink-0 text-stone-400" aria-hidden="true" /><div><p className="text-sm font-medium text-stone-700">Ready to run</p><p className="mt-1 text-xs leading-relaxed text-stone-500">Run Tests or Run Code to see your output here.</p></div></div>
           )}
         </div>
-      )}
     </div>
   );
 }
@@ -189,8 +158,6 @@ export function CodeEditor({
   panelHeight,
   onPanelHeightChange,
 }: CodeEditorProps) {
-  const [isPanelOpen, setIsPanelOpen] = useState(true); // panel starts expanded
-
   // Output panel height: the parent owns it when it passes panelHeight, otherwise it is kept here.
   const [localPanelHeight, setLocalPanelHeight] = useState(DEFAULT_PANEL_HEIGHT);
   const height = panelHeight ?? localPanelHeight; // the height actually used
@@ -228,25 +195,10 @@ export function CodeEditor({
   };
 
   return (
-    <div ref={containerRef} className="flex flex-col h-full">
-      {/* Editor toolbar */}
-      <div className="flex items-center justify-between px-4 py-2 border-b border-[var(--border-subtle)] bg-[var(--bg-app)] flex-shrink-0">
-        <div className="flex items-center gap-2">
-          <button
-            onClick={onRunTests}
-            disabled={isRunning}
-            className="px-3 py-1.5 rounded-lg border border-[var(--border-primary)] bg-transparent text-[var(--text-secondary)] text-[12px] font-semibold font-mono cursor-pointer hover:border-[var(--text-primary)] hover:text-[var(--text-primary)] transition-colors duration-150 disabled:opacity-50 disabled:cursor-not-allowed"
-          >
-            Run Tests
-          </button>
-          <button
-            onClick={onRunCode}
-            disabled={isRunning}
-            className="px-3 py-1.5 rounded-lg border border-[var(--border-subtle)] text-[12px] font-bold font-mono cursor-pointer transition-transform duration-150 hover:scale-[1.02] bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)] disabled:opacity-50 disabled:cursor-not-allowed disabled:hover:scale-100"
-          >
-            Run Code
-          </button>
-        </div>
+    <div ref={containerRef} className="flex min-h-0 h-full flex-col bg-white text-stone-900">
+      <div className="flex shrink-0 flex-wrap items-center justify-between gap-2 border-b border-stone-200 bg-[#f8f8f8] px-4 py-3">
+        <h3 className="text-sm font-semibold text-stone-900">Your answer</h3>
+        <span className="rounded border border-stone-200 bg-white px-2 py-0.5 font-mono text-xs text-stone-600">{language}</span>
       </div>
 
       {/* Monaco editor fills remaining space */}
@@ -265,14 +217,15 @@ export function CodeEditor({
             automaticLayout: true,
             padding: { top: 16 },
             tabSize: 4,
+            links: false,
+            dropIntoEditor: { enabled: false },
           }}
         />
       </div>
 
-      {/* NEW — collapsible output panel, shows compile errors or per-test-case results */}
       <OutputPanel
-        isOpen={isPanelOpen}
-        onToggle={() => setIsPanelOpen((open) => !open)}
+        onRunTests={onRunTests}
+        onRunCode={onRunCode}
         isRunning={isRunning}
         testsResult={testsResult}
         codeResult={codeResult}

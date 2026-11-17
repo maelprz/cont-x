@@ -1,4 +1,4 @@
-import { ipcMain } from 'electron';
+import { ipcMain, type BrowserWindow } from 'electron';
 import { compileSource, runBinary, cleanupDir } from '../compiler/compilerService';
 import { dirname } from 'path';
 
@@ -27,8 +27,20 @@ function buildSource(
   return `${code}\n\n${mainCode ?? ''}`;
 }
 
-export function registerCompilerHandlers() {
-  ipcMain.handle('run-test-cases', async (_event, payload: RunTestCasesPayload) => {
+export function registerCompilerHandlers(getWindow: () => BrowserWindow | null) {
+  ipcMain.handle('run-test-cases', async (event, payload: RunTestCasesPayload) => {
+    const window = getWindow();
+    if (!window || event.senderFrame !== window.webContents.mainFrame) {
+      throw new Error('Compilation is only available from the exam window.');
+    }
+    if (!payload || typeof payload.code !== 'string' ||
+        !['cFunction', 'cProgram'].includes(payload.programType) ||
+        (payload.mainCode !== undefined && typeof payload.mainCode !== 'string') ||
+        !Array.isArray(payload.testCases) || payload.testCases.some((test) =>
+          !test || typeof test.id !== 'string' || typeof test.input !== 'string' ||
+          typeof test.expectedOutput !== 'string' || !Number.isFinite(test.timeLimitMs) || test.timeLimitMs <= 0)) {
+      throw new Error('Invalid compilation request.');
+    }
     const source = buildSource(payload.code, payload.programType, payload.mainCode);
     const compileResult = compileSource(source);
 

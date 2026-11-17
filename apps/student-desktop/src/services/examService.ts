@@ -239,7 +239,7 @@ export interface FetchedQuestion {
   id: string; // questions.id, the real database id (for a pooled question: its draw id, session_pool_questions.id)
   poolDrawId: string | null; // set when this question was drawn from a random pool for this attempt
   orderIndex: number; // questions.order_index, the teacher's own order (the list itself is already in the student's order)
-  title: string; // questions.title, shown as the question heading
+  //title: string; // questions.title, shown as the question heading
   prompt: string; // questions.prompt, shown as the question body text
   type: "mcq" | "coding" | "fitb"; // questions.type, tells the UI which shape to expect
   maxPoints: number; // questions.max_points, kept for future scoring use
@@ -285,7 +285,7 @@ export async function getSessionQuestions(
       id: row.id, // real question id (or the draw id for a pooled question)
       poolDrawId: row.pool_draw_id ?? null, // null for questions placed directly in the exam
       orderIndex: row.order_index, // the teacher's own order number
-      title: row.title, // question heading
+      //title: row.title, // question heading
       prompt: row.prompt, // question body text
       type: row.type, // "mcq", "coding" or "fitb"
       maxPoints: row.max_points, // kept for later scoring

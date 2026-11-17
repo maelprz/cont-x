@@ -1,6 +1,9 @@
 import { create } from "zustand";
+import { persist, createJSONStorage } from "zustand/middleware";
 
 interface QuestionBankState {
+  editingQuestionId: string | null;
+  setEditingQuestionId: (id: string | null) => void;
   // which sub-question bank (subject) is open — null means the sub-bank list
   selectedSubjectId: string | null;
   setSelectedSubjectId: (id: string | null) => void;
@@ -12,9 +15,15 @@ interface QuestionBankState {
   setResetHandler: (handler: (() => void) | null) => void;
 }
 
-export const useQuestionBankStore = create<QuestionBankState>((set) => ({
+export const useQuestionBankStore = create<QuestionBankState>()(persist((set) => ({
+  editingQuestionId: null,
+  setEditingQuestionId: (id) => set({ editingQuestionId: id }),
   selectedSubjectId: null,
   setSelectedSubjectId: (id: string | null) => set({ selectedSubjectId: id }),
   resetHandler: null,
   setResetHandler: (handler) => set({ resetHandler: handler }),
+}), {
+  name: "contx-question-bank",
+  storage: createJSONStorage(() => sessionStorage),
+  partialize: (state) => ({ selectedSubjectId: state.selectedSubjectId, editingQuestionId: state.editingQuestionId }),
 }));

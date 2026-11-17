@@ -3,12 +3,23 @@ import { useAuthStore } from "../../stores/useAuthStore"; // store controlling t
 
 // Single shared header bar — used by Dashboard, Archive, ExamConfirmation, and now Login.
 export function AppHeader({
+  title,
   variant = "full", // defaults to the full version, so no existing screen needs to change
 }: AppHeaderProps) {
   const user = useAuthStore((state) => state.user);
 
   const studentName = user?.fullName ?? ""; // empty string if no session yet
   const studentId = user?.idNumber ?? "";
+
+  if (title) return (
+    <header className="flex min-h-14 shrink-0 items-center justify-between gap-4 border-b border-stone-200 bg-[#f8f8f8] px-4 py-2 sm:px-8">
+      <h1 className="min-w-0 break-words text-base font-semibold text-stone-900 sm:text-xl">{title}</h1>
+      <div className="shrink-0 text-right">
+        <p className="text-[13px] font-semibold leading-tight text-stone-900">{studentName}</p>
+        <p className="mt-0.5 font-mono text-[10px] text-stone-500">{studentId}</p>
+      </div>
+    </header>
+  );
 
   return (
     <header className="h-14 flex items-center px-8 bg-[var(--bg-sidebar)]">
