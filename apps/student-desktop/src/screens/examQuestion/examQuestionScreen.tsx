@@ -58,6 +58,7 @@ export function ExamQuestionScreen({
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
+  const savedExam = useExamSessionStore((state) => state.offlineExam);
   const removed = useExamSessionStore((state) => state.removed); // stop reporting once the teacher removed this student
   const questionIdRef = useRef<string | null>(null);
   useViolationLogger(sessionId, questionIdRef); 
@@ -66,7 +67,7 @@ export function ExamQuestionScreen({
     questions: fetchedQuestions,
     isLoading,
     error,
-  } = useExamQuestions(sessionId); // this attempt's questions, in this student's own order
+  } = useExamQuestions(sessionId, savedExam?.questions);
   const { submitSession, isSubmitting, error: submissionError, clearError: clearSubmissionError } = useSubmitExamSession();
   const submissionInFlightRef = useRef(false);
   const timedOutAnswersRef = useRef<SubmittedAnswer[] | null>(null);
@@ -80,11 +81,12 @@ export function ExamQuestionScreen({
     await submitAndLeave();
   };
 
-  const { rules, isLoaded: rulesLoaded, error: rulesError, retry: retryRules } = useSessionRules(sessionId);
+  const { rules, isLoaded: rulesLoaded, error: rulesError, retry: retryRules } = useSessionRules(sessionId, savedExam?.rules);
   // Hard stop by default: at zero the answers are submitted automatically. With overtime allowed the clock keeps running past zero.
   const timer = useExamTimer(sessionId, handleTimeExpired, {
     allowOvertime: rules.allowOvertime,
     rulesReady: rulesLoaded,
+    savedExam: savedExam ?? undefined,
     onTimeRestored: () => {
       if (submissionInFlightRef.current) return false;
       timedOutAnswersRef.current = null;
@@ -669,6 +671,11 @@ export function ExamQuestionScreen({
             <span className="font-mono text-[10px] uppercase tracking-[0.18em] text-[var(--text-inverted-secondary)]">
               {examTitle}
             </span>
+            {savedExam && (
+              <span role="status" className="text-xs text-[var(--text-inverted-secondary)]">
+                Exam downloaded
+              </span>
+            )}
           </div>
           {/* Progress */}
           <div className="flex flex-col items-center gap-1 flex-grow max-w-xs">

@@ -1,6 +1,7 @@
 import { execFile } from "node:child_process";
 import { join } from "node:path";
 import { promisify } from "node:util";
+import { autoCloseDisallowedApps } from "../../shared/examAppPolicy";
 
 const execFileAsync = promisify(execFile);
 
@@ -82,9 +83,9 @@ export async function checkExamApps(
   if (!systemRoot) throw new Error("Windows system directory is unavailable.");
 
   const executableNames = [...disallowedExecutables.keys()];
-  const approvedExecutables = [...disallowedExecutables]
+  const approvedExecutables = autoCloseDisallowedApps ? [...disallowedExecutables]
     .filter(([, appName]) => approvedApps.includes(appName))
-    .map(([name]) => name);
+    .map(([name]) => name) : [];
   // Both lists contain only literals from the executable map.
   const quoteNames = (names: string[]) => names.map((name) => `'${name}'`).join(", ");
   const script = `

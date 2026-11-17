@@ -1,4 +1,5 @@
 import { create } from "zustand";
+import type { OfflineExamSnapshot } from "../types/offlineExam";
 
 // Shape of the exam data carried from Dashboard to Confirmation.
 interface ExamSessionState {
@@ -8,6 +9,7 @@ interface ExamSessionState {
   examStatus: string | null;
   attemptsRemaining: number | null;
   sessionId: string | null;
+  offlineExam: OfflineExamSnapshot | null;
   setExam: (exam: {
     id: string;
     classExamId: string;
@@ -15,7 +17,7 @@ interface ExamSessionState {
     status?: string; // optional: the exam lookup result does not carry a status
     attemptsRemaining: number;
   }) => void; // called by Dashboard
-  setSessionId: (sessionId: string) => void; // called by Confirmation after success
+  setSessionId: (sessionId: string, offlineExam?: OfflineExamSnapshot | null) => void;
   removed: boolean;
   markRemoved: () => void;
   reset: () => void; // clears everything, call this on logout
@@ -28,6 +30,7 @@ export const useExamSessionStore = create<ExamSessionState>((set) => ({
   examStatus: null,
   attemptsRemaining: null,
   sessionId: null,
+  offlineExam: null,
   setExam: (exam) =>
     set({
       examId: exam.id, // save the exam id for loading questions
@@ -36,7 +39,7 @@ export const useExamSessionStore = create<ExamSessionState>((set) => ({
       examStatus: exam.status ?? null, // status may be missing, so default to null
       attemptsRemaining: exam.attemptsRemaining, // save for the Attempts Left card
     }),
-  setSessionId: (sessionId) => set({ sessionId }), // save the new session's id
+  setSessionId: (sessionId, offlineExam = null) => set({ sessionId, offlineExam }),
   removed: false,
   markRemoved: () => set({ removed: true }),
   reset: () =>
@@ -47,6 +50,7 @@ export const useExamSessionStore = create<ExamSessionState>((set) => ({
       examStatus: null,
       attemptsRemaining: null,
       sessionId: null,
+      offlineExam: null,
       removed: false,
     }), // wipe on logout
 }));

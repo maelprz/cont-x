@@ -1,10 +1,12 @@
 import { useEffect, useRef, useState } from "react";
 import { getSessionTiming, subscribeSessionTiming, type SessionTiming } from "../services/examService";
+import type { OfflineExamSnapshot } from "../types/offlineExam";
 
 export interface ExamTimerOptions {
   rulesReady: boolean;
   allowOvertime?: boolean;
   onTimeRestored?: () => boolean | void;
+  savedExam?: Pick<OfflineExamSnapshot, "timing" | "timingReceivedAt">;
 }
 
 export function useExamTimer(sessionId: string | null, onExpire: () => void,
@@ -13,15 +15,16 @@ export function useExamTimer(sessionId: string | null, onExpire: () => void,
   const [timing, setTiming] = useState<SessionTiming | null>(null);
   const [error, setError] = useState<string | null>(null);
   const [reload, setReload] = useState(0);
+  const savedExam = options.savedExam;
   const callbacks = useRef({ onExpire, options });
   useEffect(() => { callbacks.current = { onExpire, options }; }, [onExpire, options]);
 
   useEffect(() => {
     let active = true, fetching = false, expired = false;
-    let snapshot: SessionTiming | null = null;
-    let receivedAt = 0;
+    let snapshot = savedExam?.timing ?? null;
+    let receivedAt = savedExam?.timingReceivedAt ?? 0;
     let unsubscribe: (() => void) | undefined;
-    setTiming(null); setSecondsLeft(null); setError(null);
+    setTiming(snapshot); setSecondsLeft(null); setError(null);
     if (!sessionId) return;
     function tick() {
       if (!active || !snapshot) return;
@@ -50,13 +53,14 @@ export function useExamTimer(sessionId: string | null, onExpire: () => void,
         if (!unsubscribe) unsubscribe = subscribeSessionTiming(next.classExamId, () => { void refresh(); });
         tick();
       } catch {
-        if (active) setError("Could not refresh the exam timer. Reconnect and retry.");
+        if (active && !snapshot) setError("Could not refresh the exam timer. Reconnect and retry.");
       } finally { fetching = false; }
     }
+    tick();
     void refresh();
     const clock = setInterval(tick, 1000);
     const polling = setInterval(refresh, 2500);
     return () => { active = false; clearInterval(clock); clearInterval(polling); unsubscribe?.(); };
-  }, [sessionId, reload]);
+  }, [sessionId, savedExam, reload]);
   return { secondsLeft, timing, error, retry: () => setReload(value => value + 1) };
 }

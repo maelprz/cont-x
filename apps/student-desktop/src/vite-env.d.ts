@@ -9,6 +9,8 @@ interface Window {
     setExamProcessMonitoring: (enabled: boolean) => void;
     checkExamApps: (closeApps: boolean) => Promise<string[]>;
     endExamAppCheck: () => void;
+    checkOfflineExamStorage: () => Promise<boolean>;
+    saveOfflineExam: (snapshot: import("./types/offlineExam").OfflineExamSnapshot) => Promise<void>;
     onViolation: (callback: (payload: import("./types/violationEvent").ViolationEvent) => void) => () => void;
   };
 }

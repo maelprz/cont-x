@@ -2,6 +2,8 @@ import { app, BrowserWindow, ipcMain } from "electron";
 import { createRequire } from "node:module";
 import { fileURLToPath } from "node:url";
 import { registerCompilerHandlers } from "./ipc/compilerHandlers";
+import { registerOfflineExamHandlers } from "./ipc/offlineExamHandlers";
+import { closeOfflineExamStorage } from "./storage/offlineExamStorage";
 import { startExamProcessMonitor } from "./native/examProcessMonitor";
 import { checkExamApps } from "./native/disallowedProcesses";
 import { muteSystemAudio, unmuteSystemAudio } from "./native/audioControl"; // audio mute/unmute, sits next to keyboard-hook folder
@@ -72,6 +74,7 @@ ipcMain.on("set-exam-process-monitoring", (event, enabled: unknown) => {
 });
 
 app.on("before-quit", stopExamProcessMonitoring);
+app.on("before-quit", closeOfflineExamStorage);
 
 // clears any leftover restrictions from a crashed previous session
 // runs before createWindow so a clean state is guaranteed on startup
@@ -273,6 +276,7 @@ app.on("activate", () => {
 });
 
 app.whenReady().then(() => {
+  registerOfflineExamHandlers(() => win);
   cleanupStaleLockdownState(); // undo any restrictions left by a previous crash
   createWindow();
   registerLockdown(); // lockdown starts the moment the window is ready, comment this out for testing without restrictions
