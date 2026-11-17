@@ -21,6 +21,7 @@ import { useRemovalWatcher } from "../../hooks/useRemovalWatcher";
 import { useLiveStateReporter } from "../../hooks/useLiveStateReporter"; 
 import { checkIfRemoved, getSessionStatus } from "../../services/removalService";
 import { useMovementEvents } from "../../hooks/useMovementEvents"; 
+import { useKeystrokeRecorder } from "../../hooks/useKeystrokeRecorder";
 
 import type {
   ExamQuestionScreenProps,
@@ -143,6 +144,13 @@ export function ExamQuestionScreen({
   const liveQuestion = fetchedQuestions[currentIndex]; 
   const reportingEnabled = !isLoading && !removed && fetchedQuestions.length > 0; 
   const processMonitoringEnabled = Boolean(sessionId && !removed && timer.timing?.sessionStatus === "in_progress");
+  const recordKeystrokes = processMonitoringEnabled && rulesLoaded && !isLoading && !error;
+  const { flush: flushKeystrokes } = useKeystrokeRecorder(
+    sessionId,
+    recordKeystrokes && liveQuestion && !liveQuestion.poolDrawId ? liveQuestion.id : null,
+    recordKeystrokes ? liveQuestion?.poolDrawId ?? null : null,
+    answersLocked,
+  );
   useEffect(() => {
     if (!processMonitoringEnabled) return;
     window.ipcRenderer?.setExamProcessMonitoring(true);
@@ -421,7 +429,7 @@ export function ExamQuestionScreen({
     if (!sessionId || submissionInFlightRef.current) return;
     submissionInFlightRef.current = true; 
     try {
-      await flushMovementEvents(1500); 
+      await Promise.all([flushMovementEvents(1500), flushKeystrokes()]);
       const result = await submitSession(
         sessionId,
         timedOutAnswersRef.current ? "timed_out" : "submitted",

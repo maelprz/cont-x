@@ -20,8 +20,8 @@ export function createKeystrokeRecorder(startedAt: number) {
       const now = performance.now();
       const gap = Math.round(now - lastAt); //milliseconds since last event
       lastAt = now;
-      tokens.push(`${gap}:${code}`);
-      lastAt = now;
+      // Modifier releases need to be distinguishable from presses.
+      tokens.push(`${gap}:${code}${isDown ? "" : ":up"}`);
     },
 
     drain(): string | null {

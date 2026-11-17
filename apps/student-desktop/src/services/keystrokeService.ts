@@ -1,15 +1,27 @@
 import { supabase } from "./supabaseClient";
 
+export type KeystrokeQuestion =
+  | { questionId: string; poolDrawId?: never }
+  | { questionId?: never; poolDrawId: string };
+
 export async function logKeystrokeBatch(
   sessionId: string,
-  questionId: string,
-  batch: string, //the compact text from the recorder
+  id: string,
+  question: KeystrokeQuestion,
+  batch: string,
 ): Promise<boolean> {
-  const { error } = await supabase.from("keystroke_logs").insert({
-    session_id: sessionId,
-    question_id: questionId,
-    key_sequence: batch,
-  });
+  const { error } = await supabase.from("keystroke_logs")
+    .insert({
+      id,
+      session_id: sessionId,
+      ...(question.poolDrawId
+        ? { pool_draw_id: question.poolDrawId }
+        : { question_id: question.questionId }),
+      key_sequence: batch,
+    })
+    .abortSignal(AbortSignal.timeout(5_000));
+
+  if (error?.code === "23505") return true; // The earlier insert committed before its response was lost.
 
   if (error) {
     console.error("[keystrokeService] failed to save batch:", error.message); // log the reason, never the keys themselves
