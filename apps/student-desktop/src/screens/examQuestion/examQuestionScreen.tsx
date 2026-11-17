@@ -13,7 +13,7 @@ import { QuestionAnswerSplit } from "../../components/examQuestion/questionAnswe
 import { QuestionMapGrid } from "../../components/examQuestion/questionMapGrid";
 import { CodeEditor } from "../../components/examQuestion/codeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
-import type { SubmittedAnswer } from "../../services/examService";
+import type { SessionTiming, SubmittedAnswer } from "../../services/examService";
 import { countAnsweredQuestions, hasQuestionAnswer } from "../../lib/examProgress";
 import { AnswerChangeTracker } from "../../lib/answerChanges";
 import { useViolationLogger } from "../../hooks/useViolationLogger"; 
@@ -22,6 +22,7 @@ import { useLiveStateReporter } from "../../hooks/useLiveStateReporter";
 import { checkIfRemoved, getSessionStatus } from "../../services/removalService";
 import { useMovementEvents } from "../../hooks/useMovementEvents"; 
 import { useKeystrokeRecorder } from "../../hooks/useKeystrokeRecorder";
+import { finishOfflineExam } from "../../services/offlineExamService";
 
 import type {
   ExamQuestionScreenProps,
@@ -46,6 +47,14 @@ function formatTime(seconds: number): string {
   return `${String(h).padStart(2, "0")}:${String(m).padStart(2, "0")}:${String(s).padStart(2, "0")}`;
 }
 
+function sameExamTiming(left: SessionTiming, right: SessionTiming): boolean {
+  return left.normalDeadline === right.normalDeadline && left.hardDeadline === right.hardDeadline &&
+    left.forceSubmit === right.forceSubmit && left.sessionStatus === right.sessionStatus &&
+    left.classExamStatus === right.classExamStatus && left.allowOvertime === right.allowOvertime &&
+    left.overtimeMinutes === right.overtimeMinutes && left.overtimeDeduction === right.overtimeDeduction &&
+    left.durationMinutes === right.durationMinutes;
+}
+
 export function ExamQuestionScreen({
   onNavigate,
   onFlag,
@@ -54,15 +63,23 @@ export function ExamQuestionScreen({
   onPrevious,
   onNext,
   onSubmit,
+  queueGradedRun,
+  onExamTimingRefreshed,
 }: ExamQuestionScreenProps) {
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
   const savedExam = useExamSessionStore((state) => state.offlineExam);
+  const restoredOffline = useExamSessionStore((state) => state.restoredOffline);
+  const savedTiming = useRef(savedExam ? { timing: savedExam.timing, receivedAt: savedExam.timingReceivedAt } : null);
+  const closed = useRef(false);
+  const [waitingForServer, setWaitingForServer] = useState(false);
+  const [runNotice, setRunNotice] = useState<string | null>(null);
+  const queuedRunId = useRef<string | null>(null);
   const removed = useExamSessionStore((state) => state.removed); // stop reporting once the teacher removed this student
   const questionIdRef = useRef<string | null>(null);
   useViolationLogger(sessionId, questionIdRef); 
-  useRemovalWatcher(sessionId);
+  useRemovalWatcher(savedExam ? null : sessionId);
   const {
     questions: fetchedQuestions,
     isLoading,
@@ -73,9 +90,23 @@ export function ExamQuestionScreen({
   const timedOutAnswersRef = useRef<SubmittedAnswer[] | null>(null);
   const answersLocked = () => submissionInFlightRef.current || timedOutAnswersRef.current !== null;
 
+  const finish = (status: "result" | "removed") => {
+    if (closed.current) return;
+    closed.current = true;
+    if (savedExam) finishOfflineExam({ studentId: savedExam.studentId, sessionId: savedExam.sessionId });
+    if (status === "removed") useExamSessionStore.getState().markRemoved();
+    else {
+      onSubmit?.();
+      navigateTo("examResult");
+    }
+  };
 
   // Retain exactly the answers present at the deadline if the network requires a retry.
   const handleTimeExpired = async () => {
+    if (restoredOffline && Object.keys(answeredAtRef.current).length === 0) {
+      setWaitingForServer(true);
+      return;
+    }
     timedOutAnswersRef.current = buildAnswers();
     setShowSubmitConfirm(false);
     await submitAndLeave();
@@ -90,8 +121,23 @@ export function ExamQuestionScreen({
     onTimeRestored: () => {
       if (submissionInFlightRef.current) return false;
       timedOutAnswersRef.current = null;
+      setWaitingForServer(false);
       clearSubmissionError();
       return true;
+    },
+    onServerTiming: (timing, receivedAt) => {
+      if (!savedExam) return;
+      const key = { studentId: savedExam.studentId, sessionId: savedExam.sessionId };
+      onExamTimingRefreshed?.(key, timing);
+      if (timing.sessionStatus === "removed") { finish("removed"); return; }
+      if (timing.sessionStatus === "submitted" || timing.sessionStatus === "timed_out") { finish("result"); return; }
+      if (!savedTiming.current || !sameExamTiming(savedTiming.current.timing, timing)) {
+        void window.ipcRenderer.updateOfflineTiming(key, timing, receivedAt).then(() => {
+          if (!savedTiming.current || savedTiming.current.receivedAt < receivedAt) {
+            savedTiming.current = { timing, receivedAt };
+          }
+        }).catch(() => { /* Retry this timing update on the next server refresh. */ });
+      }
     },
   }); // real countdown, ticks every second
   const timeLeftSeconds = timer.secondsLeft;
@@ -104,6 +150,7 @@ export function ExamQuestionScreen({
     runError,
     handleRunTests: runTests,
     handleRunCode: runCode,
+    setRunError,
     clearResults,
   } = useCodeExecution();
 
@@ -271,6 +318,8 @@ export function ExamQuestionScreen({
         ? (codeByQuestion[currentQuestionId] ?? question.starterCode ?? "") // what the student already wrote, or the starter code the first time
         : "",
     );
+    setRunNotice(null);
+    queuedRunId.current = null;
     clearResults(); // NEW - don't show the previous question's Run Tests/Run Code output
     // eslint-disable-next-line react-hooks/exhaustive-deps -- deliberately keyed to the question id only (see above)
   }, [currentQuestionId, hasQuestion]);
@@ -327,12 +376,15 @@ export function ExamQuestionScreen({
     if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding") return; // guard, only coding questions can run tests
+    setRunNotice(null);
+    queuedRunId.current = null;
     runTests(
       raw.id,
       localCode,
       raw.programType ?? "cProgram",
       raw.mainCode ?? undefined,
       Boolean(raw.poolDrawId), // a pooled question reads its tests through the pool function
+      savedExam?.visibleTests?.[raw.id],
     );
   };
 
@@ -341,6 +393,26 @@ export function ExamQuestionScreen({
     if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding" || !sessionId) return; // guard, needs a real session to attribute the answer to
+    setRunNotice(null);
+    if (savedExam && queueGradedRun) {
+      clearResults();
+      const request = {
+        studentId: savedExam.studentId, sessionId, operationId: crypto.randomUUID(),
+        questionId: raw.poolDrawId ? null : raw.id, poolDrawId: raw.poolDrawId,
+        requestedAt: new Date().toISOString(), code: localCode,
+      };
+      queuedRunId.current = request.operationId;
+      void queueGradedRun(request).then(() => {
+        if (queuedRunId.current === request.operationId) setRunNotice("Graded run queued.");
+      }).catch(() => {
+        if (queuedRunId.current === request.operationId) setRunError("Could not queue the graded run. Try again.");
+      });
+      return;
+    }
+    if (savedExam && !navigator.onLine) {
+      setRunError("Graded runs are available when the connection returns.");
+      return;
+    }
     runCode(
       sessionId,
       raw.id,
@@ -441,17 +513,28 @@ export function ExamQuestionScreen({
         // Removal has its own screen. A failed status check must retain the exam too.
         try {
           const status = await getSessionStatus(sessionId);
-          if (status === "submitted" || status === "timed_out") { onSubmit?.(); navigateTo("examResult"); return; }
-          if (status === "removed") await checkIfRemoved(sessionId);
+          if (status === "submitted" || status === "timed_out") { finish("result"); return; }
+          if (status === "removed") {
+            if (savedExam) finish("removed");
+            else await checkIfRemoved(sessionId);
+          }
         } catch { /* the submission error stays visible */ }
         return;
       }
-      onSubmit?.();
-      navigateTo("examResult");
+      finish("result");
     } finally {
       submissionInFlightRef.current = false;
     }
   };
+
+  if (waitingForServer) {
+    return (
+      <div className="h-screen flex flex-col gap-4 items-center justify-center text-[var(--text-inverted)] bg-[var(--bg-sidebar)]">
+        <p role="status">Time has expired. Reconnect to check this attempt with the server.</p>
+        <button type="button" className={footerButtonClass} onClick={timer.retry}>Check again</button>
+      </div>
+    );
+  }
 
   // A settings failure must not silently turn off sequential or other exam rules.
   if (!rulesLoaded) {
@@ -642,6 +725,7 @@ export function ExamQuestionScreen({
 
   const codePane = codingQ && (
     <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
+      {runNotice && <p role="status" className="px-4 py-2 text-sm">{runNotice}</p>}
       <CodeEditor
         code={localCode}
         language={codingQ.language ?? "c"}
@@ -673,7 +757,7 @@ export function ExamQuestionScreen({
             </span>
             {savedExam && (
               <span role="status" className="text-xs text-[var(--text-inverted-secondary)]">
-                Exam downloaded
+                Offline ready
               </span>
             )}
           </div>

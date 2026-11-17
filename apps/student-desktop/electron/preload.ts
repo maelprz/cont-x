@@ -1,6 +1,6 @@
 import { ipcRenderer, contextBridge } from "electron";
 import type { ViolationEvent } from "../src/types/violationEvent";
-import type { OfflineExamSnapshot } from "../src/types/offlineExam";
+import type { OfflineAttemptKey, OfflineExamSnapshot } from "../src/types/offlineExam";
 
 // --------- Expose some API to the Renderer process ---------
 contextBridge.exposeInMainWorld("ipcRenderer", {
@@ -43,4 +43,10 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
     ipcRenderer.invoke("check-offline-exam-storage"),
   saveOfflineExam: (snapshot: OfflineExamSnapshot): Promise<void> =>
     ipcRenderer.invoke("save-offline-exam", snapshot),
+  loadOfflineExam: (key: OfflineAttemptKey): Promise<OfflineExamSnapshot | null> =>
+    ipcRenderer.invoke("load-offline-exam", key),
+  updateOfflineTiming: (key: OfflineAttemptKey, timing: OfflineExamSnapshot["timing"], receivedAt: number): Promise<void> =>
+    ipcRenderer.invoke("update-offline-timing", key, timing, receivedAt),
+  deleteOfflineExam: (key: OfflineAttemptKey): Promise<void> =>
+    ipcRenderer.invoke("delete-offline-exam", key),
 });

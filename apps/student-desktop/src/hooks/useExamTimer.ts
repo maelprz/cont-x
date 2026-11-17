@@ -6,6 +6,7 @@ export interface ExamTimerOptions {
   rulesReady: boolean;
   allowOvertime?: boolean;
   onTimeRestored?: () => boolean | void;
+  onServerTiming?: (timing: SessionTiming, receivedAt: number) => void;
   savedExam?: Pick<OfflineExamSnapshot, "timing" | "timingReceivedAt">;
 }
 
@@ -28,6 +29,7 @@ export function useExamTimer(sessionId: string | null, onExpire: () => void,
     if (!sessionId) return;
     function tick() {
       if (!active || !snapshot) return;
+      if (savedExam && snapshot.sessionStatus !== "in_progress") return;
       const now = Date.parse(snapshot.serverNow) + Date.now() - receivedAt;
       const normalLeft = Math.ceil((Date.parse(snapshot.normalDeadline) - now) / 1000);
       const mustFinish = snapshot.forceSubmit || now >= Date.parse(snapshot.hardDeadline);
@@ -43,13 +45,14 @@ export function useExamTimer(sessionId: string | null, onExpire: () => void,
       if (!expired) setSecondsLeft(normalLeft);
     }
     async function refresh() {
-      if (fetching || !active) return;
+      if (fetching || !active || (savedExam && !navigator.onLine)) return;
       fetching = true;
       try {
-        const next = await getSessionTiming(sessionId!);
+        const next = await getSessionTiming(sessionId!, savedExam ? AbortSignal.timeout(8_000) : undefined);
         if (!active) return;
         snapshot = next; receivedAt = Date.now();
         setTiming(next); setError(null);
+        callbacks.current.options.onServerTiming?.(next, receivedAt);
         if (!unsubscribe) unsubscribe = subscribeSessionTiming(next.classExamId, () => { void refresh(); });
         tick();
       } catch {
@@ -60,7 +63,15 @@ export function useExamTimer(sessionId: string | null, onExpire: () => void,
     void refresh();
     const clock = setInterval(tick, 1000);
     const polling = setInterval(refresh, 2500);
-    return () => { active = false; clearInterval(clock); clearInterval(polling); unsubscribe?.(); };
+    const onOnline = () => void refresh();
+    window.addEventListener("online", onOnline);
+    return () => {
+      active = false;
+      clearInterval(clock);
+      clearInterval(polling);
+      window.removeEventListener("online", onOnline);
+      unsubscribe?.();
+    };
   }, [sessionId, savedExam, reload]);
   return { secondsLeft, timing, error, retry: () => setReload(value => value + 1) };
 }

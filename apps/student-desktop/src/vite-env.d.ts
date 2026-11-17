@@ -11,6 +11,9 @@ interface Window {
     endExamAppCheck: () => void;
     checkOfflineExamStorage: () => Promise<boolean>;
     saveOfflineExam: (snapshot: import("./types/offlineExam").OfflineExamSnapshot) => Promise<void>;
+    loadOfflineExam: (key: import("./types/offlineExam").OfflineAttemptKey) => Promise<import("./types/offlineExam").OfflineExamSnapshot | null>;
+    updateOfflineTiming: (key: import("./types/offlineExam").OfflineAttemptKey, timing: import("./services/examService").SessionTiming, receivedAt: number) => Promise<void>;
+    deleteOfflineExam: (key: import("./types/offlineExam").OfflineAttemptKey) => Promise<void>;
     onViolation: (callback: (payload: import("./types/violationEvent").ViolationEvent) => void) => () => void;
   };
 }

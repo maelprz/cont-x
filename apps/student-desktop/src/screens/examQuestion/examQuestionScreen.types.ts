@@ -1,3 +1,6 @@
+import type { SessionTiming } from "../../services/examService";
+import type { OfflineAttemptKey, OfflineGradedRunRequest } from "../../types/offlineExam";
+
 // ---------------------------------------------------------------------------
 // Question types
 // ---------------------------------------------------------------------------
@@ -65,6 +68,8 @@ export type Question = CodingQuestion | MCQQuestion | FITBQuestion;
 // ---------------------------------------------------------------------------
 
 export interface ExamQuestionScreenProps {
+  queueGradedRun?: (request: OfflineGradedRunRequest) => Promise<void>;
+  onExamTimingRefreshed?: (key: OfflineAttemptKey, timing: SessionTiming) => void;
   // Exam-level
   examTitle?: string;
   timeLeftSeconds?: number;

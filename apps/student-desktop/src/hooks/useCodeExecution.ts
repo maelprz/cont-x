@@ -1,6 +1,6 @@
 import { useState } from 'react';
 import { runVisibleTests, runAllTestsAndScore } from '../services/codeExecutionService';
-import type { RunOutcome } from '../services/codeExecutionService';
+import type { RunOutcome, VisibleTestCase } from '../services/codeExecutionService';
 
 // Everything the exam question screen needs to drive the code editor buttons
 export function useCodeExecution() {
@@ -15,13 +15,14 @@ export function useCodeExecution() {
     code: string,
     programType: 'cFunction' | 'cProgram',
     mainCode: string | undefined,
-    pooled = false // true for a question drawn from a random pool
+    pooled = false, // true for a question drawn from a random pool
+    cachedTests?: VisibleTestCase[],
   ) => {
     setIsRunning(true);
     setRunError(null);
     setCodeResult(null); // clear the other panel's result so only one shows at a time
     try {
-      const result = await runVisibleTests(questionId, code, programType, mainCode, pooled);
+      const result = await runVisibleTests(questionId, code, programType, mainCode, pooled, cachedTests);
       setTestsResult(result);
     } catch (err) {
       setRunError(err instanceof Error ? err.message : 'Could not run tests.');
@@ -79,6 +80,7 @@ export function useCodeExecution() {
     runError,
     handleRunTests,
     handleRunCode,
+    setRunError,
     clearResults,
   };
 }

@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { FunctionsHttpError } from "@supabase/supabase-js"; // lets us read the real error message from an edge function
+import { forgetOfflineAttempt } from "./offlineExamService";
 
 // Shape of a logged-in student.
 // Desktop app only ever authenticates students —
@@ -82,6 +83,7 @@ export async function login(
 export async function logout(): Promise<void> {
   const { error } = await supabase.auth.signOut();
   if (error) throw new Error(error.message);
+  forgetOfflineAttempt();
 }
 
 // Checks for an existing session when the app first loads.

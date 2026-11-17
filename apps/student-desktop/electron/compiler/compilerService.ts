@@ -65,7 +65,9 @@ export function compileSource(sourceCode: string): CompileResult {
 
   if (proc.status !== 0) {
     cleanupDir(workDir);
-    return { success: false, stderr: proc.stderr ?? proc.error?.message ?? '' };
+    const stderr = proc.stderr || proc.error?.message ||
+      `GCC stopped before producing a program (${proc.signal ?? proc.status ?? "unknown error"}).`;
+    return { success: false, stderr };
   }
 
   return { success: true, binaryPath, stderr: proc.stderr ?? '' };

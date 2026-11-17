@@ -15,4 +15,17 @@ if (!supabaseUrl || !supabaseAnonKey) {
 
 // Single shared client for the entire renderer — every service file imports this,
 // never creates its own instance.
-export const supabase = createClient(supabaseUrl, supabaseAnonKey);
+// Keep the SDK's project-scoped storage key so offline startup can identify the cached owner.
+const authStorageKey = `sb-${new URL(supabaseUrl).hostname.split(".")[0]}-auth-token`;
+export const supabase = createClient(supabaseUrl, supabaseAnonKey, {
+  auth: { storageKey: authStorageKey },
+});
+
+export function getCachedSessionOwner(): string | null {
+  try {
+    const id: unknown = JSON.parse(localStorage.getItem(authStorageKey) ?? "null")?.user?.id;
+    return typeof id === "string" ? id : null;
+  } catch {
+    return null;
+  }
+}
