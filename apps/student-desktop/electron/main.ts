@@ -51,7 +51,6 @@ let isExiting = false;
 let stopProcessMonitor: (() => void) | undefined;
 let preflightScan: AbortController | undefined;
 let detectedApps: string[] = [];
-let restorePreflightLockdown: (() => void) | undefined;
 
 function stopExamProcessMonitoring() {
   stopProcessMonitor?.();
@@ -135,8 +134,6 @@ function endExamAppCheck() {
   preflightScan?.abort();
   preflightScan = undefined;
   detectedApps = [];
-  restorePreflightLockdown?.();
-  restorePreflightLockdown = undefined;
 }
 
 ipcMain.handle("check-exam-apps", async (event, closeApps: unknown) => {
@@ -150,25 +147,10 @@ ipcMain.handle("check-exam-apps", async (event, closeApps: unknown) => {
   const scan = new AbortController();
   preflightScan = scan;
   try {
-    const remaining = await checkExamApps(scan.signal, closeApps ? detectedApps : []);
+    const remaining = await checkExamApps(scan.signal, closeApps ? detectedApps : [], !!VITE_DEV_SERVER_URL);
     if (scan.signal.aborted || examWindow.isDestroyed()) {
       throw new Error("The exam app check ended.");
     }
-    if (remaining.length > 0 && !restorePreflightLockdown) {
-      // Let the student switch to save prompts and quit apps from the tray.
-      const wasKiosk = examWindow.isKiosk();
-      const wasOnTop = examWindow.isAlwaysOnTop();
-      restorePreflightLockdown = () => {
-        if (examWindow.isDestroyed() || isExiting) return;
-        examWindow.setKiosk(wasKiosk);
-        examWindow.setAlwaysOnTop(wasOnTop, "screen-saver");
-        registerLockdown();
-      };
-      unregisterLockdown();
-      examWindow.setKiosk(false);
-      examWindow.setAlwaysOnTop(false);
-    }
-
     if (remaining.length === 0) endExamAppCheck();
     else detectedApps = remaining;
     return remaining;
