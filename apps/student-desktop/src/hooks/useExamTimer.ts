@@ -10,7 +10,7 @@ export interface ExamTimerOptions {
   savedExam?: Pick<OfflineExamSnapshot, "timing" | "timingReceivedAt">;
 }
 
-export function useExamTimer(sessionId: string | null, onExpire: () => void,
+export function useExamTimer(sessionId: string | null, onExpire: (deadlineLocalMs: number) => void,
   options: ExamTimerOptions = { rulesReady: true }) {
   const [secondsLeft, setSecondsLeft] = useState<number | null>(null);
   const [timing, setTiming] = useState<SessionTiming | null>(null);
@@ -35,7 +35,11 @@ export function useExamTimer(sessionId: string | null, onExpire: () => void,
       const mustFinish = snapshot.forceSubmit || now >= Date.parse(snapshot.hardDeadline);
       if (mustFinish && callbacks.current.options.rulesReady) {
         setSecondsLeft(snapshot.allowOvertime ? Math.min(normalLeft, 0) : 0);
-        if (!expired) { expired = true; callbacks.current.onExpire(); }
+        if (!expired) {
+          expired = true;
+          const deadlineLocalMs = receivedAt + Date.parse(snapshot.hardDeadline) - Date.parse(snapshot.serverNow);
+          callbacks.current.onExpire(Math.min(Date.now(), deadlineLocalMs));
+        }
         return;
       }
       if (expired && !mustFinish && snapshot.sessionStatus === "in_progress") {

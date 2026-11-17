@@ -59,18 +59,29 @@ function stopExamProcessMonitoring() {
 }
 
 ipcMain.on("set-exam-process-monitoring", (event, enabled: unknown) => {
-  if (!win || event.senderFrame !== win.webContents.mainFrame || typeof enabled !== "boolean") return;
+  if (
+    !win ||
+    event.senderFrame !== win.webContents.mainFrame ||
+    typeof enabled !== "boolean"
+  )
+    return;
   if (!enabled) {
     stopExamProcessMonitoring();
-  } else if (process.platform === "win32" && !isExiting && !stopProcessMonitor) {
+  } else if (
+    process.platform === "win32" &&
+    !isExiting &&
+    !stopProcessMonitor
+  ) {
     endExamAppCheck();
-    stopProcessMonitor = startExamProcessMonitor(({ appName, executableName }) => {
-      win?.webContents.send("violation-detected", {
-        violationType: "disallowed_process",
-        occurredAt: new Date().toISOString(),
-        process: { appName, executableName },
-      });
-    });
+    stopProcessMonitor = startExamProcessMonitor(
+      ({ appName, executableName }) => {
+        win?.webContents.send("violation-detected", {
+          violationType: "disallowed_process",
+          occurredAt: new Date().toISOString(),
+          process: { appName, executableName },
+        });
+      },
+    );
   }
 });
 
@@ -139,8 +150,14 @@ function endExamAppCheck() {
 
 ipcMain.handle("check-exam-apps", async (event, closeApps: unknown) => {
   const examWindow = win;
-  if (!examWindow || event.senderFrame !== examWindow.webContents.mainFrame ||
-      isExiting || stopProcessMonitor || preflightScan || typeof closeApps !== "boolean") {
+  if (
+    !examWindow ||
+    event.senderFrame !== examWindow.webContents.mainFrame ||
+    isExiting ||
+    stopProcessMonitor ||
+    preflightScan ||
+    typeof closeApps !== "boolean"
+  ) {
     throw new Error("The exam app check is unavailable.");
   }
   if (!autoCloseDisallowedApps) return [];
@@ -148,7 +165,11 @@ ipcMain.handle("check-exam-apps", async (event, closeApps: unknown) => {
   const scan = new AbortController();
   preflightScan = scan;
   try {
-    const remaining = await checkExamApps(scan.signal, closeApps ? detectedApps : [], !!VITE_DEV_SERVER_URL);
+    const remaining = await checkExamApps(
+      scan.signal,
+      closeApps ? detectedApps : [],
+      !!VITE_DEV_SERVER_URL,
+    );
     if (scan.signal.aborted || examWindow.isDestroyed()) {
       throw new Error("The exam app check ended.");
     }
@@ -182,7 +203,11 @@ function createWindow() {
   });
 
   // keeps the app above all other windows at the highest z-order level
-  installEditorSandbox(win, VITE_DEV_SERVER_URL || pathToFileURL(path.join(RENDERER_DIST, "index.html")).href);
+  installEditorSandbox(
+    win,
+    VITE_DEV_SERVER_URL ||
+      pathToFileURL(path.join(RENDERER_DIST, "index.html")).href,
+  );
   win.setAlwaysOnTop(true, "screen-saver"); //comment this out for testing without restrictions
 
   // if somehow minimized (e.g. via a hotkey we didn't catch), restore immediately
@@ -207,12 +232,15 @@ function createWindow() {
   win.webContents.on("did-finish-load", () => {
     win?.webContents.send("main-process-message", new Date().toLocaleString());
   });
-  win.webContents.on("did-start-navigation", (_event, _url, isInPlace, isMainFrame) => {
-    if (isMainFrame && !isInPlace) {
-      stopExamProcessMonitoring();
-      endExamAppCheck();
-    }
-  });
+  win.webContents.on(
+    "did-start-navigation",
+    (_event, _url, isInPlace, isMainFrame) => {
+      if (isMainFrame && !isInPlace) {
+        stopExamProcessMonitoring();
+        endExamAppCheck();
+      }
+    },
+  );
   win.webContents.on("render-process-gone", stopExamProcessMonitoring);
   win.webContents.on("render-process-gone", endExamAppCheck);
   win.on("closed", stopExamProcessMonitoring);
@@ -273,5 +301,5 @@ app.whenReady().then(() => {
   cleanupStaleLockdownState(); // undo any restrictions left by a previous crash
   createWindow();
   registerLockdown(); // lockdown starts the moment the window is ready, comment this out for testing without restrictions
-  registerCompilerHandlers(() => win); // only the app's main frame can request compilation
+  registerCompilerHandlers(); // sets up the run-test-cases IPC channel
 });

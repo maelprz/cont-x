@@ -13,6 +13,10 @@ interface Window {
     loadOfflineExam: (key: import("./types/offlineExam").OfflineAttemptKey) => Promise<import("./types/offlineExam").OfflineExamSnapshot | null>;
     updateOfflineTiming: (key: import("./types/offlineExam").OfflineAttemptKey, timing: import("./services/examService").SessionTiming, receivedAt: number) => Promise<void>;
     deleteOfflineExam: (key: import("./types/offlineExam").OfflineAttemptKey) => Promise<void>;
+    saveOfflineDraft: (key: import("./types/offlineExam").OfflineAttemptKey, draft: import("./types/offlineExam").OfflineExamDraft) => Promise<void>;
+    enqueueOfflineOperation: (key: import("./types/offlineExam").OfflineAttemptKey, operation: import("./types/offlineExam").OfflineOperation) => Promise<void>;
+    listOfflineOperations: (key: import("./types/offlineExam").OfflineAttemptKey) => Promise<import("./types/offlineExam").OfflineOperation[]>;
+    acknowledgeOfflineOperation: (key: import("./types/offlineExam").OfflineAttemptKey, operation: import("./types/offlineExam").OfflineOperation) => Promise<void>;
     onViolation: (callback: (payload: import("./types/violationEvent").ViolationEvent) => void) => () => void;
   };
 }
