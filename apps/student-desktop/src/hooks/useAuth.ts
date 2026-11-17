@@ -1,4 +1,7 @@
 import { useAuthStore } from "../stores/useAuthStore";
+import { useExamSessionStore } from "../stores/useExamSessionStore";
+import { useRouterLogic } from "../router/routerLogic";
+import { getOfflineResumeIdentity } from "../services/offlineExamService";
 import {
   login as loginService,
   logout as logoutService,
@@ -20,6 +23,16 @@ export function useAuth(): UseAuthReturn {
 
   async function login(idNumber: string, password: string) {
     const loggedInUser = await loginService(idNumber, password);
+    const resume = getOfflineResumeIdentity();
+    if (!loggedInUser.mustChangePassword && resume?.user.id === loggedInUser.id) {
+      const exam = await window.ipcRenderer.loadOfflineExam({
+        studentId: loggedInUser.id, sessionId: resume.sessionId,
+      });
+      if (exam) {
+        useExamSessionStore.getState().restoreOfflineExam(exam);
+        useRouterLogic.getState().navigateTo("examQuestion");
+      }
+    }
     setUser(loggedInUser);
   }
 

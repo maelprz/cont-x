@@ -10,6 +10,7 @@ import { useRouterLogic } from "../../router/routerLogic";
 import { AppHeader } from "../../components/layout/appHeader";
 import { SessionVerificationModal } from "../../components/modals/sessionVerificationModal";
 import type { OfflineExamSnapshot } from "../../types/offlineExam";
+import { rememberOfflineAttempt } from "../../services/offlineExamService";
 
 // ---------------------------------------------------------------------------
 // Sub-components
@@ -109,6 +110,7 @@ export function ExamConfirmationScreen({
   };
 
   const handleVerificationConfirm = (sessionId: string, snapshot: OfflineExamSnapshot | null) => {
+    if (snapshot && user) rememberOfflineAttempt(user, sessionId);
     setSessionId(sessionId, snapshot);
     onStartExam?.();
     setIsVerificationOpen(false);

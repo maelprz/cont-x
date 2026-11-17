@@ -1,9 +1,11 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import type { ComponentType } from "react";
 import type { ScreenName } from "./route";
 import { useRouterLogic } from "./routerLogic";
 import { useAuthStore } from "../stores/useAuthStore";
-import { logout } from "../services/authService";
+import { isAuthRetryableFetchError } from "@supabase/supabase-js";
+import { getCachedSessionOwner, supabase } from "../services/supabaseClient";
+import { forgetOfflineAttempt, getOfflineResumeIdentity } from "../services/offlineExamService";
 import { LoginScreen } from "../screens/login/loginScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
 import { ExamConfirmationScreen } from "../screens/examConfirmation/examConfirmationScreen";
@@ -36,23 +38,49 @@ export function AppRouter() {
   const currentScreen = useRouterLogic((state) => state.currentScreen);
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const { user, isLoading, setUser, setIsLoading } = useAuthStore();
+  const [resumeError, setResumeError] = useState(false);
+  const [resumeRetry, setResumeRetry] = useState(0);
   const removed = useExamSessionStore((state) => state.removed); // true after a teacher removes the student
-  // Runs once on mount — checks if a session already exists
-  // (e.g. student reopens the app without logging out).
-  // This is the ONLY place the session check happens.
+  // Resume a verified offline attempt before applying the normal login route.
   useEffect(() => {
+    let active = true;
     async function checkSession() {
       try {
-        logout();
+        const resume = getOfflineResumeIdentity();
+        if (resume) {
+          const matchingCachedOwner = getCachedSessionOwner() === resume.user.id;
+          let ownsAttempt = matchingCachedOwner && !navigator.onLine;
+          if (!ownsAttempt) {
+            const { data, error } = await supabase.auth.getSession();
+            ownsAttempt = data.session?.user.id === resume.user.id ||
+              Boolean(matchingCachedOwner && !data.session && error && isAuthRetryableFetchError(error));
+          }
+          if (ownsAttempt) {
+            const exam = await window.ipcRenderer.loadOfflineExam({
+              studentId: resume.user.id, sessionId: resume.sessionId,
+            });
+            if (!active) return;
+            if (exam) {
+              useExamSessionStore.getState().restoreOfflineExam(exam);
+              setUser(resume.user);
+              navigateTo("examQuestion");
+              return;
+            }
+          }
+          if (active && ownsAttempt) forgetOfflineAttempt();
+        }
+        await supabase.auth.signOut({ scope: "local" });
+        if (active) setUser(null);
       } catch {
-        setUser(null);
+        if (active) setResumeError(true);
       } finally {
-        setIsLoading(false); // done — router can now decide which screen to show
+        if (active) setIsLoading(false);
       }
     }
 
     checkSession();
-  }, []); // empty array — once on mount only
+    return () => { active = false; };
+  }, [resumeRetry, navigateTo, setUser, setIsLoading]);
 
   // Runs whenever user or isLoading changes —
   // this is what actually does the redirect after checkSession finishes.
@@ -88,6 +116,19 @@ export function AppRouter() {
         }}
       >
         INITIALIZING...
+      </div>
+    );
+  }
+
+  if (resumeError) {
+    return (
+      <div className="h-screen flex flex-col items-center justify-center gap-4">
+        <p role="alert">Could not reopen the saved exam. Check that local MySQL is running.</p>
+        <button type="button" onClick={() => {
+          setResumeError(false);
+          setIsLoading(true);
+          setResumeRetry((count) => count + 1);
+        }}>Retry</button>
       </div>
     );
   }

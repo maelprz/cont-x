@@ -3,6 +3,7 @@ import type { SessionVerificationModalProps, VerificationStatus } from './sessio
 import { verifySessionCode } from '../../services/examService';
 import { prepareOfflineExam } from '../../services/offlineExamService';
 import { useAuthStore } from '../../stores/useAuthStore';
+import { useExamSessionStore } from '../../stores/useExamSessionStore';
 import { autoCloseDisallowedApps } from '../../../shared/examAppPolicy';
 
 export function SessionVerificationModal({
@@ -114,7 +115,8 @@ export function SessionVerificationModal({
       let snapshot = null;
       if (offlineStorageAvailable && studentId) {
         setStatus('saving_exam');
-        snapshot = await prepareOfflineExam(studentId, sessionId, examId);
+        const { examId: id, examTitle: title } = useExamSessionStore.getState();
+        snapshot = await prepareOfflineExam(studentId, sessionId, examId, { id, title });
       }
       onConfirm?.(sessionId, snapshot);
     } catch (err) {

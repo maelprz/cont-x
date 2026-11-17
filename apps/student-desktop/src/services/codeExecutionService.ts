@@ -1,5 +1,12 @@
 import { supabase } from '../services/supabaseClient';
 
+export interface VisibleTestCase {
+  id: string;
+  input: string;
+  expected_output: string;
+  time_limit_ms: number;
+}
+
 // One result row for a single test case run
 export interface TestCaseResult {
   testCaseId: string;
@@ -77,7 +84,7 @@ async function loadTestCases(
   questionId: string,
   pooled: boolean,
   onlyVisible: boolean,
-): Promise<{ id: string; input: string; expected_output: string; time_limit_ms: number }[]> {
+): Promise<VisibleTestCase[]> {
   if (pooled) {
     const { data, error } = await supabase.rpc('get_pool_draw_test_cases', {
       p_draw_id: questionId,
@@ -97,6 +104,10 @@ async function loadTestCases(
   return data;
 }
 
+export function loadVisibleTestCases(questionId: string, pooled: boolean): Promise<VisibleTestCase[]> {
+  return loadTestCases(questionId, pooled, true);
+}
+
 // Run Tests: checks only the teacher's visible test cases
 // Pure feedback for the student, no Supabase writes, no penalty
 export async function runVisibleTests(
@@ -104,9 +115,10 @@ export async function runVisibleTests(
   code: string,
   programType: 'cFunction' | 'cProgram',
   mainCode: string | undefined,
-  pooled = false // true when questionId is a pooled question's draw id
+  pooled = false, // true when questionId is a pooled question's draw id
+  cachedTests?: VisibleTestCase[],
 ): Promise<RunOutcome> {
-  const testCases = await loadTestCases(questionId, pooled, true);
+  const testCases = cachedTests ?? await loadVisibleTestCases(questionId, pooled);
 
   return window.ipcRenderer.invoke('run-test-cases', {
     code,

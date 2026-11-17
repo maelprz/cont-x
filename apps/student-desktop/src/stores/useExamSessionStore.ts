@@ -10,6 +10,8 @@ interface ExamSessionState {
   attemptsRemaining: number | null;
   sessionId: string | null;
   offlineExam: OfflineExamSnapshot | null;
+  restoredOffline: boolean;
+  restoreOfflineExam: (exam: OfflineExamSnapshot) => void;
   setExam: (exam: {
     id: string;
     classExamId: string;
@@ -31,6 +33,16 @@ export const useExamSessionStore = create<ExamSessionState>((set) => ({
   attemptsRemaining: null,
   sessionId: null,
   offlineExam: null,
+  restoredOffline: false,
+  restoreOfflineExam: (exam) => set({
+    examId: exam.examId ?? null,
+    classExamId: exam.timing.classExamId,
+    examTitle: exam.title ?? "Exam",
+    sessionId: exam.sessionId,
+    offlineExam: exam,
+    restoredOffline: true,
+    removed: false,
+  }),
   setExam: (exam) =>
     set({
       examId: exam.id, // save the exam id for loading questions
@@ -39,7 +51,7 @@ export const useExamSessionStore = create<ExamSessionState>((set) => ({
       examStatus: exam.status ?? null, // status may be missing, so default to null
       attemptsRemaining: exam.attemptsRemaining, // save for the Attempts Left card
     }),
-  setSessionId: (sessionId, offlineExam = null) => set({ sessionId, offlineExam }),
+  setSessionId: (sessionId, offlineExam = null) => set({ sessionId, offlineExam, restoredOffline: false }),
   removed: false,
   markRemoved: () => set({ removed: true }),
   reset: () =>
@@ -51,6 +63,7 @@ export const useExamSessionStore = create<ExamSessionState>((set) => ({
       attemptsRemaining: null,
       sessionId: null,
       offlineExam: null,
+      restoredOffline: false,
       removed: false,
     }), // wipe on logout
 }));
