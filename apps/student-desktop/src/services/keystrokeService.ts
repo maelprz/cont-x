@@ -9,6 +9,7 @@ export async function logKeystrokeBatch(
   id: string,
   question: KeystrokeQuestion,
   batch: string,
+  loggedAt?: string,
 ): Promise<boolean> {
   const { error } = await supabase.from("keystroke_logs")
     .insert({
@@ -18,6 +19,7 @@ export async function logKeystrokeBatch(
         ? { pool_draw_id: question.poolDrawId }
         : { question_id: question.questionId }),
       key_sequence: batch,
+      ...(loggedAt ? { logged_at: loggedAt } : {}),
     })
     .abortSignal(AbortSignal.timeout(5_000));
 

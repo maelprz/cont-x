@@ -22,7 +22,10 @@ import { useLiveStateReporter } from "../../hooks/useLiveStateReporter";
 import { checkIfRemoved, getSessionStatus } from "../../services/removalService";
 import { useMovementEvents } from "../../hooks/useMovementEvents"; 
 import { useKeystrokeRecorder } from "../../hooks/useKeystrokeRecorder";
+import { useOfflineDraft } from "../../hooks/useOfflineDraft";
+import { useOfflineSync } from "../../hooks/useOfflineSync";
 import { finishOfflineExam } from "../../services/offlineExamService";
+import type { OfflineExamSnapshot, OfflineSubmission } from "../../types/offlineExam";
 
 import type {
   ExamQuestionScreenProps,
@@ -55,6 +58,13 @@ function sameExamTiming(left: SessionTiming, right: SessionTiming): boolean {
     left.durationMinutes === right.durationMinutes;
 }
 
+function localDeadline(snapshot?: Pick<OfflineExamSnapshot, "timing" | "timingReceivedAt"> | null): number {
+  if (!snapshot) return Infinity;
+  const { timing, timingReceivedAt } = snapshot;
+  const deadline = timingReceivedAt + Date.parse(timing.hardDeadline) - Date.parse(timing.serverNow);
+  return timing.forceSubmit ? Math.min(timingReceivedAt, deadline) : deadline;
+}
+
 export function ExamQuestionScreen({
   onNavigate,
   onFlag,
@@ -69,13 +79,18 @@ export function ExamQuestionScreen({
   const examTitle = useExamSessionStore((state) => state.examTitle) ?? ""; // real exam title
   const sessionId = useExamSessionStore((state) => state.sessionId); // real session id, needed for the timer
   const savedExam = useExamSessionStore((state) => state.offlineExam);
-  const restoredOffline = useExamSessionStore((state) => state.restoredOffline);
+  const draft = savedExam?.draft;
+  const deadlineRef = useRef(localDeadline(savedExam));
   const savedTiming = useRef(savedExam ? { timing: savedExam.timing, receivedAt: savedExam.timingReceivedAt } : null);
   const closed = useRef(false);
   const [waitingForServer, setWaitingForServer] = useState(false);
+  const [pendingSubmission, setPendingSubmission] = useState(Boolean(savedExam?.pendingSubmission));
+  const [submissionStored, setSubmissionStored] = useState(Boolean(savedExam?.pendingSubmission));
+  const pendingRef = useRef<OfflineSubmission | null>(savedExam?.pendingSubmission ?? null);
+  const [runNotice, setRunNotice] = useState<string | null>(null);
+  const queuedRunId = useRef<string | null>(null);
   const removed = useExamSessionStore((state) => state.removed); // stop reporting once the teacher removed this student
   const questionIdRef = useRef<string | null>(null);
-  useViolationLogger(sessionId, questionIdRef); 
   useRemovalWatcher(savedExam ? null : sessionId);
   const {
     questions: fetchedQuestions,
@@ -86,6 +101,8 @@ export function ExamQuestionScreen({
   const submissionInFlightRef = useRef(false);
   const timedOutAnswersRef = useRef<SubmittedAnswer[] | null>(null);
   const answersLocked = () => submissionLocked || submissionInFlightRef.current || timedOutAnswersRef.current !== null;
+  const answersLocked = () => closed.current || Boolean(pendingRef.current) ||
+    submissionInFlightRef.current || timedOutAnswersRef.current !== null || Date.now() >= deadlineRef.current;
 
   const finish = (status: "result" | "removed") => {
     if (closed.current) return;
@@ -105,8 +122,12 @@ export function ExamQuestionScreen({
       return;
     }
     timedOutAnswersRef.current = savedExam?.gradingState?.submission?.answers ?? buildAnswers();
+  const handleTimeExpired = async (deadlineLocalMs: number) => {
+    if (savedExam && (closed.current || pendingRef.current)) return;
+    timedOutAnswersRef.current = buildAnswers(deadlineLocalMs);
     setShowSubmitConfirm(false);
-    await submitAndLeave();
+    if (savedExam) await saveSubmission("timed_out", timedOutAnswersRef.current, deadlineLocalMs);
+    else await submitAndLeave();
   };
 
   const { rules, isLoaded: rulesLoaded, error: rulesError, retry: retryRules } = useSessionRules(sessionId, savedExam?.rules);
@@ -116,14 +137,14 @@ export function ExamQuestionScreen({
     rulesReady: rulesLoaded,
     savedExam: savedExam ?? undefined,
     onTimeRestored: () => {
-      if (submissionInFlightRef.current) return false;
+      if (submissionInFlightRef.current || pendingRef.current) return false;
       timedOutAnswersRef.current = null;
-      setWaitingForServer(false);
       clearSubmissionError();
       return true;
     },
     onServerTiming: (timing, receivedAt) => {
       if (!savedExam) return;
+      deadlineRef.current = localDeadline({ timing, timingReceivedAt: receivedAt });
       const key = { studentId: savedExam.studentId, sessionId: savedExam.sessionId };
       onExamTimingRefreshed?.(key, timing);
       if (timing.sessionStatus === "removed") { finish("removed"); return; }
@@ -147,36 +168,58 @@ export function ExamQuestionScreen({
     runError,
     handleRunTests: runTests,
     handleRunCode: runCode,
+    setCodeResult,
     clearResults,
   } = useCodeExecution();
 
+  const sync = useOfflineSync(savedExam, (outcome) => {
+    if (outcome !== "extended") {
+      finish(outcome);
+      return;
+    }
+    pendingRef.current = null;
+    timedOutAnswersRef.current = null;
+    setPendingSubmission(false);
+    setSubmissionStored(false);
+  }, (id, result) => {
+    if (queuedRunId.current !== id) return;
+    queuedRunId.current = null;
+    setRunNotice(null);
+    setCodeResult(result);
+  }, () => setSubmissionStored(true));
+  const queueOffline = savedExam ? sync.enqueue : undefined;
+  useViolationLogger(pendingSubmission ? null : sessionId, questionIdRef, queueOffline);
+
   // Tracks which question is currently shown, by position in the loaded list.
-  const [currentIndex, setCurrentIndex] = useState(0);
+  const [currentIndex, setCurrentIndex] = useState(draft?.currentIndex ?? 0);
   // WBS 6.7: how long the student spends on each question (only while it is on screen and the window is in front)
-  const { getTimes } = useQuestionTimeTracker(fetchedQuestions[currentIndex]?.id ?? null);
+  const { getTimes, getTimesMs } = useQuestionTimeTracker(
+    pendingSubmission ? null : fetchedQuestions[currentIndex]?.id ?? null, draft?.questionTimesMs,
+  );
   const [showSubmitConfirm, setShowSubmitConfirm] = useState(false); // the "are you sure?" step before submitting
   // The output panel height is kept here so it survives moving between questions (undefined = use the editor's default)
   const [panelHeight, setPanelHeight] = useState<number | undefined>(undefined);
   // WBS 8.13 / 8.16: when each answer was last changed, how many times it was changed after first being given,
   // and the last answer the student settled on (used to tell a real change from the first answer)
-  const answeredAtRef = useRef<Record<string, string>>({});
-  const changeTrackerRef = useRef(new AnswerChangeTracker());
+  const answeredAtRef = useRef<Record<string, string>>({ ...draft?.answeredAt });
+  const changeTrackerRef = useRef(new AnswerChangeTracker(draft?.answerChanges));
   useEffect(() => {
     const current = fetchedQuestions[currentIndex];
     questionIdRef.current = current && !current.poolDrawId ? current.id : null; // null while loading, and for pooled questions (their id is a draw, not a question)
   }, [fetchedQuestions, currentIndex]);
-  // Tracks flagged state per question id, kept in memory only for now.
-  const [flaggedIds, setFlaggedIds] = useState<Set<string>>(new Set());
-  // Tracks each question's chosen MCQ option id, kept in memory only for now.
+  const [flaggedIds, setFlaggedIds] = useState(() => new Set(draft?.flaggedIds));
   const [selectedOptions, setSelectedOptions] = useState<
     Record<string, string>
-  >({});
-  // Tracks each fill-in-the-blank question's typed answer, kept in memory only for now.
-  const [textAnswers, setTextAnswers] = useState<Record<string, string>>({});
-  // Tracks each coding question's current code text, kept in memory only for now.
+  >(draft?.selectedOptions ?? {});
+  const [textAnswers, setTextAnswers] = useState<Record<string, string>>(draft?.textAnswers ?? {});
   const [codeByQuestion, setCodeByQuestion] = useState<Record<string, string>>(
-    {},
+    draft?.codeByQuestion ?? {},
   );
+  const captureDraft = () => ({
+    currentIndex, flaggedIds: [...flaggedIds], selectedOptions, textAnswers, codeByQuestion,
+    answeredAt: answeredAtRef.current, answerChanges: changeTrackerRef.current.snapshot(),
+  });
+  const draftError = useOfflineDraft(savedExam, captureDraft(), getTimesMs, pendingSubmission);
 
   // Builds the question map (sidebar grid) from the real fetched list.
   // Same idea as the "answered" status in the map: something was selected, typed or written.
@@ -187,14 +230,15 @@ export function ExamQuestionScreen({
   };
 
   const liveQuestion = fetchedQuestions[currentIndex]; 
-  const reportingEnabled = !isLoading && !removed && fetchedQuestions.length > 0; 
-  const processMonitoringEnabled = Boolean(sessionId && !removed && timer.timing?.sessionStatus === "in_progress");
+  const reportingEnabled = !isLoading && !removed && !pendingSubmission && fetchedQuestions.length > 0;
+  const processMonitoringEnabled = Boolean(sessionId && !removed && !pendingSubmission && timer.timing?.sessionStatus === "in_progress");
   const recordKeystrokes = processMonitoringEnabled && rulesLoaded && !isLoading && !error;
   const { flush: flushKeystrokes } = useKeystrokeRecorder(
     sessionId,
     recordKeystrokes && liveQuestion && !liveQuestion.poolDrawId ? liveQuestion.id : null,
     recordKeystrokes ? liveQuestion?.poolDrawId ?? null : null,
     answersLocked,
+    queueOffline,
   );
   useEffect(() => {
     if (!processMonitoringEnabled) return;
@@ -210,12 +254,14 @@ export function ExamQuestionScreen({
     position: reportedPosition, 
     total: fetchedQuestions.length > 0 ? fetchedQuestions.length : null, 
     answeredCount: countAnsweredQuestions(fetchedQuestions, answers),
+    queueOffline,
   });
   const { flushNow: flushMovementEvents } = useMovementEvents({
     sessionId,
     enabled: reportingEnabled, 
     questionId: reportedQuestionId, 
     position: reportedPosition, 
+    queueOffline,
   });
 
   // In-order exams: the first question with no answer yet. Nothing past it can be opened.
@@ -385,6 +431,26 @@ export function ExamQuestionScreen({
     if (answersLocked()) return;
     const raw = fetchedQuestions[currentIndex];
     if (!raw || raw.type !== "coding" || !sessionId) return; // guard, needs a real session to attribute the answer to
+    setRunNotice(null);
+    if (savedExam) {
+      clearResults();
+      const request = {
+        studentId: savedExam.studentId, sessionId, operationId: crypto.randomUUID(),
+        questionId: raw.poolDrawId ? null : raw.id, poolDrawId: raw.poolDrawId,
+        requestedAt: new Date().toISOString(), code: localCode,
+      };
+      queuedRunId.current = request.operationId;
+      const queued = queueGradedRun ? queueGradedRun(request) : sync.enqueue({
+        kind: "graded", questionId: request.questionId, poolDrawId: request.poolDrawId, code: request.code,
+      }, request.requestedAt, request.operationId);
+      setRunNotice("Saving graded run...");
+      void queued.then(() => {
+        if (queuedRunId.current === request.operationId) setRunNotice("Graded run queued.");
+      }).catch(() => {
+        if (queuedRunId.current === request.operationId) setRunNotice("Retrying local save for the graded run.");
+      });
+      return;
+    }
     runCode(
       sessionId,
       raw.id,
@@ -398,6 +464,7 @@ export function ExamQuestionScreen({
   };
 
   const handleFlag = () => {
+    if (answersLocked()) return;
     if (!question || !fetchedQuestions[currentIndex]) return; // guard against no question loaded
     const id = fetchedQuestions[currentIndex].id;
     setFlaggedIds((prev) => {
@@ -419,6 +486,7 @@ export function ExamQuestionScreen({
   };
 
   const handleNavigate = (n: number) => {
+    if (answersLocked()) return;
     if (n - 1 === currentIndex) return;
     if (rules.sequential && n - 1 > firstUnansweredIndex) return; // in-order exams: cannot jump past an unanswered question
     settleCurrentAnswer();
@@ -427,12 +495,14 @@ export function ExamQuestionScreen({
   };
 
   const handlePrevious = () => {
+    if (answersLocked()) return;
     settleCurrentAnswer();
     setCurrentIndex((i) => Math.max(i - 1, 0)); // never go below the first question
     onPrevious?.();
   };
 
   const handleNext = () => {
+    if (answersLocked()) return;
     if (nextBlocked) return; // in-order exams: this question has to be answered first
     settleCurrentAnswer();
     setCurrentIndex((i) => Math.min(i + 1, fetchedQuestions.length - 1)); // never go past the last question
@@ -446,8 +516,8 @@ export function ExamQuestionScreen({
     return q.type === "coding" ? 0 : changeTrackerRef.current.count(q.id, answerValueOf(q));
   };
 
-  function buildAnswers(): SubmittedAnswer[] {
-    const times = getTimes(); // seconds per question id, including the stretch running right now
+  function buildAnswers(asOf?: number): SubmittedAnswer[] {
+    const times = getTimes(asOf);
     return fetchedQuestions.map((q) => ({
       question_id: q.poolDrawId ? null : q.id, // real question id; none for a pooled question
       pool_draw_id: q.poolDrawId, // the draw id for a pooled question, otherwise null
@@ -465,11 +535,31 @@ export function ExamQuestionScreen({
 
   const handleOnSubmit = async () => {
     try {
-      await submitAndLeave();
+      if (!savedExam) await submitAndLeave();
+      else if (Date.now() >= deadlineRef.current) await handleTimeExpired(deadlineRef.current);
+      else await saveSubmission("submitted", buildAnswers());
     } finally {
       setShowSubmitConfirm(false);
     }
   };
+
+  async function saveSubmission(status: OfflineSubmission["status"], answers: SubmittedAnswer[], requestedAt = Date.now()) {
+    if (pendingRef.current || closed.current) return;
+    const submission = {
+      status, answers,
+      draft: { ...captureDraft(), questionTimesMs: getTimesMs(requestedAt) },
+    };
+    pendingRef.current = submission;
+    setPendingSubmission(true);
+    // The recorder drains synchronously into the same local write queue before the submission.
+    await flushKeystrokes();
+    try {
+      await sync.enqueue({ kind: "submit", submission }, new Date(requestedAt).toISOString());
+      void sync.retry();
+    } catch {
+      // The queue keeps the frozen submission and retries the local write.
+    }
+  }
 
   const submitAndLeave = async () => {
     if (!sessionId || submissionInFlightRef.current) return;
@@ -507,10 +597,12 @@ export function ExamQuestionScreen({
   }, [savedExam]);
 
   if (waitingForServer) {
+  if (pendingSubmission) {
     return (
       <div className="h-screen flex flex-col gap-4 items-center justify-center text-[var(--text-inverted)] bg-[var(--bg-sidebar)]">
-        <p role="status">Time has expired. Reconnect to check this attempt with the server.</p>
-        <button type="button" className={footerButtonClass} onClick={timer.retry}>Check again</button>
+        <p role="status">{submissionStored ? "Pending sync" : "Saving submission locally"}</p>
+        <p>{sync.error ?? "Your exam is locked. The official result will open after the server confirms submission."}</p>
+        <button type="button" className={footerButtonClass} onClick={() => void sync.retry()}>Retry sync</button>
       </div>
     );
   }
@@ -812,6 +904,12 @@ export function ExamQuestionScreen({
           </div>
         </aside>
       </div>
+
+      {(draftError || sync.error) && (
+        <div role="alert" className="px-6 py-3 bg-[var(--bg-app)] text-[var(--text-primary)]">
+          {draftError ? "Could not save your draft to local MySQL. Retrying." : sync.error}
+        </div>
+      )}
 
       {submissionError && (
         <div role="alert" className="flex-shrink-0 flex items-center justify-between gap-4 px-6 py-3 bg-[var(--bg-app)] text-[var(--text-primary)]">

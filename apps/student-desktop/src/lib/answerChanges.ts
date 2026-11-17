@@ -1,8 +1,20 @@
 // One deduction per changed answer when a revisit is settled. Changing an initial
 // selection, or changing back to the previous answer during the same visit, is free.
 export class AnswerChangeTracker {
-  private settled = new Map<string, string>();
-  private changes = new Map<string, number>();
+  private settled: Map<string, string>;
+  private changes: Map<string, number>;
+
+  constructor(snapshot?: { settled: Record<string, string>; changes: Record<string, number> }) {
+    this.settled = new Map(Object.entries(snapshot?.settled ?? {}));
+    this.changes = new Map(Object.entries(snapshot?.changes ?? {}));
+  }
+
+  snapshot() {
+    return {
+      settled: Object.fromEntries(this.settled),
+      changes: Object.fromEntries(this.changes),
+    };
+  }
 
   count(questionId: string, currentAnswer: string): number {
     const previous = this.settled.get(questionId);

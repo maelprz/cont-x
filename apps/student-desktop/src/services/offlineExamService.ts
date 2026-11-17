@@ -74,8 +74,7 @@ export async function prepareOfflineExam(
 }
 
 export function finishOfflineExam(key: OfflineAttemptKey): void {
-  forgetOfflineAttempt(key);
-  void window.ipcRenderer.deleteOfflineExam(key).catch(() => {
+  void window.ipcRenderer.deleteOfflineExam(key).then(() => forgetOfflineAttempt(key)).catch(() => {
     console.warn("Could not remove the completed offline exam from local storage.");
   });
 }

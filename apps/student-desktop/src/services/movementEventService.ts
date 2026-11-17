@@ -10,6 +10,7 @@ export interface BufferedMovementEvent {
   toQuestionId: string | null; // for navigation: the question arrived at. Null for focus events.
   meta: Record<string, unknown>; // small extras such as question positions (works even for pooled questions)
   at: number; // Date.now() when it happened on this computer
+  id?: string;
 }
 
 // what the caller should do next with a batch
@@ -25,18 +26,21 @@ export async function insertMovementEvents(
 ): Promise<InsertResult> {
   const now = Date.now(); // one reading, so every row in the batch uses the same "now"
   const rows = events.map((e) => ({
+    ...(e.id ? { id: e.id } : {}),
     session_id: sessionId, // which attempt these belong to
     event_type: e.eventType,
     from_question_id: e.fromQuestionId,
     to_question_id: e.toQuestionId,
     // The database stamps occurred_at with the moment the row is SAVED, so late events would look wrong.
     // delay_ms says how long the event waited in the buffer. Real time = occurred_at minus delay_ms.
-    meta: { ...e.meta, delay_ms: Math.max(0, now - e.at) },
+    meta: { ...e.meta, delay_ms: Math.max(0, now - e.at), ...(e.id ? { captured_at: new Date(e.at).toISOString() } : {}) },
   }));
 
   try {
-    const { error } = await supabase.from("session_movement_events").insert(rows);
+    const { error } = await supabase.from("session_movement_events").insert(rows)
+      .abortSignal(AbortSignal.timeout(8_000));
     if (!error) return "ok"; // saved
+    if (error.code === "23505" && events.length === 1 && events[0].id) return "ok";
     // 23xxx = integrity problem, 42xxx = not allowed (RLS). The server answered "no", so retrying cannot help.
     if (error.code && (error.code.startsWith("23") || error.code.startsWith("42"))) return "drop";
     return "retry"; // anything else is treated as temporary

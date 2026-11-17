@@ -13,6 +13,7 @@ type EventRow = {
   occurred_at: string; 
   meta: {
     delay_ms?: number; 
+    captured_at?: string;
     position?: number; 
     from_position?: number; 
     to_position?: number; 
@@ -68,13 +69,16 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
   const eventRows = (eventsResult.data ?? []) as EventRow[];
   const session = sessionResult.data as SessionRow;
 
-  // 1. real time of each event = saved time minus the time it waited in the buffer, then oldest first
+  // Older clients only send the time spent waiting in the buffer.
   const timed = eventRows
     .filter((row) => row.event_type !== "submitted") 
-    .map((row) => ({
-      row,
-      time: Date.parse(row.occurred_at) - (row.meta?.delay_ms ?? 0),
-    }))
+    .map((row) => {
+      const capturedAt = Date.parse(row.meta?.captured_at ?? "");
+      return {
+        row,
+        time: Number.isFinite(capturedAt) ? capturedAt : Date.parse(row.occurred_at) - (row.meta?.delay_ms ?? 0),
+      };
+    })
     .sort((a, b) => a.time - b.time);
 
   // 2. walk the events in order to build sentences and work out how long each away period lasted

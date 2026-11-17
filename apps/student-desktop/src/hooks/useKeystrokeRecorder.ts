@@ -1,12 +1,13 @@
 import { useCallback, useLayoutEffect, useMemo, useRef } from "react";
 import { createKeystrokeRecorder } from "../lib/keystrokeRecorder";
 import { logKeystrokeBatch, type KeystrokeQuestion } from "../services/keystrokeService";
+import type { OfflineEnqueue } from "../types/offlineExam";
 
 const FLUSH_MS = 30_000;
 const JITTER_MS = 5_000;
 const FINAL_FLUSH_MS = 5_000;
 
-function createAttempt(sessionId: string) {
+function createAttempt(sessionId: string, queueOffline?: OfflineEnqueue) {
   const recorder = createKeystrokeRecorder(performance.now());
   const pending: { id: string; question: KeystrokeQuestion; batch: string }[] = [];
   let sending: Promise<void> | null = null;
@@ -15,7 +16,12 @@ function createAttempt(sessionId: string) {
     record: recorder.record,
     queue(question: KeystrokeQuestion) {
       const batch = recorder.drain();
-      if (batch) pending.push({ id: crypto.randomUUID(), question, batch });
+      if (!batch) return;
+      if (queueOffline) {
+        void queueOffline({ kind: "keystrokes", question, batch }).catch(() => {});
+      } else {
+        pending.push({ id: crypto.randomUUID(), question, batch });
+      }
     },
     send(): Promise<void> {
       if (!sending) {
@@ -41,8 +47,9 @@ export function useKeystrokeRecorder(
   questionId: string | null,
   poolDrawId: string | null,
   isAnswerLocked: () => boolean,
+  queueOffline?: OfflineEnqueue,
 ) {
-  const attempt = useMemo(() => sessionId ? createAttempt(sessionId) : null, [sessionId]);
+  const attempt = useMemo(() => sessionId ? createAttempt(sessionId, queueOffline) : null, [sessionId, queueOffline]);
   const drainCurrent = useRef<(() => void) | null>(null);
   const answerLocked = useRef(isAnswerLocked);
 
@@ -68,7 +75,7 @@ export function useKeystrokeRecorder(
     const interval = setInterval(() => {
       queueCurrent();
       void attempt.send();
-    }, FLUSH_MS + Math.floor(Math.random() * JITTER_MS));
+    }, queueOffline ? 1000 : FLUSH_MS + Math.floor(Math.random() * JITTER_MS));
 
     return () => {
       window.removeEventListener("keydown", onKey, true);
@@ -78,7 +85,7 @@ export function useKeystrokeRecorder(
       queueCurrent();
       void attempt.send();
     };
-  }, [attempt, questionId, poolDrawId]);
+  }, [attempt, questionId, poolDrawId, queueOffline]);
 
   const flush = useCallback(async () => {
     if (!attempt) return;
