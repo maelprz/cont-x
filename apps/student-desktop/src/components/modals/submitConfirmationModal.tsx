@@ -102,7 +102,7 @@ export function SubmitConfirmationModal({
             <button
               onClick={onConfirm}
               disabled={isSubmitting}
-              className="flex-1 px-5 py-3 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[14px] font-bold cursor-pointer hover:bg-[#c5d7ff] hover:border-[#c5d7ff] transition-colors duration-150 disabled:opacity-70 disabled:cursor-not-allowed"
+              className="flex-1 px-5 py-3 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[14px] font-bold cursor-pointer shadow-[0_0_20px_rgba(173,198,255,0.25)] hover:bg-[#c5d7ff] hover:border-[#c5d7ff] hover:shadow-[0_0_28px_rgba(173,198,255,0.45)] transition-shadow duration-150 disabled:opacity-70 disabled:cursor-not-allowed disabled:shadow-none"
             >
               {isSubmitting ? (
                 <span className="inline-flex items-center gap-2 justify-center">

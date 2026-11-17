@@ -36,7 +36,7 @@ import type {
 // Helpers
 // ---------------------------------------------------------------------------
 
-const footerButtonClass =
+const submitButtonClass =
   "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer shadow-[0_0_20px_rgba(173,198,255,0.25)] transition-all duration-150 hover:bg-[#c5d7ff] hover:border-[#c5d7ff] hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(173,198,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:scale-100 disabled:hover:bg-[#adc6ff] disabled:hover:border-[#adc6ff]";
 
 function formatTime(seconds: number): string {
@@ -501,64 +501,32 @@ export function ExamQuestionScreen({
 
   const questionPane = (
     <section
-      className={`flex flex-col overflow-y-auto bg-[var(--bg-app)] min-w-0 ${isCoding ? "w-[420px] shrink-0 border-r border-[var(--border-primary)]" : "flex-1"}`}
+      className="flex min-w-0 flex-1 flex-col overflow-y-auto bg-white"
     >
-      {/* Question header */}
-      <div className="flex items-center justify-between px-6 pt-5 pb-3 flex-shrink-0">
-        <div className="min-w-0">
-          {question.sectionTitle && (
-            <p className="font-mono text-[10px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-1 break-words">
-              {question.sectionTitle}
-            </p>
-          )}
-          <h2 className="text-[22px] font-semibold text-[var(--text-primary)] leading-tight">
-            {question.title}
-          </h2>
+      <div className="shrink-0 border-b border-stone-200 bg-[#f8f8f8] px-5 py-3 sm:px-6">
+        <div className="mb-2 flex flex-wrap items-center justify-between gap-2">
+          <span className="rounded-md bg-[#e9eee3] px-2.5 py-1 text-xs font-semibold text-[#465a3b]">Question {question.number} of {question.totalQuestions}</span>
+          <button type="button" aria-label={question.isFlagged ? "Unflag question" : "Flag question"} aria-pressed={question.isFlagged ?? false}
+            title={question.isFlagged ? "Remove flag" : "Flag for review"} onClick={handleFlag}
+            className={"flex shrink-0 cursor-pointer items-center justify-center rounded-lg border p-2 transition-colors focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-red-700 " + (question.isFlagged ? 'border-red-400 bg-red-100 text-red-700' : 'border-red-200 bg-red-50 text-red-700 hover:bg-red-100')}>
+            <Flag size={14} aria-hidden="true" className={question.isFlagged ? "fill-current" : ""} />
+          </button>
         </div>
-        <button
-          type="button"
-          aria-label="Flag question"
-          aria-pressed={question.isFlagged ?? false}
-          onClick={handleFlag}
-          className={`
-            flex items-center gap-1.5 px-3 py-1.5 rounded-lg border cursor-pointer
-            transition-colors duration-150 font-mono text-[10px] font-semibold tracking-[0.15em] uppercase bg-[var(--warning-primary)] hover:bg-[var(--warning-secondary)]
-            ${
-              question.isFlagged
-                ? "border-[var(--warning-icon)] text-[var(--warning-icon)] bg-[color:var(--warning-accent)]"
-                : "border-[var(--border-primary)] text-[var(--text-primary)] hover:border-[var(--text-secondary)] hover:text-[var(--text-secondary)]"
-            }
-          `}
-        >
-          <svg
-            width="13"
-            height="13"
-            viewBox="0 0 24 24"
-            fill="none"
-            stroke={
-              question.isFlagged
-                ? "var(--warning-icon)"
-                : "var(--text-primary)"
-            }
-            strokeWidth="1.5"
-          >
-            <path
-              strokeLinecap="round"
-              strokeLinejoin="round"
-              d="M3 3v1.5M3 21v-6m0 0 2.77-.693a9 9 0 0 1 6.208.682l.108.054a9 9 0 0 0 6.086.71l3.114-.732a48.524 48.524 0 0 1-.005-10.499l-3.11.732a9 9 0 0 1-6.085-.711l-.108-.054a9 9 0 0 0-6.208-.682L3 4.5M3 15V4.5"
-            />
-          </svg>
-        </button>
+        <p className="mb-1 break-words text-[11px] text-stone-500">
+          {question.sectionTitle && <>{question.sectionTitle} · </>}
+          {isCoding ? "Coding" : mcqQ ? "Multiple choice" : "Fill in the blank"}
+        </p>
+        <h2 className="break-words text-lg font-semibold leading-snug tracking-tight text-stone-900">{question.title}</h2>
       </div>
       {/* Question body */}
-      <div className="px-6 pb-4 min-w-0">
-        <p className="text-[15px] text-[var(--text-secondary)] leading-relaxed mb-5 whitespace-pre-wrap wrap-break-word">
+      <div className="min-w-0 px-5 py-5 sm:px-6">
+        <p className="mb-5 whitespace-pre-wrap break-words text-sm leading-7 text-stone-700">
           {question.body}
         </p>
 
         {/* Coding: code snippet example */}
         {isCoding && codingQ?.codeSnippet && (
-          <div className="rounded-lg p-4 mb-5 font-mono text-[13px] leading-relaxed overflow-x-auto bg-[var(--bg-sidebar)] border border-[var(--border-primary)]">
+          <div className="rounded-lg p-4 mb-5 font-mono text-xs leading-relaxed overflow-x-auto bg-stone-50 border border-stone-200">
             {codingQ.codeSnippet.split("\n").map((line, i) => {
               const isComment = line.trim().startsWith("//");
               const isNote = line.trim().startsWith("(");
@@ -567,10 +535,10 @@ export function ExamQuestionScreen({
                   key={i}
                   className={
                     isComment
-                      ? "text-[#8c909f]"
+                      ? "text-stone-500"
                       : isNote
-                        ? "text-[#8c909f] italic"
-                        : "text-[#c2c6d6]"
+                        ? "text-stone-500 italic"
+                        : "text-stone-800"
                   }
                 >
                   {line || "\u00A0"}
@@ -607,13 +575,16 @@ export function ExamQuestionScreen({
     <section aria-label="Answer" className="min-w-0 overflow-y-auto border-t border-[var(--border-primary)] px-6 py-5 sm:border-t-0">
       {/* Fill in the blank: one text box */}
       {fitbQ && (
-        <div className="w-full min-w-0">
+        <div className="w-full min-w-0 rounded-xl border border-stone-200 bg-[#f8f8f8] p-4 sm:p-5">
           <label
             htmlFor="fitb-answer"
-            className="block font-mono text-[11px] font-semibold tracking-[0.15em] uppercase text-[var(--text-secondary)] mb-2"
+            className="mb-1 block text-sm font-semibold text-stone-900"
           >
             Your answer
           </label>
+          <p id="fitb-answer-help" className="mb-4 text-xs leading-relaxed text-stone-500">
+            Enter the missing word or phrase.
+          </p>
           <input
             id="fitb-answer"
             type="text"
@@ -621,14 +592,18 @@ export function ExamQuestionScreen({
             onChange={(e) => handleTextChange(e.target.value)}
             autoComplete="off"
             spellCheck={false}
+            aria-describedby="fitb-answer-help"
             placeholder="Type your answer"
-            className="w-full px-4 py-3 rounded-lg border border-[var(--border-primary)] bg-[var(--bg-sidebar)] text-[var(--text-inverted)] text-[15px] outline-none focus:border-[var(--text-secondary)]"
+            className="w-full rounded-lg border border-stone-300 bg-white px-4 py-3 text-sm text-stone-900 placeholder:text-stone-400 transition-colors focus:border-[#465a3b] focus:outline-2 focus:outline-offset-2 focus:outline-[#465a3b]"
           />
         </div>
       )}
 
       {/* MCQ: options */}
       {mcqQ && (
+        <div className="mx-auto w-full max-w-3xl">
+          <h3 className="text-sm font-semibold text-stone-900">Your answer</h3>
+          <p className="mb-4 mt-1 text-xs text-stone-500">Select one option below.</p>
         <MultipleChoiceOptions
           options={mcqQ.options}
           className="mt-0"
@@ -636,6 +611,7 @@ export function ExamQuestionScreen({
           onSelect={handleOptionSelect}
           onClear={handleClearOption}
         />
+        </div>
       )}
     </section>
   );
@@ -740,14 +716,10 @@ export function ExamQuestionScreen({
 
       {/* Body: sidebar and content */}
       <div className="flex flex-grow overflow-hidden">
-        {isCoding && codingQ ? (
-          <>
-            {questionPane}
-            {codePane}
-          </>
-        ) : (
-          <QuestionAnswerSplit question={questionPane} answer={answerPane} />
-        )}
+        <QuestionAnswerSplit
+          question={questionPane}
+          answer={isCoding && codingQ ? codePane : answerPane}
+        />
         {/* Right sidebar: question map */}
         <aside className="w-[105px] lg:w-[180px] flex-shrink-0 flex flex-col border-l border-[var(--border-primary)] bg-[var(--bg-sidebar)] overflow-y-auto">
           <div className="p-2 lg:p-4 flex-grow">
@@ -846,7 +818,7 @@ export function ExamQuestionScreen({
         <button
           onClick={isLastQuestion ? () => setShowSubmitConfirm(true) : handleNext}
           disabled={isSubmitting || (!isLastQuestion && nextBlocked)}
-          className={footerButtonClass}
+          className={isLastQuestion ? submitButtonClass : footerButtonClass}
         >
           {isLastQuestion ? (
             "Submit"
@@ -884,3 +856,6 @@ export function ExamQuestionScreen({
     </div>
   );
 }
+
+const footerButtonClass =
+  "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer hover:bg-[#c5d7ff] hover:border-[#c5d7ff] transition-colors duration-150 disabled:opacity-40 disabled:cursor-not-allowed";
