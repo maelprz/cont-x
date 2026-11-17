@@ -6,6 +6,7 @@ import { registerOfflineExamHandlers } from "./ipc/offlineExamHandlers";
 import { closeOfflineExamStorage } from "./storage/offlineExamStorage";
 import { startExamProcessMonitor } from "./native/examProcessMonitor";
 import { checkExamApps } from "./native/disallowedProcesses";
+import { autoCloseDisallowedApps } from "../shared/examAppPolicy";
 import { muteSystemAudio, unmuteSystemAudio } from "./native/audioControl"; // audio mute/unmute, sits next to keyboard-hook folder
 import path from "node:path";
 
@@ -144,6 +145,7 @@ ipcMain.handle("check-exam-apps", async (event, closeApps: unknown) => {
       isExiting || stopProcessMonitor || preflightScan || typeof closeApps !== "boolean") {
     throw new Error("The exam app check is unavailable.");
   }
+  if (!autoCloseDisallowedApps) return [];
 
   const scan = new AbortController();
   preflightScan = scan;

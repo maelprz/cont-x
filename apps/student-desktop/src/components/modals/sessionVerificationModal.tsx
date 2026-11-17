@@ -65,20 +65,22 @@ export function SessionVerificationModal({
       return;
     }
 
-    setStatus('checking_apps');
     setErrorMessage('');
-    try {
-      const remaining = await window.ipcRenderer.checkExamApps(closeApps);
-      setOpenApps(remaining);
-      if (remaining.length > 0) {
-        setStatus('idle');
+    if (autoCloseDisallowedApps) {
+      setStatus('checking_apps');
+      try {
+        const remaining = await window.ipcRenderer.checkExamApps(closeApps);
+        setOpenApps(remaining);
+        if (remaining.length > 0) {
+          setStatus('idle');
+          return;
+        }
+      } catch (error) {
+        console.error('[exam app check]', error);
+        setErrorMessage('Could not check running apps. Try again before starting the exam.');
+        setStatus('error');
         return;
       }
-    } catch (error) {
-      console.error('[exam app check]', error);
-      setErrorMessage('Could not check running apps. Try again before starting the exam.');
-      setStatus('error');
-      return;
     }
 
     setStatus('verifying'); // show the spinner while the server checks the code
@@ -194,7 +196,7 @@ export function SessionVerificationModal({
           {/* ── Actions ───────────────────────────────────────────── */}
           <div className="flex flex-col gap-3">
             <button
-              onClick={() => void handleConfirm(autoCloseDisallowedApps && openApps.length > 0)}
+              onClick={() => void handleConfirm(openApps.length > 0)}
               disabled={busy}
               className="w-full py-3.5 rounded-lg font-bold text-[15px] transition-all duration-200 hover:-translate-y-0.5 active:scale-[0.98] disabled:opacity-70 disabled:cursor-not-allowed disabled:hover:translate-y-0 bg-[image:var(--button-gradient)] text-[var(--button-gradient-text)] font-[var(--font-body)] border border-[var(--border-subtle)]"
             >
@@ -207,11 +209,11 @@ export function SessionVerificationModal({
                   {busyLabel}
                 </span>
               ) : (
-                openApps.length > 0 ? (autoCloseDisallowedApps ? 'Close Apps and Continue' : 'Check Again')
+                openApps.length > 0 ? 'Close Apps and Continue'
                   : verifiedSessionId.current ? 'Retry Exam Download' : 'Confirm and Enter Exam'
               )}
             </button>
-            {autoCloseDisallowedApps && openApps.length > 0 && (
+            {openApps.length > 0 && (
               <button type="button" disabled={busy} onClick={() => void handleConfirm()} className="rounded-lg border border-[var(--border-primary)] bg-transparent px-6 py-2.5 text-[var(--text-inverted)] disabled:opacity-70">
                 Check Again
               </button>
