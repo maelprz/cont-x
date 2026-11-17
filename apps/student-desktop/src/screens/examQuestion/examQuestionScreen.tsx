@@ -563,13 +563,34 @@ export function ExamQuestionScreen({
   };
 
   if (pendingSubmission) {
+    if (!sync.showLocalResult) {
+      return <div className="h-screen flex flex-col gap-3 items-center justify-center bg-white text-[#101828]" role="status">
+        <h1 className="text-2xl font-semibold">Submitting exam…</h1>
+        <p className="text-sm">Saving your submission and loading your result.</p>
+      </div>;
+    }
+    const localGrade = sync.submission;
+    const maxScore = fetchedQuestions.reduce((sum, question) => sum + question.maxPoints, 0);
     return (
-      <div className="h-screen flex flex-col gap-4 items-center justify-center text-[var(--text-inverted)] bg-[var(--bg-sidebar)]">
+      <div className="h-screen overflow-y-auto flex flex-col gap-5 items-center justify-center p-6 text-[#101828] bg-white">
+        <h1 className="text-2xl font-semibold">{localGrade ? "Exam submitted" : "Submitting exam"}</h1>
+        {localGrade && <section aria-label="Local exam result" className="w-full max-w-xl rounded-xl border border-stone-200 p-6">
+          <p className="text-sm">{examTitle} · Local score</p>
+          <p className="mt-3 text-5xl font-bold" role="status">{localGrade.totalScore}<span className="text-2xl"> / {maxScore}</span></p>
+          <table className="mt-6 w-full text-left text-sm">
+            <thead><tr className="border-b border-stone-200"><th className="pb-2">Question</th><th className="pb-2 text-right">Points</th></tr></thead>
+            <tbody>{fetchedQuestions.map((question, index) => {
+              const answer = localGrade.answers.find((answer) => (answer.pool_draw_id ?? answer.question_id) === question.id);
+              return <tr key={question.id} className="border-b border-stone-200"><td className="py-3">{question.title ?? `Question ${index + 1}`}</td><td className="py-3 text-right">{answer?.score ?? 0} / {question.maxPoints}</td></tr>;
+            })}</tbody>
+          </table>
+          {localGrade.overtimeDeduction > 0 && <p className="mt-3 text-sm">Overtime deduction: {localGrade.overtimeDeduction} points.</p>}
+        </section>}
         <p role="status">{sync.gradeSaved ? "Pending sync" : submissionStored ? "Grading locally" : "Saving submission locally"}</p>
-        <p>{sync.error ?? (sync.gradeSaved
-          ? "Your grade is saved on this device. The official result will open after the server confirms submission."
+        <p className="max-w-xl text-center text-sm">{sync.error ?? (sync.gradeSaved
+          ? "Your score and submission are saved on this device. Sync will retry automatically when you reconnect. Teacher adjustments will appear after sync."
           : "Your exam is locked. Grading can finish without an internet connection.")}</p>
-        <button type="button" className={footerButtonClass} onClick={() => void sync.retry()}>Retry sync</button>
+        <button type="button" className="rounded-lg border border-[#101828] bg-white px-5 py-2.5 text-sm font-semibold text-[#101828] cursor-pointer transition-colors hover:bg-stone-100 focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#101828]" onClick={() => void sync.retry()}>Retry sync</button>
       </div>
     );
   }

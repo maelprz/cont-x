@@ -107,7 +107,7 @@ export function CodingEditorPanel({
               className="block text-[13px] font-medium mb-2"
               style={{ color: "var(--color-base-content)" }}
             >
-              Points per Test Case
+              Total Question Points
             </label>
             <input
               type="number"

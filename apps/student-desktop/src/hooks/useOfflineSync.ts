@@ -9,7 +9,8 @@ export function useOfflineSync(
   onSubmissionStored: () => void,
 ) {
   const [error, setError] = useState<string | null>(null);
-  const [gradeSaved, setGradeSaved] = useState(Boolean(exam?.gradingState?.submission));
+  const [submission, setSubmission] = useState<LocalSubmission | null>(exam?.gradingState?.submission ?? null);
+  const [showLocalResult, setShowLocalResult] = useState(!navigator.onLine);
   const pending = useRef(exam?.pendingSubmission);
   const receipt = useRef<LocalSubmission | null>(exam?.gradingState?.submission ?? null);
   const writes = useRef(new Map<string, OfflineOperation>());
@@ -40,6 +41,7 @@ export function useOfflineSync(
 
   const enqueue = useCallback<OfflineEnqueue>(async (payload, occurredAt = new Date().toISOString(), id = crypto.randomUUID()) => {
     if (!exam) throw new Error("Offline exam is unavailable.");
+    if (payload.kind === 'submit') setShowLocalResult(!navigator.onLine);
     if (payload.kind === "live") {
       // A failed local write can leave unsaved heartbeats in memory. Keep the newest.
       for (const [pendingId, pending] of writes.current) {
@@ -64,18 +66,20 @@ export function useOfflineSync(
       if (!navigator.onLine && (!pending.current || receipt.current)) return;
       const local = await prepareLocalSync(exam, pending.current, receipt.current);
       receipt.current = local.receipt;
-      setGradeSaved(Boolean(local.receipt));
-      if (!navigator.onLine) return;
+      setSubmission(local.receipt);
+      if (!navigator.onLine) { setShowLocalResult(true); return; }
       const operations = local.operations;
       if (!operations.length) return;
       const outcome = await syncOfflineAttempt(exam, operations, receipt.current);
       if (outcome === "extended") {
         pending.current = undefined;
         receipt.current = null;
-        setGradeSaved(false);
+        setSubmission(null);
+        setShowLocalResult(!navigator.onLine);
       }
       if (outcome) callbacks.current.onOutcome(outcome);
     } catch {
+      if (pending.current) setShowLocalResult(true);
       setError(pending.current && !receipt.current
         ? "Local grading could not finish. Your submission is saved and grading will retry."
         : "Exam sync will retry. Check the connection and local MySQL.");
@@ -87,14 +91,17 @@ export function useOfflineSync(
   useEffect(() => {
     if (!exam) return;
     const run = () => void retry();
+    const offline = () => setShowLocalResult(true);
     const interval = setInterval(run, 2500);
     window.addEventListener("online", run);
+    window.addEventListener("offline", offline);
     run();
     return () => {
       clearInterval(interval);
       window.removeEventListener("online", run);
+      window.removeEventListener("offline", offline);
     };
   }, [exam, retry]);
 
-  return { enqueue, retry, error, gradeSaved };
+  return { enqueue, retry, error, gradeSaved: Boolean(submission), submission, showLocalResult };
 }

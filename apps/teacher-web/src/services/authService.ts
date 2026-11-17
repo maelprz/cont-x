@@ -65,7 +65,7 @@ export async function login(
   if (userData.role === "student") {
     await supabase.auth.signOut();
     throw new Error(
-      "Students should use the desktop application, not this web portal.",
+      "This portal is for teacher and administrator accounts only. Students should use the desktop application.",
     );
   }
 

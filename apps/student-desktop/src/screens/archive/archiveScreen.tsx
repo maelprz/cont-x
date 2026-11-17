@@ -167,8 +167,7 @@ export function ArchiveScreen(_props: ArchiveScreenProps) {
                     return (
                       <tr
                         key={entry.id}
-                        onClick={() => handleViewResult(entry.id)}
-                        className="hover:bg-stone-50 cursor-pointer"
+                        className="hover:bg-stone-50"
                       >
                         {/* exam name + code */}
                         <td
