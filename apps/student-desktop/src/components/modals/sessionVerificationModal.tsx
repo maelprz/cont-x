@@ -98,27 +98,24 @@ export function SessionVerificationModal({
     }
 
     setStatus('verifying'); // show the spinner while the server checks the code
-    let offlineStorageAvailable: boolean;
     try {
-      offlineStorageAvailable = await window.ipcRenderer.checkOfflineExamStorage();
+      if (!await window.ipcRenderer.checkOfflineExamStorage()) {
+        throw new Error('Local exam storage is unavailable.');
+      }
     } catch {
-      setErrorMessage('Local MySQL storage is unavailable. Ask your exam administrator for help.');
+      setErrorMessage('Local exam storage is unavailable. Ask your exam administrator for help.');
       setStatus('error');
       return;
     }
 
     try {
-      if (!offlineStorageAvailable) throw new Error('Configure local MySQL storage before starting a locally graded exam.');
       if (!studentId) throw new Error('Sign in again before starting the exam.');
 
       const sessionId = verifiedSessionId.current ?? (await verifySessionCode(examId, code)).sessionId;
       verifiedSessionId.current = sessionId;
-      let snapshot = null;
-      if (offlineStorageAvailable && studentId) {
-        setStatus('saving_exam');
-        const { examId: id, examTitle: title } = useExamSessionStore.getState();
-        snapshot = await prepareOfflineExam(studentId, sessionId, examId, { id, title });
-      }
+      setStatus('saving_exam');
+      const { examId: id, examTitle: title } = useExamSessionStore.getState();
+      const snapshot = await prepareOfflineExam(studentId, sessionId, examId, { id, title });
       onConfirm?.(sessionId, snapshot);
     } catch (err) {
       const message = err instanceof Error ? err.message : 'Verification failed.';

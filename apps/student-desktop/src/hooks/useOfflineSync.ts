@@ -52,7 +52,7 @@ export function useOfflineSync(
     try {
       await flush();
     } catch (cause) {
-      setError("Could not save exam activity to local MySQL. Retrying.");
+      setError("Could not save exam activity to local storage. Retrying.");
       throw cause;
     }
   }, [exam, flush]);
@@ -82,7 +82,7 @@ export function useOfflineSync(
       if (pending.current) setShowLocalResult(true);
       setError(pending.current && !receipt.current
         ? "Local grading could not finish. Your submission is saved and grading will retry."
-        : "Exam sync will retry. Check the connection and local MySQL.");
+        : "Exam sync will retry. Check the connection and local storage.");
     } finally {
       syncing.current = false;
     }

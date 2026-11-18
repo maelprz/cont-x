@@ -25,10 +25,11 @@ export function registerOfflineExamHandlers(getWindow: () => BrowserWindow | nul
   ipcMain.handle("check-offline-exam-storage", async (event) => {
     checkSender(event);
     try {
-      return await checkOfflineExamStorage();
+      await checkOfflineExamStorage();
+      return true;
     } catch (error) {
-      console.error("[offline exam] MySQL preflight failed", error instanceof Error ? error.name : "");
-      throw new Error("Local MySQL storage is unavailable. Ask your exam administrator for help.");
+      console.error("[offline exam] storage preflight failed", error instanceof Error ? error.name : "");
+      throw new Error("Local exam storage is unavailable. Ask your exam administrator for help.");
     }
   });
 
@@ -44,14 +45,15 @@ export function registerOfflineExamHandlers(getWindow: () => BrowserWindow | nul
     try {
       await saveOfflineExam(snapshot);
     } catch (error) {
-      console.error("[offline exam] MySQL save failed", error instanceof Error ? error.name : "");
-      throw new Error("Could not save the exam to local MySQL storage. Try again.");
+      console.error("[offline exam] storage save failed", error instanceof Error ? error.name : "");
+      throw new Error("Could not save the exam to local storage. Try again.");
     }
   });
 
   ipcMain.handle("load-offline-exam", async (event, key: OfflineAttemptKey) => {
     checkAttempt(event, key);
-    return await checkOfflineExamStorage() ? loadOfflineExam(key) : null;
+    await checkOfflineExamStorage();
+    return loadOfflineExam(key);
   });
   ipcMain.handle("update-offline-timing", (event, key: OfflineAttemptKey, timing: OfflineExamSnapshot["timing"], receivedAt: number) => {
     checkAttempt(event, key);

@@ -895,7 +895,7 @@ export function ExamQuestionScreen({
 
       {(draftError || sync.error) && (
         <div role="alert" className="px-6 py-3 bg-[var(--bg-app)] text-[var(--text-primary)]">
-          {draftError ? "Could not save your draft to local MySQL. Retrying." : sync.error}
+          {draftError ? "Could not save your draft to local storage. Retrying." : sync.error}
         </div>
       )}
 

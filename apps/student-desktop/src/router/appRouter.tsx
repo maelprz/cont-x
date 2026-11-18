@@ -123,7 +123,7 @@ export function AppRouter() {
   if (resumeError) {
     return (
       <div className="h-screen flex flex-col items-center justify-center gap-4">
-        <p role="alert">Could not reopen the saved exam. Check that local MySQL is running.</p>
+        <p role="alert">Could not reopen the saved exam. Check that local exam storage is available.</p>
         <button type="button" onClick={() => {
           setResumeError(false);
           setIsLoading(true);

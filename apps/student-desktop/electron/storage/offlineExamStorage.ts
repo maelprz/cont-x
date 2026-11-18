@@ -2,17 +2,23 @@ import { createPool, type Pool, type ResultSetHeader, type RowDataPacket } from 
 import { readFileSync } from "node:fs";
 import { parseEnv } from "node:util";
 import type { OfflineAttemptKey, OfflineExamDraft, OfflineExamSnapshot, OfflineOperation } from "../../src/types/offlineExam";
+import { openEmbeddedExamStorage } from "./embeddedExamStorage";
+import { examDownload, queueSlot, restoreExam } from "./offlineStorageData";
 
 const TIMEOUT_MS = 5_000;
 let pool: Pool | undefined;
 let configFile: string | undefined;
+let embeddedFile: string | undefined;
+let embedded: ReturnType<typeof openEmbeddedExamStorage> | undefined;
 
-export function setOfflineStorageConfigFile(file: string): void {
-  configFile = file;
+export function configureOfflineExamStorage(sqlitePath: string, mysqlConfigPath?: string): void {
+  embeddedFile = sqlitePath;
+  configFile = mysqlConfigPath;
 }
 
 function getPool(): Pool | undefined {
   if (pool) return pool;
+  if (embedded) return undefined;
 
   let config: NodeJS.Dict<string> = {};
   if (configFile) {
@@ -25,9 +31,15 @@ function getPool(): Pool | undefined {
     }
   }
   const setting = (key: string) => process.env[key] ?? config[key];
+  const mode = setting("CONTX_OFFLINE_STORAGE") ?? "auto";
+  if (mode !== "auto" && mode !== "mysql" && mode !== "embedded") {
+    throw new Error("CONTX_OFFLINE_STORAGE must be auto, mysql, or embedded.");
+  }
   const user = setting("CONTX_MYSQL_USER");
   const password = setting("CONTX_MYSQL_PASSWORD");
-  if (user === undefined && password === undefined) return undefined;
+  if (mode === "embedded" || (mode === "auto" && user === undefined && password === undefined)) {
+    return undefined;
+  }
   if (!user || !password) {
     throw new Error("Set both the username and password for local exam storage.");
   }
@@ -49,9 +61,17 @@ function getPool(): Pool | undefined {
   return pool;
 }
 
-export async function checkOfflineExamStorage(): Promise<boolean> {
+function getEmbeddedStorage() {
+  if (!embeddedFile) throw new Error("Built-in exam storage has no database path.");
+  return embedded ??= openEmbeddedExamStorage(embeddedFile);
+}
+
+export async function checkOfflineExamStorage(): Promise<"mysql" | "embedded"> {
   const db = getPool();
-  if (!db) return false;
+  if (!db) {
+    getEmbeddedStorage().check();
+    return "embedded";
+  }
 
   await db.query({
     sql: `CREATE TABLE IF NOT EXISTS offline_exam_snapshots (
@@ -75,26 +95,13 @@ export async function checkOfflineExamStorage(): Promise<boolean> {
     ) ENGINE=InnoDB`,
     timeout: TIMEOUT_MS,
   });
-  return true;
+  return "mysql";
 }
 
 export async function saveOfflineExam(snapshot: OfflineExamSnapshot): Promise<void> {
   const db = getPool();
-  if (!db) throw new Error("Local exam storage is not configured.");
-
-  // The function invocation harness is needed for visible tests after a restart.
-  const questions = snapshot.questions.map(({ mainCode, ...question }) =>
-    question.programType === "cFunction" ? { ...question, mainCode } : question);
-  const payload = JSON.stringify({
-    gradingMaterial: snapshot.gradingMaterial,
-    examId: snapshot.examId,
-    title: snapshot.title,
-    visibleTests: snapshot.visibleTests,
-    questions,
-    rules: snapshot.rules,
-    timing: snapshot.timing,
-    timingReceivedAt: snapshot.timingReceivedAt,
-  });
+  if (!db) return getEmbeddedStorage().save(snapshot);
+  const payload = JSON.stringify(examDownload(snapshot));
 
   await db.execute({
     sql: `INSERT INTO offline_exam_snapshots (student_id, session_id, snapshot)
@@ -106,7 +113,7 @@ export async function saveOfflineExam(snapshot: OfflineExamSnapshot): Promise<vo
 
 export async function loadOfflineExam(key: OfflineAttemptKey): Promise<OfflineExamSnapshot | null> {
   const db = getPool();
-  if (!db) return null;
+  if (!db) return getEmbeddedStorage().load(key);
   const [rows] = await db.execute<RowDataPacket[]>({
     sql: `SELECT s.snapshot, q.operation AS submission
       FROM offline_exam_snapshots s LEFT JOIN offline_exam_queue q
@@ -118,15 +125,12 @@ export async function loadOfflineExam(key: OfflineAttemptKey): Promise<OfflineEx
   const snapshot = typeof rows[0].snapshot === 'string' ? JSON.parse(rows[0].snapshot) : rows[0].snapshot;
   const queued = rows[0].submission;
   const operation = typeof queued === "string" ? JSON.parse(queued) : queued;
-  const pendingSubmission = operation ? {
-    ...operation.submission, requestedAt: operation.occurredAt,
-  } : undefined;
-  return { ...snapshot, ...key, draft: pendingSubmission?.draft ?? snapshot.draft, pendingSubmission };
+  return restoreExam(key, snapshot, operation);
 }
 
 export async function saveLocalGradingState(key: OfflineAttemptKey, state: OfflineExamSnapshot['gradingState']): Promise<void> {
   const db = getPool();
-  if (!db) throw new Error('Local exam storage is not configured.');
+  if (!db) return getEmbeddedStorage().saveGradingState(key, state);
   await db.execute({
     sql: "UPDATE offline_exam_snapshots SET snapshot = JSON_SET(snapshot, '$.gradingState', CAST(? AS JSON)) WHERE student_id = ? AND session_id = ?",
     timeout: TIMEOUT_MS,
@@ -135,7 +139,7 @@ export async function saveLocalGradingState(key: OfflineAttemptKey, state: Offli
 
 export async function saveOfflineDraft(key: OfflineAttemptKey, draft: OfflineExamDraft): Promise<void> {
   const db = getPool();
-  if (!db) throw new Error("Local exam storage is unavailable.");
+  if (!db) return getEmbeddedStorage().saveDraft(key, draft);
   const [result] = await db.execute<ResultSetHeader>({
     sql: `UPDATE offline_exam_snapshots SET snapshot = JSON_SET(snapshot, '$.draft', CAST(? AS JSON))
       WHERE student_id = ? AND session_id = ?`,
@@ -146,8 +150,8 @@ export async function saveOfflineDraft(key: OfflineAttemptKey, draft: OfflineExa
 
 export async function enqueueOfflineOperation(key: OfflineAttemptKey, operation: OfflineOperation): Promise<void> {
   const db = getPool();
-  if (!db) throw new Error("Local exam storage is unavailable.");
-  const slot = operation.kind === "live" || operation.kind === "submit" ? operation.kind : operation.id;
+  if (!db) return getEmbeddedStorage().enqueue(key, operation);
+  const slot = queueSlot(operation);
   await db.execute({
     sql: `INSERT INTO offline_exam_queue (student_id, session_id, slot, operation) VALUES (?, ?, ?, ?) AS incoming
       ON DUPLICATE KEY UPDATE operation = IF(offline_exam_queue.slot = 'live', incoming.operation, offline_exam_queue.operation)`,
@@ -157,7 +161,7 @@ export async function enqueueOfflineOperation(key: OfflineAttemptKey, operation:
 
 export async function listOfflineOperations(key: OfflineAttemptKey): Promise<OfflineOperation[]> {
   const db = getPool();
-  if (!db) throw new Error("Local exam storage is unavailable.");
+  if (!db) return getEmbeddedStorage().list(key);
   const [rows] = await db.execute<RowDataPacket[]>({
     sql: `SELECT operation FROM offline_exam_queue WHERE student_id = ? AND session_id = ?
       ORDER BY CASE
@@ -172,8 +176,8 @@ export async function listOfflineOperations(key: OfflineAttemptKey): Promise<Off
 
 export async function acknowledgeOfflineOperation(key: OfflineAttemptKey, operation: OfflineOperation): Promise<void> {
   const db = getPool();
-  if (!db) throw new Error("Local exam storage is unavailable.");
-  const slot = operation.kind === "live" || operation.kind === "submit" ? operation.kind : operation.id;
+  if (!db) return getEmbeddedStorage().acknowledge(key, operation);
+  const slot = queueSlot(operation);
   if (operation.kind === "submit") {
     // Remove the provisional grade and reopen the frozen draft together.
     const connection = await db.getConnection();
@@ -212,7 +216,7 @@ export async function updateOfflineTiming(
   key: OfflineAttemptKey, timing: OfflineExamSnapshot["timing"], receivedAt: number,
 ): Promise<void> {
   const db = getPool();
-  if (!db) return;
+  if (!db) return getEmbeddedStorage().updateTiming(key, timing, receivedAt);
   await db.execute({
     sql: `UPDATE offline_exam_snapshots
       SET snapshot = JSON_SET(snapshot, '$.timing', CAST(? AS JSON), '$.timingReceivedAt', CAST(? AS UNSIGNED))
@@ -222,7 +226,9 @@ export async function updateOfflineTiming(
 }
 
 export async function deleteOfflineExam(key: OfflineAttemptKey): Promise<void> {
-  await getPool()?.execute({
+  const db = getPool();
+  if (!db) return getEmbeddedStorage().delete(key);
+  await db.execute({
     sql: "DELETE FROM offline_exam_snapshots WHERE student_id = ? AND session_id = ?",
     timeout: TIMEOUT_MS,
   }, [key.studentId, key.sessionId]);
@@ -232,4 +238,6 @@ export function closeOfflineExamStorage(): void {
   const db = pool;
   pool = undefined;
   void db?.end().catch(() => {});
+  embedded?.close();
+  embedded = undefined;
 }
