@@ -1,8 +1,14 @@
 import { useRef, useState } from 'react';
 import type { HTMLAttributes, PointerEvent as ReactPointerEvent } from 'react';
-import Editor from '@monaco-editor/react';
+import Editor, { loader } from '@monaco-editor/react';
+import * as monaco from 'monaco-editor/editor/editor.api.js';
+import 'monaco-editor/languages/definitions/cpp/register.js';
+import EditorWorker from 'monaco-editor/editor/editor.worker.js?worker&inline';
 import { CircleX, Terminal, LoaderCircle } from 'lucide-react';
 import type { RunOutcome } from '../../services/codeExecutionService';
+
+globalThis.MonacoEnvironment = { getWorker: () => new EditorWorker() };
+loader.config({ monaco });
 
 // Props for the code editor pane
 interface CodeEditorProps {

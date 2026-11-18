@@ -4,7 +4,7 @@ import { fileURLToPath, pathToFileURL } from "node:url";
 import { registerCompilerHandlers } from "./ipc/compilerHandlers";
 import { installEditorSandbox } from "./editorSandbox";
 import { registerOfflineExamHandlers } from "./ipc/offlineExamHandlers";
-import { checkOfflineExamStorage, closeOfflineExamStorage, setOfflineStorageConfigFile } from "./storage/offlineExamStorage";
+import { checkOfflineExamStorage, closeOfflineExamStorage, configureOfflineExamStorage } from "./storage/offlineExamStorage";
 import { startExamProcessMonitor } from "./native/examProcessMonitor";
 import { checkExamApps } from "./native/disallowedProcesses";
 import { autoCloseDisallowedApps } from "../shared/examAppPolicy";
@@ -314,8 +314,12 @@ app.whenReady().then(async () => {
       );
     }
 
-    const mysqlConfigPath = path.join(app.getPath("userData"), "offline-mysql.env");
-    if (app.isPackaged) setOfflineStorageConfigFile(mysqlConfigPath);
+    const userData = app.getPath("userData");
+    const mysqlConfigPath = path.join(userData, "offline-mysql.env");
+    configureOfflineExamStorage(
+      path.join(userData, app.isPackaged ? "offline-exams.sqlite" : "offline-exams-dev.sqlite"),
+      app.isPackaged ? mysqlConfigPath : undefined,
+    );
 
     await verifyDependencies();
 
@@ -324,12 +328,13 @@ app.whenReady().then(async () => {
       let storageStatus: string;
       let storageReady = false;
       try {
-        storageReady = await checkOfflineExamStorage();
-        storageStatus = storageReady
+        const backend = await checkOfflineExamStorage();
+        storageReady = true;
+        storageStatus = backend === "mysql"
           ? "Local MySQL storage passed its schema check."
-          : "Local MySQL storage needs configuration.";
+          : "Built-in exam storage is ready.";
       } catch {
-        storageStatus = "Local MySQL storage is unavailable. Check the local server, database, and credentials.";
+        storageStatus = "Local exam storage is unavailable. Check app data permissions or the configured MySQL connection.";
       }
 
       dialog.showMessageBoxSync({

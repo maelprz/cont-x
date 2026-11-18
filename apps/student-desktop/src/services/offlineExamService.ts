@@ -72,7 +72,7 @@ export async function prepareOfflineExam(
   try {
     await window.ipcRenderer.saveOfflineExam(snapshot);
   } catch {
-    throw new Error("Could not save the exam to local MySQL storage. Try again.");
+    throw new Error("Could not save the exam to local storage. Try again.");
   }
   return snapshot;
 }
