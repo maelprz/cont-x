@@ -1,4 +1,4 @@
-import { useState } from "react"; // remembers values across re-renders
+import { useEffect, useState } from "react"; // remembers values across re-renders
 import type { ChangeEvent } from "react"; // type of the event fired when the input's text changes
 import { ArrowRight } from "lucide-react"; // pre-made icon components
 import { useRouterLogic } from "../../router/routerLogic"; // store controlling which screen is active
@@ -9,11 +9,20 @@ import { useAuthStore } from "../../stores/useAuthStore"; // store controlling t
 import { useExamSessionStore } from "../../stores/useExamSessionStore"; // carries exam to Confirmation, and which session to view on Result
 import { useExamHistory } from "../../hooks/useExamHistory"; // custom hook for fetching exam history
 import { useVerifyExamCode } from "../../hooks/useVerifyExamCode"; // new hook for exam code lookup
+import { loadCodeEditor } from "../../components/examQuestion/loadCodeEditor";
 
 export function DashboardScreen(_props: DashboardScreenProps) {
   const [examCodeInput, setExamCodeInput] = useState("");
   const navigateTo = useRouterLogic((state) => state.navigateTo);
   const user = useAuthStore((state) => state.user);
+
+  useEffect(() => {
+    const idleTask = window.requestIdleCallback(() => {
+      // Preload while the dashboard is idle. Opening a coding question also loads the module.
+      void loadCodeEditor().catch((error) => console.warn("Could not preload the code editor", error));
+    }, { timeout: 2000 });
+    return () => window.cancelIdleCallback(idleTask);
+  }, []);
 
   const { examHistory, isLoading: historyLoading, error: historyError } = useExamHistory(); // fetch exam history using the custom hook
   const {
