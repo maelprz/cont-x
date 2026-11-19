@@ -190,6 +190,7 @@ ipcMain.on("end-exam-app-check", (event) => {
 function createWindow() {
   win = new BrowserWindow({
     title: "Cont/x",
+    backgroundColor: "#051424",
     icon: path.join(process.env.VITE_PUBLIC, "electron-vite.svg"),
     kiosk: true, // covers the taskbar area at the OS level as a secondary layer
     frame: false, // removes the title bar and window controls
