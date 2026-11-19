@@ -4,6 +4,7 @@ export type ScreenName =
   | "userManagement"
   | "auditLogs"
   | "dashboard"
+  | "myClasses"
   | "examLibrary"
   | "examBuilder"
   | "questionBank"

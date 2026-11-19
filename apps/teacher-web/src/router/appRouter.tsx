@@ -9,6 +9,7 @@ import { LoginScreen } from "../screens/login/loginScreen";
 import { UserManagementScreen } from "../screens/userManagement/userManagementScreen";
 import { AuditLogsScreen } from "../screens/auditLogs/auditLogsScreen";
 import { DashboardScreen } from "../screens/dashboard/dashboardScreen";
+import { MyClassesScreen } from "../screens/myClasses/myClassesScreen";
 import { ExamLibraryScreen } from "../screens/examLibrary/examLibraryScreen";
 import { ExamBuilderScreen } from "../screens/examBuilder/examBuilderScreen";
 import { QuestionBankScreen } from "../screens/questionBank/questionBankScreen";
@@ -30,6 +31,7 @@ const screenComponents: Record<ScreenName, ComponentType<any>> = {
   userManagement: UserManagementScreen,
   auditLogs: AuditLogsScreen,
   dashboard: DashboardScreen,
+  myClasses: MyClassesScreen,
   examLibrary: ExamLibraryScreen,
   examBuilder: ExamBuilderScreen,
   questionBank: QuestionBankScreen,
@@ -98,6 +100,9 @@ export function AppRouter() {
     }
     if (adminScreens.includes(currentScreen) && !canUseAdminScreens(user)) { // an admin screen without permission
       navigateTo("dashboard"); // send them back to the teacher dashboard
+    }
+    if (currentScreen === "myClasses" && user.role !== "teacher") {
+      navigateTo("userManagement");
     }
   }, [user, isLoading, currentScreen]); // re-checks on every change
 

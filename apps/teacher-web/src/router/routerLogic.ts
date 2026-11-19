@@ -4,6 +4,7 @@ import type { ScreenName } from "./route";
 
 // only these screens are safe to restore after a refresh, everything else falls back to login then dashboard
 const RESTORABLE_SCREENS: ScreenName[] = [
+  "myClasses",
   "examLibrary",
   "examBuilder",
   "examResults",

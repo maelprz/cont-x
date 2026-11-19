@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useState } from "react";
 import type { StudentOption } from "../../services/subjectsClassesService";
 import { EnrollCsvPanel } from "./enrollCsvPanel";
 import type { CsvEnrollResult } from "../../services/subjectsClassesService";
@@ -22,8 +22,10 @@ export function EnrollStudentModal({
   onClose: () => void;
   onSearch: (term: string) => Promise<StudentOption[]>;
   onSubmit: (student: StudentOption) => void;
-  onSubmitCsv: (entries: string[]) => Promise<CsvEnrollResult>;
+  onSubmitCsv?: (entries: string[]) => Promise<CsvEnrollResult>;
 }) {
+  const titleId = useId();
+  const searchId = useId();
   const [search, setSearch] = useState(""); //what admin typed
   const [results, setResults] = useState<StudentOption[]>([]); //students returned from the search
   const [isSearching, setIsSearching] = useState(false); // true while the search is in progress
@@ -44,7 +46,7 @@ export function EnrollStudentModal({
   useEffect(() => {
     //runs each time the search text changes
     const term = search.trim();
-    if (term.length < 2) // too short to search
+    if (!isOpen || mode !== "manual" || term.length < 2)
     {
       setResults([]);
       setSearchError(null);
@@ -72,7 +74,7 @@ export function EnrollStudentModal({
       cancelled = true; // ignore the results of this search
       clearTimeout(timer); // cancel the timer if the user types again
     };
-  }, [search, onSearch]);
+  }, [isOpen, mode, search, onSearch]);
 
   if (!isOpen) return null;
 
@@ -81,14 +83,18 @@ export function EnrollStudentModal({
   return (
     <div
       onClick={isSaving ? undefined : onClose} // clicking the background closes the modal, unless saving
-      className="fixed inset-0 flex items-center justify-center z-[60]"
+      className="fixed inset-0 z-[60] flex items-center justify-center p-4"
       style={{ backgroundColor: "rgba(0,0,0,0.5)" }}
     >
       <div
+        role="dialog"
+        aria-modal="true"
+        aria-labelledby={titleId}
         onClick={(e) => e.stopPropagation()} // clicking inside the modal does not close it
-        className={`${mode === "csv" ? "w-[560px]" : "w-[460px]"} p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]`}
+        className={`${mode === "csv" ? "max-w-[560px]" : "max-w-[460px]"} w-full max-h-full overflow-y-auto p-6 rounded-xl border bg-[var(--color-base-100)] border-[var(--color-base-300)]`}
       >
         <h2
+          id={titleId}
           className="text-[17px] font-bold mb-1"
           style={{ color: "var(--color-base-content)" }}
         >
@@ -101,7 +107,7 @@ export function EnrollStudentModal({
           Adding to {classTitle} ({classCode}).
         </p>
 
-        <div
+        {onSubmitCsv && <div
           role="tablist"
           className="flex gap-1 mb-4 p-1 rounded-lg"
           style={{ backgroundColor: "var(--color-base-200)" }}
@@ -130,9 +136,9 @@ export function EnrollStudentModal({
               {m === "manual" ? "Single student" : "Upload CSV"}
             </button>
           ))}
-        </div>
+        </div>}
 
-        {mode === "csv" ? (
+        {mode === "csv" && onSubmitCsv ? (
           <EnrollCsvPanel
             isSaving={isSaving}
             onSubmit={onSubmitCsv}
@@ -141,16 +147,22 @@ export function EnrollStudentModal({
         ) : (
           <>
             <label
+              htmlFor={searchId}
               className="text-[12px] font-medium opacity-70 block mb-1.5"
               style={{ color: "var(--color-base-content)" }}
             >
               Find student
             </label>
             <input
+              id={searchId}
               autoFocus // put the cursor in the box straight away
               type="text"
               value={search} // shows what has been typed
-              onChange={(e) => setSearch(e.target.value)} // keeps the typed text in state
+              onChange={(e) => {
+                setSearch(e.target.value);
+                setSelected(null);
+                setResults([]);
+              }}
               onKeyDown={(e) =>
                 e.key === "Enter" && canSubmit && selected && onSubmit(selected)
               } // Enter confirms when a student is chosen
