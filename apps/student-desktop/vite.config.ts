@@ -32,7 +32,8 @@ async function startConfiguredMysql() {
   }
   console.log('Starting local MySQL…')
   const child = spawn(executable, [`--defaults-file=${config}`], {
-    detached: true, windowsHide: true, stdio: 'ignore',
+    // A detached Windows child gets its own console. Unref still lets Vite exit.
+    detached: process.platform !== 'win32', windowsHide: true, stdio: 'ignore',
   })
   let stopped = false
   child.once('error', () => { stopped = true })

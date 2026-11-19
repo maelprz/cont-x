@@ -10,6 +10,12 @@ static void CallJs(Napi::Env env, Napi::Function jsCallback, std::nullptr_t*, st
 using ViolationTSFN = Napi::TypedThreadSafeFunction<std::nullptr_t, std::string, CallJs>;
 static ViolationTSFN g_tsfn;
 
+static void releaseViolationCallback() {
+  if (!g_tsfn) return;
+  auto callback = g_tsfn;
+  g_tsfn = ViolationTSFN{};
+  callback.Release();
+}
 
 // list of virtual key codes to block
 static bool shouldBlock(DWORD vkCode, DWORD flags) {
@@ -105,6 +111,7 @@ Napi::Value StartHook(const Napi::CallbackInfo& info) {
 
   g_hook = SetWindowsHookEx(WH_KEYBOARD_LL, LowLevelKeyboardProc, NULL, 0);
   if (g_hook == NULL) {
+    releaseViolationCallback();
     Napi::Error::New(env, "Failed to install keyboard hook").ThrowAsJavaScriptException();
   }
   return env.Undefined();
@@ -117,9 +124,7 @@ Napi::Value StopHook(const Napi::CallbackInfo& info) {
     UnhookWindowsHookEx(g_hook);
     g_hook = NULL;
   }
-  if (g_tsfn) {
-    g_tsfn.Release();
-  }
+  releaseViolationCallback();
   return info.Env().Undefined();
 }
 
