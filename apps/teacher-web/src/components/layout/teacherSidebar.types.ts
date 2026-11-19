@@ -1,6 +1,7 @@
 // Props contract for the shared teacher web sidebar.
 
 export type TeacherScreenName =
+  | "myClasses"
   | "dashboard" 
   | "examLibrary" 
   | "examBuilder" 

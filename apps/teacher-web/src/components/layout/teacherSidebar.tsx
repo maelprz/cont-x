@@ -8,6 +8,7 @@ import {
   Users,
   FileClock,
   BookOpen,
+  GraduationCap,
 } from "lucide-react";
 import { useAuthStore } from "../../store/useAuthStore";
 import { useLogout } from "../../hooks/useLogout";
@@ -81,6 +82,19 @@ export function TeacherSidebar({ activeItem }: TeacherSidebarProps) {
           <LayoutDashboard size={16} />
           {<span>Dashboard</span>}
         </button>
+
+        {user?.role === "teacher" && (
+          <button
+            type="button"
+            aria-current={activeItem === "myClasses" ? "page" : undefined}
+            title="My Classes"
+            onClick={() => navigateTo("myClasses")}
+            className={`${navItemBase} ${activeItem === "myClasses" ? navItemActive : navItemInactive}`}
+          >
+            <GraduationCap size={16} aria-hidden="true" />
+            <span>My Classes</span>
+          </button>
+        )}
 
         <button
           aria-current={activeItem === "examLibrary" ? "page" : undefined}
