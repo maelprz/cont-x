@@ -1,5 +1,5 @@
 import { Flag } from "lucide-react";
-import { lazy, Suspense, useState, useMemo, useEffect, useRef } from "react";
+import { Suspense, useState, useMemo, useEffect, useRef } from "react";
 import { useRouterLogic } from "../../router/routerLogic";
 import { useExamSessionStore } from "../../stores/useExamSessionStore";
 import { useExamQuestions } from "../../hooks/useExamQuestions"; 
@@ -11,6 +11,7 @@ import { useCodeExecution } from "../../hooks/useCodeExecution";
 import { MultipleChoiceOptions } from "../../components/examQuestion/multipleChoiceOptions";
 import { QuestionAnswerSplit } from "../../components/examQuestion/questionAnswerSplit";
 import { QuestionMapGrid } from "../../components/examQuestion/questionMapGrid";
+import { LazyCodeEditor } from "../../components/examQuestion/loadCodeEditor";
 import { useSubmitExamSession } from "../../hooks/useSubmitExamSession";
 import type { SessionTiming, SubmittedAnswer } from "../../services/examService";
 import { countAnsweredQuestions, hasQuestionAnswer } from "../../lib/examProgress";
@@ -38,11 +39,6 @@ import type {
 // ---------------------------------------------------------------------------
 // Helpers
 // ---------------------------------------------------------------------------
-
-const CodeEditor = lazy(async () => {
-  const { CodeEditor } = await import("../../components/examQuestion/codeEditor");
-  return { default: CodeEditor };
-});
 
 const submitButtonClass =
   "flex items-center gap-2 px-6 py-2.5 rounded-lg border border-[#adc6ff] bg-[#adc6ff] text-[#00285d] text-[13px] font-bold cursor-pointer shadow-[0_0_20px_rgba(173,198,255,0.25)] transition-all duration-150 hover:bg-[#c5d7ff] hover:border-[#c5d7ff] hover:scale-[1.02] hover:shadow-[0_0_28px_rgba(173,198,255,0.45)] disabled:opacity-40 disabled:cursor-not-allowed disabled:shadow-none disabled:hover:scale-100 disabled:hover:bg-[#adc6ff] disabled:hover:border-[#adc6ff]";
@@ -765,7 +761,7 @@ export function ExamQuestionScreen({
   const codePane = codingQ && (
     <section className="flex-grow flex flex-col overflow-hidden bg-[var(--bg-app)] min-w-0">
       <Suspense fallback={<p role="status" className="p-4">Loading code editor…</p>}>
-        <CodeEditor
+        <LazyCodeEditor
           code={localCode}
           language={codingQ.language ?? "c"}
           onChange={handleCodeChange}
