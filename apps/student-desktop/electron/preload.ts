@@ -47,8 +47,8 @@ contextBridge.exposeInMainWorld("ipcRenderer", {
   endExamAppCheck: () => ipcRenderer.send("end-exam-app-check"),
   checkOfflineExamStorage: (): Promise<boolean> =>
     ipcRenderer.invoke("check-offline-exam-storage"),
-  saveOfflineExam: (snapshot: OfflineExamSnapshot): Promise<void> =>
-    ipcRenderer.invoke("save-offline-exam", snapshot),
+  prepareOfflineExam: (snapshot: OfflineExamSnapshot, accessToken: string): Promise<OfflineExamSnapshot> =>
+    ipcRenderer.invoke("prepare-offline-exam", snapshot, accessToken),
   loadOfflineExam: (
     key: OfflineAttemptKey,
   ): Promise<OfflineExamSnapshot | null> =>

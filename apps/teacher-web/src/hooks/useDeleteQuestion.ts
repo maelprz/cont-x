@@ -13,7 +13,8 @@ export function useDeleteQuestion() {
       await deleteQuestionFromDb(questionId);
       return true;
     } catch (err) {
-      setError("Could not delete question. Try again.");
+      setError(err && typeof err === "object" && "message" in err
+        ? String(err.message) : "Could not delete question. Try again.");
       return false;
     } finally {
       setIsDeleting(false);

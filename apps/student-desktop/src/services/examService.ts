@@ -486,8 +486,9 @@ export async function getExamResultDetails(
 
   if (correctError) throw new Error(correctError.message); // bubble up, let the screen decide the fallback
 
-  const totalScore = data.total_score ?? 0; // auto-graded score, 0 if missing
+  const finalScore = Number(data.total_score ?? 0); // database total already includes adjustments
   const scoreAdjustment = Number(data.score_adjustment ?? 0); // numeric can arrive as text, so coerce
+  const totalScore = finalScore - scoreAdjustment;
 
   return {
     examTitle: examRow?.title ?? "Exam",
@@ -499,7 +500,7 @@ export async function getExamResultDetails(
     totalScore, // raw auto-graded score
     scoreAdjustment, // teacher's manual change
     adjustmentReason: data.adjustment_reason ?? null, // null when no adjustment
-    finalScore: totalScore + scoreAdjustment, // what the student should see and be judged on
+    finalScore, // the authoritative total, including the adjustment exactly once
     overtimeSeconds: data.overtime_seconds ?? 0, // 0 when the student wasn't in overtime
     overtimeDeduction: Number(data.overtime_deduction_applied ?? 0), // numeric can arrive as text, so coerce
     maxScore: Number(totals.max_score ?? 0), // server total, bank-placed and pooled questions included

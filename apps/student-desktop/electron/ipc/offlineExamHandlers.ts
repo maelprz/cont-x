@@ -1,8 +1,11 @@
 import { ipcMain, type BrowserWindow, type IpcMainInvokeEvent } from "electron";
-import { gradeLocalSubmission, runLocalCode } from '../localGradingService';
+import { gradeLocalSubmission, runLocalCode, withAttemptLock } from '../localGradingService';
+import { prepareOfflineExam } from '../prepareOfflineExam';
+import { publicExam } from '../storage/offlineStorageData';
+import { checkGradingProtection } from '../storage/gradingProtection';
 import type { SubmittedAnswer } from '../../src/services/examService';
 import type { OfflineAttemptKey, OfflineExamDraft, OfflineExamSnapshot, OfflineOperation } from "../../src/types/offlineExam";
-import { acknowledgeOfflineOperation, checkOfflineExamStorage, deleteOfflineExam, enqueueOfflineOperation, listOfflineOperations, loadOfflineExam, saveOfflineDraft, saveOfflineExam, updateOfflineTiming } from "../storage/offlineExamStorage";
+import { acknowledgeOfflineOperation, checkOfflineExamStorage, deleteOfflineExam, enqueueOfflineOperation, listOfflineOperations, loadOfflineExam, saveOfflineDraft, updateOfflineTiming } from "../storage/offlineExamStorage";
 
 const UUID = /^[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}$/i;
 
@@ -26,6 +29,7 @@ export function registerOfflineExamHandlers(getWindow: () => BrowserWindow | nul
     checkSender(event);
     try {
       await checkOfflineExamStorage();
+      await checkGradingProtection();
       return true;
     } catch (error) {
       console.error("[offline exam] storage preflight failed", error instanceof Error ? error.name : "");
@@ -33,27 +37,28 @@ export function registerOfflineExamHandlers(getWindow: () => BrowserWindow | nul
     }
   });
 
-  ipcMain.handle("save-offline-exam", async (event, snapshot: OfflineExamSnapshot) => {
+  ipcMain.handle("prepare-offline-exam", async (event, snapshot: OfflineExamSnapshot, accessToken: string) => {
     checkAttempt(event, snapshot);
     if (
       !Array.isArray(snapshot.questions) || snapshot.questions.length === 0 ||
-      !snapshot.rules || !snapshot.timing || !Number.isFinite(snapshot.timingReceivedAt)
+      !snapshot.rules || !snapshot.timing || !Number.isFinite(snapshot.timingReceivedAt) || typeof accessToken !== 'string'
     ) {
       throw new Error("The downloaded exam is incomplete.");
     }
 
     try {
-      await saveOfflineExam(snapshot);
+      return await prepareOfflineExam(snapshot, accessToken);
     } catch (error) {
       console.error("[offline exam] storage save failed", error instanceof Error ? error.name : "");
-      throw new Error("Could not save the exam to local storage. Try again.");
+      throw new Error(error instanceof Error ? error.message : "Could not save the exam to local storage. Try again.");
     }
   });
 
   ipcMain.handle("load-offline-exam", async (event, key: OfflineAttemptKey) => {
     checkAttempt(event, key);
     await checkOfflineExamStorage();
-    return loadOfflineExam(key);
+    const exam = await loadOfflineExam(key);
+    return exam ? publicExam(exam) : null;
   });
   ipcMain.handle("update-offline-timing", (event, key: OfflineAttemptKey, timing: OfflineExamSnapshot["timing"], receivedAt: number) => {
     checkAttempt(event, key);
@@ -100,6 +105,6 @@ export function registerOfflineExamHandlers(getWindow: () => BrowserWindow | nul
     if (!UUID.test(operation?.id) || !Number.isFinite(Date.parse(operation.occurredAt))) {
       throw new Error("Invalid offline operation.");
     }
-    return acknowledgeOfflineOperation(key, operation);
+    return withAttemptLock(key, () => acknowledgeOfflineOperation(key, operation));
   });
 }

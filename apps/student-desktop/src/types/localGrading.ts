@@ -2,6 +2,7 @@ import type { SubmittedAnswer } from '../services/examService';
 import type { RunOutcome, VisibleTestCase } from '../services/codeExecutionService';
 
 export interface LocalRubric {
+  feedbackOnly?: boolean;
   type: 'mcq' | 'fitb' | 'coding';
   maxPoints: number;
   correctOptionIds?: string[];
@@ -25,12 +26,14 @@ export interface LocalRunState {
 }
 
 export interface LocalGradedAnswer extends SubmittedAnswer {
+  graded_max_points?: number;
   score: number;
   check_attempts: number;
   point_deduction: number;
 }
 
 export interface LocalSubmission {
+  provisional?: boolean;
   version: 1;
   status: 'submitted' | 'timed_out';
   submittedAt: string;

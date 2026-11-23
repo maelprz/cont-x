@@ -4,6 +4,7 @@ import type { CodingBuilderQuestion, CodingProgramType, TestCase } from "../../s
 import { CodeEditor } from "./codeEditor";
 import { starterCodeFor, mainCodeFor } from "./createBlankQuestion";
 import { useValidateTestCases } from "../../hooks/useValidateTestCases";
+import { DEFAULT_TEST_TIME_LIMIT_MS, MAX_TEST_TIME_LIMIT_MS } from "../../lib/questionValidation";
 
 export function CodingEditorPanel({
   question,
@@ -42,14 +43,16 @@ export function CodingEditorPanel({
   // Updates how many points are lost per check attempt.
   const setDeductionPerAttempt = (v: string) => onChange({ ...question, deductionPerAttempt: Number(v) || 0 });
 
-  const setTestCaseField = (id: string, field: keyof TestCase, value: string | boolean) =>
+  const setTestCaseField = <K extends keyof TestCase,>(id: string, field: K, value: TestCase[K]) => {
+    clearResults();
     onChange({ ...question, testCases: question.testCases.map((t) => (t.id === id ? { ...t, [field]: value } : t)) });
+  };
 
   const removeTestCase = (id: string) =>
     onChange({ ...question, testCases: question.testCases.filter((t) => t.id !== id) });
 
   const addTestCase = () =>
-    onChange({ ...question, testCases: [...question.testCases, { id: crypto.randomUUID(), input: "", expectedOutput: "", isHidden: false }] });
+    onChange({ ...question, testCases: [...question.testCases, { id: crypto.randomUUID(), input: "", expectedOutput: "", isHidden: false, timeLimitMs: DEFAULT_TEST_TIME_LIMIT_MS }] });
   
   const setReferenceSolution = (v: string) => {
     onChange({ ...question, referenceSolution: v });
@@ -301,6 +304,15 @@ export function CodingEditorPanel({
                     </button>
                   </div>
                 </div>
+
+                <label className="flex flex-wrap items-center gap-2 text-xs font-medium">
+                  Time limit (ms)
+                  <input type="number" min={1} max={MAX_TEST_TIME_LIMIT_MS} step={1}
+                    aria-label={`Time limit for test case ${question.testCases.indexOf(tc) + 1} in milliseconds`}
+                    value={tc.timeLimitMs ?? DEFAULT_TEST_TIME_LIMIT_MS}
+                    onChange={(event) => setTestCaseField(tc.id, "timeLimitMs", Number(event.target.value))}
+                    className="w-28 rounded-lg border border-[var(--color-base-300)] bg-[var(--color-base-200)] px-3 py-2" />
+                </label>
 
                 {/* Shows why a test case failed, only when there's something to show */}
                 {result && result.status !== "passed" && result.status !== "running" && (

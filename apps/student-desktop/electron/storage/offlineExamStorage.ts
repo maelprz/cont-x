@@ -4,6 +4,7 @@ import { parseEnv } from "node:util";
 import type { OfflineAttemptKey, OfflineExamDraft, OfflineExamSnapshot, OfflineOperation } from "../../src/types/offlineExam";
 import { openEmbeddedExamStorage } from "./embeddedExamStorage";
 import { examDownload, queueSlot, restoreExam } from "./offlineStorageData";
+import { openSnapshot, protectSnapshot, sealGradingData } from './gradingProtection';
 
 const TIMEOUT_MS = 5_000;
 let pool: Pool | undefined;
@@ -99,6 +100,7 @@ export async function checkOfflineExamStorage(): Promise<"mysql" | "embedded"> {
 }
 
 export async function saveOfflineExam(snapshot: OfflineExamSnapshot): Promise<void> {
+  snapshot = await protectSnapshot(snapshot);
   const db = getPool();
   if (!db) return getEmbeddedStorage().save(snapshot);
   const payload = JSON.stringify(examDownload(snapshot));
@@ -113,7 +115,7 @@ export async function saveOfflineExam(snapshot: OfflineExamSnapshot): Promise<vo
 
 export async function loadOfflineExam(key: OfflineAttemptKey): Promise<OfflineExamSnapshot | null> {
   const db = getPool();
-  if (!db) return getEmbeddedStorage().load(key);
+  if (!db) return openStoredExam(getEmbeddedStorage().load(key));
   const [rows] = await db.execute<RowDataPacket[]>({
     sql: `SELECT s.snapshot, q.operation AS submission
       FROM offline_exam_snapshots s LEFT JOIN offline_exam_queue q
@@ -125,16 +127,24 @@ export async function loadOfflineExam(key: OfflineAttemptKey): Promise<OfflineEx
   const snapshot = typeof rows[0].snapshot === 'string' ? JSON.parse(rows[0].snapshot) : rows[0].snapshot;
   const queued = rows[0].submission;
   const operation = typeof queued === "string" ? JSON.parse(queued) : queued;
-  return restoreExam(key, snapshot, operation);
+  return openStoredExam(restoreExam(key, snapshot, operation));
+}
+
+async function openStoredExam(stored: OfflineExamSnapshot | null): Promise<OfflineExamSnapshot | null> {
+  const exam = await openSnapshot(stored);
+  // Upgrade older complete downloads on first access; do not discard saved drafts.
+  if (exam?.gradingMaterial && !exam.protectedGradingMaterial) await saveOfflineExam(exam);
+  return exam;
 }
 
 export async function saveLocalGradingState(key: OfflineAttemptKey, state: OfflineExamSnapshot['gradingState']): Promise<void> {
+  const protectedState = await sealGradingData(state);
   const db = getPool();
-  if (!db) return getEmbeddedStorage().saveGradingState(key, state);
+  if (!db) return getEmbeddedStorage().saveGradingState(key, protectedState);
   await db.execute({
-    sql: "UPDATE offline_exam_snapshots SET snapshot = JSON_SET(snapshot, '$.gradingState', CAST(? AS JSON)) WHERE student_id = ? AND session_id = ?",
+    sql: "UPDATE offline_exam_snapshots SET snapshot = JSON_SET(JSON_REMOVE(snapshot, '$.gradingState'), '$.protectedGradingState', ?) WHERE student_id = ? AND session_id = ?",
     timeout: TIMEOUT_MS,
-  }, [JSON.stringify(state), key.studentId, key.sessionId]);
+  }, [protectedState, key.studentId, key.sessionId]);
 }
 
 export async function saveOfflineDraft(key: OfflineAttemptKey, draft: OfflineExamDraft): Promise<void> {
@@ -175,11 +185,19 @@ export async function listOfflineOperations(key: OfflineAttemptKey): Promise<Off
 }
 
 export async function acknowledgeOfflineOperation(key: OfflineAttemptKey, operation: OfflineOperation): Promise<void> {
+  if (operation.kind === 'submit' && (await listOfflineOperations(key)).some(queued => queued.id === operation.id && queued.kind === 'submit')) {
+    // A teacher extension reopens a timed-out attempt, retaining prior check penalties.
+    const exam = await loadOfflineExam(key);
+    if (exam?.gradingState) {
+      const state = { ...exam.gradingState, submission: undefined };
+      await saveLocalGradingState(key, state);
+    }
+  }
   const db = getPool();
   if (!db) return getEmbeddedStorage().acknowledge(key, operation);
   const slot = queueSlot(operation);
   if (operation.kind === "submit") {
-    // Remove the provisional grade and reopen the frozen draft together.
+    // Reopen the frozen draft after a teacher extension.
     const connection = await db.getConnection();
     try {
       await connection.beginTransaction();

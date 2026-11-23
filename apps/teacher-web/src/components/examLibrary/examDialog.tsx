@@ -24,8 +24,14 @@ export function ExamDialog({ title, subtitle, children, footer, onClose, onSubmi
 
   useEffect(() => {
     const dialog = dialogRef.current;
+    const launcher = document.activeElement;
     dialog?.showModal();
-    return () => dialog?.close();
+    return () => {
+      dialog?.close();
+      queueMicrotask(() => {
+        if (launcher instanceof HTMLElement && launcher.isConnected) launcher.focus();
+      });
+    };
   }, []);
 
   return (
@@ -58,11 +64,12 @@ export function ExamDialog({ title, subtitle, children, footer, onClose, onSubmi
   );
 }
 
-export function ExamConfirmDialog({ isOpen, title, message, confirmLabel, isProcessing, error, onConfirm, onCancel, destructive = true }: {
+export function ExamConfirmDialog({ isOpen, title, message, confirmLabel, cancelLabel = "Cancel", isProcessing, error, onConfirm, onCancel, destructive = true }: {
   isOpen: boolean;
   title: string;
   message: string;
   confirmLabel: string;
+  cancelLabel?: string;
   isProcessing: boolean;
   error: string | null;
   onConfirm: () => void;
@@ -72,7 +79,7 @@ export function ExamConfirmDialog({ isOpen, title, message, confirmLabel, isProc
   if (!isOpen) return null;
   return (
     <ExamDialog title={title} busy={isProcessing} onClose={onCancel} footer={<>
-      <button type="button" className={examSecondary} onClick={onCancel} disabled={isProcessing}>Cancel</button>
+      <button type="button" className={examSecondary} onClick={onCancel} disabled={isProcessing}>{cancelLabel}</button>
       <button type="button" className={destructive ? examDanger : examPrimary} onClick={onConfirm} disabled={isProcessing}>{isProcessing ? "Please wait…" : confirmLabel}</button>
     </>}>
       <p className="text-sm leading-relaxed text-stone-600">{message}</p>

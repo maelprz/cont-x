@@ -56,7 +56,7 @@ export function ExamBuilderScreen({
   onDeleteQuestion,
   onPreviewRendered,
 }: ExamBuilderScreenProps) {
-  const { examData, isLoading, error } = useExamBuilder();
+  const { examData, isLoading, error, retry } = useExamBuilder();
   const teacherId = useAuthStore((state) => state.user?.id);
   const openedFromEditExam = useExamBuilderStore(
     (state) => state.openedFromEditExam,
@@ -713,6 +713,7 @@ export function ExamBuilderScreen({
             subjectId={examData?.subjectId??null}
             isLoading={isLoading}
             error={error}
+            onRetry={retry}
             activeQuestion={activeQuestion}
             editorTab={editorTab}
 

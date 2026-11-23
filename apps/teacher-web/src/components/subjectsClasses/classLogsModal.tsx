@@ -1,4 +1,4 @@
-import { useEffect, useState } from "react";
+import { useEffect, useId, useRef, useState } from "react";
 import { getClassLogs, type ClassLogEntry, type ClassLogFilters } from "../../services/classLogService";
 import { TeacherSelect } from "../shared/teacherSelect";
 
@@ -8,6 +8,19 @@ const eventLabels: Record<string, string> = {
   attempt_status: "Attempt status", enrollment: "Enrollment", class_insert: "Class created", class_update: "Class changed",
 };
 export function ClassLogsModal({ classId, className, onClose }: { classId: string; className: string; onClose: () => void }) {
+  const dialogRef = useRef<HTMLDialogElement>(null);
+  const searchRef = useRef<HTMLInputElement>(null);
+  const titleId = useId();
+  useEffect(() => {
+    const dialog = dialogRef.current!;
+    const launcher = document.activeElement;
+    dialog.showModal();
+    searchRef.current?.focus();
+    return () => {
+      dialog.close();
+      if (launcher instanceof HTMLElement && launcher.isConnected) launcher.focus();
+    };
+  }, []);
   const [draft, setDraft] = useState(emptyFilters);
   const [filters, setFilters] = useState(emptyFilters);
   const [page, setPage] = useState(0);
@@ -29,11 +42,17 @@ export function ClassLogsModal({ classId, className, onClose }: { classId: strin
   function refresh() { beginLoad(); setReload(value => value + 1); }
   function changePage(value: number) { beginLoad(); setPage(value); }
   function applyFilters(event: React.FormEvent) { event.preventDefault(); beginLoad(); setPage(0); setFilters({ ...draft }); }
-  return <div className="fixed inset-0 z-[60] flex items-center justify-center bg-black/50 p-5" onClick={onClose}>
-    <section role="dialog" aria-modal="true" aria-label={`Class logs: ${className}`} onClick={event => event.stopPropagation()} className="w-full max-w-5xl max-h-[90vh] overflow-y-auto rounded-xl border p-6 bg-[var(--color-base-100)] text-[var(--color-base-content)]">
-      <div className="flex justify-between gap-4 mb-4"><div><h2 className="text-xl font-bold">Class logs — {className}</h2><p className="text-xs opacity-70">Recorded from this update onward. Search by person, event or changed value.</p></div><button type="button" onClick={onClose} aria-label="Close class logs">Close</button></div>
+  return <dialog ref={dialogRef} aria-labelledby={titleId}
+    onCancel={event => { event.preventDefault(); onClose(); }}
+    onClick={event => {
+      if (event.target !== event.currentTarget) return;
+      const bounds = event.currentTarget.getBoundingClientRect();
+      if (event.clientX < bounds.left || event.clientX > bounds.right || event.clientY < bounds.top || event.clientY > bounds.bottom) onClose();
+    }}
+    className="m-auto w-[calc(100%-2rem)] max-w-5xl max-h-[90dvh] overflow-y-auto rounded-xl border p-6 bg-[var(--color-base-100)] text-[var(--color-base-content)] backdrop:bg-black/50">
+      <div className="flex justify-between gap-4 mb-4"><div><h2 id={titleId} className="text-xl font-bold">Class logs — {className}</h2><p className="text-xs opacity-70">Recorded from this update onward. Search by person, event or changed value.</p></div><button type="button" onClick={onClose} aria-label="Close class logs">Close</button></div>
       <form onSubmit={applyFilters} className="flex flex-wrap gap-3 items-end mb-4">
-        <label className="text-sm">Search<input aria-label="Search class logs" maxLength={200} value={draft.search} onChange={e => setDraft({ ...draft, search: e.target.value })} className="block border rounded p-2" /></label>
+        <label className="text-sm">Search<input ref={searchRef} aria-label="Search class logs" maxLength={200} value={draft.search} onChange={e => setDraft({ ...draft, search: e.target.value })} className="block border rounded p-2" /></label>
         <div className="w-40 text-sm"><label htmlFor="class-log-event">Event</label><TeacherSelect id="class-log-event" label="Event type" value={draft.event} onChange={(event) => setDraft({ ...draft, event })} options={[{ value: "", label: "All events" }, ...Object.entries(eventLabels).map(([value, label]) => ({ value, label }))]} /></div>
         <div className="w-40 text-sm"><label htmlFor="class-log-outcome">Outcome</label><TeacherSelect id="class-log-outcome" label="Event outcome" value={draft.outcome} onChange={(outcome) => setDraft({ ...draft, outcome })} options={[{ value: "", label: "All outcomes" }, { value: "success", label: "Success" }, { value: "denied", label: "Denied" }]} /></div>
         <label className="text-sm">From<input aria-label="Logs from" type="datetime-local" value={draft.from} onChange={e => setDraft({ ...draft, from: e.target.value })} className="block border rounded p-2" /></label>
@@ -53,6 +72,5 @@ export function ClassLogsModal({ classId, className, onClose }: { classId: strin
         <div className="grid md:grid-cols-2 gap-4 mt-3">{[["Before",selected.old_values],["After",selected.new_values]].map(([label,values]) => <div key={String(label)}><h4 className="font-semibold">{String(label)}</h4><pre className="text-xs whitespace-pre-wrap break-all">{JSON.stringify(values,null,2)}</pre></div>)}</div>
         <button type="button" onClick={() => setSelected(null)} className="underline mt-3">Close details</button>
       </section>}
-    </section>
-  </div>;
+  </dialog>;
 }

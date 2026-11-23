@@ -4,6 +4,14 @@ The Windows x64 setup executable includes the app runtime, compiler, native modu
 
 Run the installed `ContxDesktop.exe --contx-check-setup` to check the compiler, native modules, and selected exam storage before starting an exam.
 
+### Fully offline grading
+
+After the initial online sign-in and exam download, answering, visible test runs, all-test code checks, deductions and final grading run on the device without a network connection. The result is saved locally and sync retries when a connection returns. Sync uploads the local grade; no grading worker, Docker or Supabase service-role key is required.
+
+The main process downloads the complete grading package using the student's authenticated session. Answer keys, hidden tests and internal grading state are encrypted at rest with Electron safeStorage (Windows DPAPI). Run Tests executes and displays visible cases only. Run Code executes and displays results for all cases, including hidden cases, by design. The raw private grading package stays in the main process. Protected storage must be available before an exam can start. Keep the attempt on the same device and OS account until it is synced.
+
+Fully offline grading requires private grading material on the student's device. OS encryption and main-process isolation reduce accidental exposure; a determined user controlling that account or modifying the application can extract material or forge a grade. Sync validates ownership, question membership, point bounds and totals, and pins downloaded point values for later rescaling; it does not independently verify execution or prove the grade's authenticity.
+
 ### Storage selection
 
 The installed app reads optional settings from `offline-mysql.env` in its user-data directory. Development uses the project's `.env.local`. `CONTX_OFFLINE_STORAGE` accepts the following values.

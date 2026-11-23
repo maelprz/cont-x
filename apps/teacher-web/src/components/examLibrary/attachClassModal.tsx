@@ -27,6 +27,13 @@ function AttachClassForm({ examId, onClose, onAttached }: Omit<AttachClassProps,
   const [classId, setClassId] = useState("");
   const [isLoadingClasses, setIsLoadingClasses] = useState(Boolean(teacherId));
   const [loadError, setLoadError] = useState<string | null>(null);
+  const [classesRequest, setClassesRequest] = useState(0);
+
+  const retryClasses = () => {
+    setLoadError(null);
+    setIsLoadingClasses(true);
+    setClassesRequest((request) => request + 1);
+  };
 
   const [durationHours, setDurationHours] = useState(1);
   const [durationMinutesInput, setDurationMinutesInput] = useState(0);
@@ -43,7 +50,7 @@ function AttachClassForm({ examId, onClose, onAttached }: Omit<AttachClassProps,
       .then((data) => {
         if (!isMounted) return;
         setClasses(data);
-        setClassId(data[0]?.id ?? "");
+        setClassId((current) => data.some((item) => item.id === current) ? current : data[0]?.id ?? "");
       })
       .catch((err) => {
         if (isMounted) setLoadError(err instanceof Error ? err.message : "Could not load classes.");
@@ -55,10 +62,10 @@ function AttachClassForm({ examId, onClose, onAttached }: Omit<AttachClassProps,
     return () => {
       isMounted = false;
     };
-  }, [examId, teacherId]);
+  }, [examId, teacherId, classesRequest]);
 
   const totalMinutes = durationHours * 60 + durationMinutesInput;
-  const canSubmit = classId.length > 0 && totalMinutes > 0 && !isSubmitting;
+  const canSubmit = classId.length > 0 && totalMinutes > 0 && !isSubmitting && !isLoadingClasses && !loadError;
 
   const handleSubmit = async () => {
     if (!canSubmit || !examId) return;
@@ -94,7 +101,12 @@ function AttachClassForm({ examId, onClose, onAttached }: Omit<AttachClassProps,
         Class
       </label>
       {isLoadingClasses ? (
-        <p className="text-[13px] mb-4 opacity-60 text-[var(--color-base-content)]">Loading classes...</p>
+        <p role="status" className="text-[13px] mb-4 opacity-60 text-[var(--color-base-content)]">Loading classes...</p>
+      ) : loadError ? (
+        <div role="alert" className="mb-4 text-sm">
+          <p className="mb-2 text-[var(--color-error)]">{loadError}</p>
+          <button type="button" className={examSecondary} onClick={retryClasses}>Retry classes</button>
+        </div>
       ) : classes.length === 0 ? (
         <p className="text-[13px] mb-4 opacity-60 text-[var(--color-base-content)]">
           None of your classes in this subject are available — they already have this exam, or you
@@ -111,12 +123,6 @@ function AttachClassForm({ examId, onClose, onAttached }: Omit<AttachClassProps,
           options={classes.map((item) => ({ value: item.id, label: item.name }))}
         />
       )}
-      {loadError && (
-        <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>
-          {loadError}
-        </p>
-      )}
-
       <p className="mb-2 text-[13px] font-medium">Exam duration</p>
       <div className="flex items-end gap-3 mb-4">
         <div>

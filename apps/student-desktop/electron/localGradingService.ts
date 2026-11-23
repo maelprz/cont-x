@@ -4,6 +4,7 @@ import type { CodingReview, LocalGradingState, LocalRubric, LocalSubmission } fr
 import { gradeTextAnswer, codingScore, validateCodingRubric } from '../shared/localGrading';
 import { executeTestCases } from './ipc/compilerHandlers';
 import { loadOfflineExam, saveLocalGradingState } from './storage/offlineExamStorage';
+import { publicExam } from './storage/offlineStorageData';
 
 const locks = new Map<string, Promise<unknown>>();
 export async function withAttemptLock<T>(key: OfflineAttemptKey, action: () => Promise<T>): Promise<T> {
@@ -17,7 +18,9 @@ export async function withAttemptLock<T>(key: OfflineAttemptKey, action: () => P
 
 async function readAttempt(key: OfflineAttemptKey) {
   const exam = await loadOfflineExam(key);
-  if (!exam?.gradingMaterial) throw new Error('Download the full grading materials before starting this exam.');
+  if (!exam?.gradingMaterial || Object.values(exam.gradingMaterial).some(rubric => rubric.feedbackOnly)) {
+    throw new Error('Reconnect and download this attempt again to enable fully offline grading. Your saved answers are retained.');
+  }
   return exam;
 }
 
@@ -35,15 +38,20 @@ function stateOf(exam: OfflineExamSnapshot): LocalGradingState {
   return exam.gradingState ?? { runs: {} };
 }
 
+function visibleSubmission(exam: OfflineExamSnapshot, submission: LocalSubmission): LocalSubmission {
+  return publicExam({ ...exam, gradingState: { runs: {}, submission } }).gradingState!.submission!;
+}
+
 export function runLocalCode(key: OfflineAttemptKey, questionId: string, code: string, visibleOnly: boolean, operationId?: string) {
   return withAttemptLock(key, async () => {
     const exam = await readAttempt(key);
     const state = stateOf(exam);
     const replayed = operationId && state.replayedRuns?.[operationId];
     if (replayed) return replayed;
-    if (state.submission) throw new Error('This attempt has already been graded for submission.');
+    if (state.submission && !state.submission.provisional) throw new Error('This attempt has already been graded for submission.');
     const rubric = exam.gradingMaterial![questionId];
     if (!rubric) throw new Error('Question does not belong to this attempt.');
+    if (!visibleOnly && (state.executionLogs?.length ?? 0) >= 200) throw new Error('The 200 code-check limit was reached. You can still submit your final code.');
     const outcome = await run(rubric, code, visibleOnly);
     if (!visibleOnly && !outcome.compileError) {
       (state.executionLogs ??= []).push({ questionId, executedAt: new Date().toISOString(), outcome });
@@ -57,6 +65,7 @@ export function runLocalCode(key: OfflineAttemptKey, questionId: string, code: s
     }
     if (operationId) (state.replayedRuns ??= {})[operationId] = outcome;
     if (operationId || (!visibleOnly && !outcome.compileError)) await saveLocalGradingState(key, state);
+    // Run Tests executes visible cases only; Run Code returns every executed case.
     return outcome;
   });
 }
@@ -66,7 +75,7 @@ export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmis
   return withAttemptLock(key, async () => {
     const exam = await readAttempt(key);
     const state = stateOf(exam);
-    if (state.submission) return state.submission;
+    if (state.submission && !state.submission.provisional) return visibleSubmission(exam, state.submission);
     const byId = new Map(answers.map((answer) => [answer.pool_draw_id ?? answer.question_id, answer]));
     if (byId.size !== answers.length || answers.some((answer) => !exam.questions.some((q) =>
       q.poolDrawId ? answer.pool_draw_id === q.id && !answer.question_id : answer.question_id === q.id && !answer.pool_draw_id))) {
@@ -111,16 +120,14 @@ export function gradeLocalSubmission(key: OfflineAttemptKey, status: LocalSubmis
       } else if (rubric.type !== 'coding') {
         score = Math.max(0, gradeTextAnswer(rubric, answer.answer_text) - changes * exam.rules.answerChangeDeduction);
       }
-      const answeredAt = answer.answered_at ? Date.parse(answer.answered_at) : null;
-      if (exam.rules.overtimePolicy === 'zero' && answeredAt !== null && answeredAt > Date.parse(exam.timing.normalDeadline)) score = 0;
-      graded.push({ ...answer, score, change_count: changes, check_attempts: previous?.checkAttempts ?? rubric.checkAttempts,
+      graded.push({ ...answer, score, graded_max_points: rubric.maxPoints, change_count: changes, check_attempts: previous?.checkAttempts ?? rubric.checkAttempts,
         point_deduction: rubric.type === 'coding' ? deduction : changes * exam.rules.answerChangeDeduction });
     }
     const overtimeDeduction = overtimeSeconds > 0 ? exam.timing.overtimeDeduction : 0;
-    state.submission = { version: 1, status: now >= Date.parse(exam.timing.hardDeadline) ? 'timed_out' : status,
+    state.submission = visibleSubmission(exam, { version: 1, status: now >= Date.parse(exam.timing.hardDeadline) ? 'timed_out' : status,
       submittedAt: new Date(now).toISOString(), answers: graded, overtimeSeconds, overtimeDeduction,
       totalScore: Math.max(0, graded.reduce((sum, answer) => sum + answer.score, 0) - overtimeDeduction),
-      executionLogs, codingReview };
+      executionLogs, codingReview });
     await saveLocalGradingState(key, state);
     return state.submission;
   });

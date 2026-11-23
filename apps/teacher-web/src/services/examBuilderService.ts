@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { requireFitbAnswer } from "../lib/fitbAnswers";
+import { DEFAULT_TEST_TIME_LIMIT_MS, validateQuestionForSave } from "../lib/questionValidation";
 import { requireTopicIds } from "./questionTopicService";
 import type {
   BuilderQuestion,
@@ -37,6 +38,7 @@ type TestCaseRow = {
   input: string;
   expected_output: string;
   is_hidden: boolean;
+  time_limit_ms: number;
 };
 
 // one question row, with its type-specific child table embedded
@@ -202,6 +204,7 @@ function mapCodingRow(row: QuestionRow): CodingBuilderQuestion | null {
       input: t.input,
       expectedOutput: t.expected_output,
       isHidden: t.is_hidden,
+      timeLimitMs: t.time_limit_ms,
     })),
     programType: row.coding_question.program_type,
     mainCode: row.coding_question.main_code ?? "",
@@ -510,6 +513,7 @@ async function syncTestCases(
         input: t.input,
         expected_output: t.expectedOutput,
         is_hidden: t.isHidden,
+        time_limit_ms: t.timeLimitMs ?? DEFAULT_TEST_TIME_LIMIT_MS,
       })),
     );
     if (upsertError) throw upsertError;
@@ -548,6 +552,7 @@ export async function saveQuestion(
   examId: string,
   question: BuilderQuestion,
 ): Promise<void> {
+  validateQuestionForSave(question);
   const topicIds = requireTopicIds(question.topicIds);
   // checked before anything is written, so a question with no usable answer never reaches the database
   const fitbAnswers =
@@ -612,6 +617,12 @@ export async function saveQuestion(
 
 // permanently deletes a question from supabase and will remove all child rows too
 export async function deleteQuestion(questionId: string): Promise<void> {
+  const { data: question, error: lookupError } = await supabase.from("questions")
+    .select("exam_id").eq("id", questionId).single();
+  if (lookupError) throw lookupError;
+  if (await countExamAttempts(question.exam_id) > 0) {
+    throw new Error("This question has student attempts and cannot be deleted. Create a new exam version instead.");
+  }
   const { error } = await supabase
     .from("questions")
     .delete()

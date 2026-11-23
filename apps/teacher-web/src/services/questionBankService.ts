@@ -1,5 +1,6 @@
 import { supabase } from "./supabaseClient";
 import { requireFitbAnswer } from "../lib/fitbAnswers";
+import { DEFAULT_TEST_TIME_LIMIT_MS, validateQuestionForSave } from "../lib/questionValidation";
 import { requireTopicIds } from "./questionTopicService";
 import type { SubjectTopic } from "./questionTopicService";
 import type {
@@ -29,6 +30,7 @@ type TestCaseBankRow = {
   input: string;
   expected_output: string;
   is_hidden: boolean;
+  time_limit_ms: number;
 };
 
 type TopicSummary = Pick<SubjectTopic, "id" | "name">;
@@ -125,6 +127,7 @@ function mapBankRowToBuilderQuestion(row: QuestionBankRow): BuilderQuestion | nu
         input: t.input,
         expectedOutput: t.expected_output,
         isHidden: t.is_hidden,
+        timeLimitMs: t.time_limit_ms,
       })),
       programType: row.coding_bank_question.program_type,
       mainCode: row.coding_bank_question.main_code ?? "",
@@ -196,7 +199,7 @@ const BANK_SELECT = `
     main_code,
     check_penalty_per_attempt,
     reference_solution,
-    test_case_bank ( id, input, expected_output, is_hidden )
+    test_case_bank ( id, input, expected_output, is_hidden, time_limit_ms )
   )
 `;
 
@@ -347,6 +350,7 @@ async function syncTestCaseBank(bankQuestionId: string, testCases: TestCase[]): 
         input: t.input,
         expected_output: t.expectedOutput,
         is_hidden: t.isHidden,
+        time_limit_ms: t.timeLimitMs ?? DEFAULT_TEST_TIME_LIMIT_MS,
       })),
     );
     if (upsertError) throw upsertError;
@@ -359,6 +363,7 @@ export async function saveBankQuestion(
   subjectId: string, // every bank question lives under a subject now (NOT NULL in the db)
   question: BuilderQuestion,
 ): Promise<void> {
+  validateQuestionForSave(question);
   const topicIds = requireTopicIds(question.topicIds);
   // checked before anything is written, so a question with no usable answer never reaches the database
   const fitbAnswers =

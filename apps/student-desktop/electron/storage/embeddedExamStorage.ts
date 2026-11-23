@@ -53,9 +53,9 @@ export function openEmbeddedExamStorage(file: string) {
       return row ? restoreExam(key, JSON.parse(String(row.snapshot)),
         row.submission ? JSON.parse(String(row.submission)) : undefined) : null;
     },
-    saveGradingState(key: OfflineAttemptKey, state: OfflineExamSnapshot["gradingState"]) {
-      db.prepare(`UPDATE offline_exam_snapshots SET snapshot = json_set(snapshot, '$.gradingState', json(?))
-        WHERE student_id = ? AND session_id = ?`).run(JSON.stringify(state ?? null), key.studentId, key.sessionId);
+    saveGradingState(key: OfflineAttemptKey, protectedState: string) {
+      db.prepare(`UPDATE offline_exam_snapshots SET snapshot = json_set(json_remove(snapshot, '$.gradingState'), '$.protectedGradingState', ?)
+        WHERE student_id = ? AND session_id = ?`).run(protectedState, key.studentId, key.sessionId);
     },
     saveDraft(key: OfflineAttemptKey, draft: OfflineExamDraft) {
       const result = db.prepare(`UPDATE offline_exam_snapshots SET snapshot = json_set(snapshot, '$.draft', json(?))

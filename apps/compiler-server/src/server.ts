@@ -16,11 +16,11 @@ app.post('/validate-test-case', async (req, res) => {
 
   // Basic shape check before doing any real work.
   if (
-    !body.programType ||
+    !['cProgram', 'cFunction'].includes(body.programType ?? '') ||
     !body.referenceSolution ||
     typeof body.input !== 'string' ||
     typeof body.expectedOutput !== 'string' ||
-    typeof body.timeLimitMs !== 'number'
+    !Number.isInteger(body.timeLimitMs) || body.timeLimitMs! < 1 || body.timeLimitMs! > 30000
   ) {
     res.status(400).json({ error: 'Missing or invalid fields in request body.' });
     return;

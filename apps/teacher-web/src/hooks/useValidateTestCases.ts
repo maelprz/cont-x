@@ -1,10 +1,7 @@
 import { useState } from "react";
 import { validateTestCase } from "../services/compilerValidationService";
 import type { CodingBuilderQuestion } from "../screens/examBuilder/examBuilderScreen.types";
-
-// Default time limit for validation runs, matches the database
-// column's own default until per-test-case limits are wired into the UI.
-const DEFAULT_TIME_LIMIT_MS = 5000;
+import { DEFAULT_TEST_TIME_LIMIT_MS, validateQuestionForSave } from "../lib/questionValidation";
 
 // One test case's validation status, keyed by the test case's id.
 export interface TestCaseValidationResult {
@@ -26,6 +23,14 @@ export function useValidateTestCases() {
 
   // Validates every test case on the given question, in order.
   async function validateAll(question: CodingBuilderQuestion): Promise<void> {
+    try {
+      validateQuestionForSave(question);
+    } catch (error) {
+      setResults(Object.fromEntries(question.testCases.map((test) => [test.id, {
+        status: "error", message: error instanceof Error ? error.message : "Invalid time limit.",
+      }])));
+      return;
+    }
     setIsValidating(true);
 
     // Run one at a time so we never spawn multiple compiles together.
@@ -39,13 +44,13 @@ export function useValidateTestCases() {
           mainCode: question.programType === "cFunction" ? question.mainCode : undefined,
           input: testCase.input,
           expectedOutput: testCase.expectedOutput,
-          timeLimitMs: DEFAULT_TIME_LIMIT_MS,
+          timeLimitMs: testCase.timeLimitMs ?? DEFAULT_TEST_TIME_LIMIT_MS,
         });
 
         if (response.compileError !== null) {
           setOneResult(testCase.id, {
             status: "error",
-            message: response.compileError || "Compilation failed — check that GCC_PATH is set correctly on the compiler-server.",
+            message: response.compileError || "Compilation failed. Check the reference solution.",
           });
         } else if (response.timedOut) {
           setOneResult(testCase.id, { status: "error", message: "Timed out — check for an infinite loop." });

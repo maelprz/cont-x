@@ -27,7 +27,7 @@ export async function prepareLocalSync(
     operations = await ipc.listOfflineOperations(key);
     gradedRuns = operations.filter((operation) => operation.kind === "graded");
   }
-  if (pending && !receipt) {
+  if (pending && (!receipt || receipt.provisional)) {
     receipt = await ipc.gradeLocalSubmission(key, pending.status, pending.answers, pending.requestedAt);
   }
   return { operations, receipt };

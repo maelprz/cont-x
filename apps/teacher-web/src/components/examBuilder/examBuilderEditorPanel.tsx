@@ -17,6 +17,7 @@ interface ExamBuilderEditorPaneProps {
   subjectId: string | null;
   isLoading: boolean;
   error: string | null;
+  onRetry?: () => void;
   activeQuestion?: BuilderQuestion;
   showQuestionNumber?: boolean;
   subjectName?: string;
@@ -37,6 +38,7 @@ export function ExamBuilderEditorPanel({
   subjectId,
   isLoading,
   error,
+  onRetry,
   activeQuestion,
   showQuestionNumber = true,
   subjectName,
@@ -64,9 +66,10 @@ export function ExamBuilderEditorPanel({
           </p>
         )}
         {error && (
-          <p className="text-[13px]" style={{ color: "var(--color-error)" }}>
-            {error}
-          </p>
+          <div role="alert" className="text-[13px]">
+            <p className="mb-3 text-[var(--color-error)]">{error}</p>
+            {onRetry && <button type="button" className={examSecondary} onClick={onRetry}>Retry loading exam</button>}
+          </div>
         )}
 
         {!isLoading && !error && poolPanel && <div className="mx-auto max-w-4xl">{poolPanel}</div>}
