@@ -9,7 +9,7 @@ interface Window {
     checkExamApps: (closeApps: boolean) => Promise<string[]>;
     endExamAppCheck: () => void;
     checkOfflineExamStorage: () => Promise<boolean>;
-    saveOfflineExam: (snapshot: import("./types/offlineExam").OfflineExamSnapshot) => Promise<void>;
+    prepareOfflineExam: (snapshot: import("./types/offlineExam").OfflineExamSnapshot, accessToken: string) => Promise<import("./types/offlineExam").OfflineExamSnapshot>;
     loadOfflineExam: (key: import("./types/offlineExam").OfflineAttemptKey) => Promise<import("./types/offlineExam").OfflineExamSnapshot | null>;
     updateOfflineTiming: (key: import("./types/offlineExam").OfflineAttemptKey, timing: import("./services/examService").SessionTiming, receivedAt: number) => Promise<void>;
     deleteOfflineExam: (key: import("./types/offlineExam").OfflineAttemptKey) => Promise<void>;

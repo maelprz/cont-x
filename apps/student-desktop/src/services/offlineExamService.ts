@@ -1,7 +1,5 @@
 import { getSessionQuestions, getSessionRules, getSessionTiming } from "./examService";
 import { supabase } from './supabaseClient';
-import type { LocalRubric } from '../types/localGrading';
-import { validateCodingRubric } from '../../shared/localGrading';
 import type { AuthUser } from "./authService";
 import type { OfflineExamSnapshot, OfflineAttemptKey } from "../types/offlineExam";
 
@@ -53,28 +51,12 @@ export async function prepareOfflineExam(
     throw new Error("This exam attempt is no longer active.");
   }
 
-  const { data: gradingMaterial, error: gradingError } = await supabase.rpc('download_local_grading_material', { p_session_id: sessionId });
-  if (gradingError || !gradingMaterial || questions.some((question) => !gradingMaterial[question.id])) {
-    throw new Error('Could not download the complete grading materials. Reconnect and retry.');
-  }
-  for (const question of questions) {
-    validateCodingRubric((gradingMaterial as Record<string, LocalRubric>)[question.id]);
-  }
-  const visibleTests = Object.fromEntries(await Promise.all(
-    questions.filter((question) => question.type === "coding").map(async (question) => [
-      question.id, ((gradingMaterial as Record<string, LocalRubric>)[question.id].tests ?? []).filter((test) => !test.is_hidden),
-    ] as const),
-  ));
-  const snapshot = {
+  const { data: { session }, error } = await supabase.auth.getSession();
+  if (error || !session) throw new Error('Reconnect and sign in to download the exam.');
+  return window.ipcRenderer.prepareOfflineExam({
     studentId, sessionId, examId: exam.id ?? undefined, title: exam.title ?? undefined,
-    questions, rules, timing, timingReceivedAt, visibleTests, gradingMaterial: gradingMaterial as Record<string, LocalRubric>,
-  };
-  try {
-    await window.ipcRenderer.saveOfflineExam(snapshot);
-  } catch {
-    throw new Error("Could not save the exam to local storage. Try again.");
-  }
-  return snapshot;
+    questions, rules, timing, timingReceivedAt,
+  }, session.access_token);
 }
 
 export function finishOfflineExam(key: OfflineAttemptKey): void {

@@ -80,7 +80,7 @@ function mapSession(
   ); // holds the pass mark
 
   const totalScore =
-    (session.total_score ?? 0) + Number(session.score_adjustment ?? 0); // auto-graded score plus any teacher adjustment
+    session.total_score ?? 0; // the database total already includes the teacher's adjustment
   const percentage =
     maxScore > 0 ? Math.round((totalScore / maxScore) * 1000) / 10 : 0; // percent with one decimal, never divides by zero
   const passmark = classExam?.pass_mark ?? null; // null means the teacher left the pass mark blank

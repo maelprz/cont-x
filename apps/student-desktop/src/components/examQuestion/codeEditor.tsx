@@ -94,6 +94,7 @@ function OutputPanel({
           className="cursor-pointer rounded-lg border border-[var(--border-subtle)] bg-[image:var(--button-gradient)] px-2.5 py-1 text-xs font-semibold text-[var(--button-gradient-text)] focus-visible:outline-2 focus-visible:outline-offset-2 focus-visible:outline-[#465a3b] disabled:cursor-not-allowed disabled:opacity-50">
           Run Code
         </button>
+        <p className="basis-full text-xs text-stone-500">Run Tests shows visible cases. Run Code shows results for all cases, including hidden cases.</p>
       </div>
 
       <div

@@ -11,6 +11,7 @@ export interface TestCase {
   input: string;
   expectedOutput: string;
   isHidden: boolean;
+  timeLimitMs?: number;
 }
 
 // Shared fields across all question types

@@ -1,5 +1,5 @@
 import { TeacherSelect } from "../shared/teacherSelect";
-import { ExamDialog, examField, examPrimary, examSecondary } from "./examDialog";
+import { ExamConfirmDialog, ExamDialog, examField, examPrimary, examSecondary } from "./examDialog";
 import { useState, useEffect } from "react";
 import type { NewExamSettings } from "../../services/examBuilderService";
 import { getAssignedSubjects } from "../../services/subjectService";
@@ -31,6 +31,20 @@ function CreateExamForm({ onClose, onSubmit, isSubmitting, error, fixedSubject }
   const [subjects, setSubjects] = useState<AssignedSubject[]>([]);
   const [isLoadingSubjects, setIsLoadingSubjects] = useState(!fixedSubject && Boolean(teacherId));
   const [subjectsError, setSubjectsError] = useState<string | null>(null);
+  const [subjectsRequest, setSubjectsRequest] = useState(0);
+  const [confirmDiscard, setConfirmDiscard] = useState(false);
+
+  const retrySubjects = () => {
+    setSubjectsError(null);
+    setIsLoadingSubjects(true);
+    setSubjectsRequest((request) => request + 1);
+  };
+
+  const requestClose = () => {
+    if (isSubmitting) return;
+    if (title || description) setConfirmDiscard(true);
+    else onClose();
+  };
 
   // loads the teacher's assigned subjects each time the modal opens
   useEffect(() => {
@@ -42,7 +56,7 @@ function CreateExamForm({ onClose, onSubmit, isSubmitting, error, fixedSubject }
       .then((data) => {
         if (!isMounted) return;
         setSubjects(data);
-        setSubjectId((current) => current || data[0]?.id || "");
+        setSubjectId((current) => data.some((subject) => subject.id === current) ? current : data[0]?.id || "");
       })
       .catch((err) => {
         if (isMounted) {
@@ -56,11 +70,12 @@ function CreateExamForm({ onClose, onSubmit, isSubmitting, error, fixedSubject }
     return () => {
       isMounted = false;
     };
-  }, [teacherId, fixedSubject]);
+  }, [teacherId, fixedSubject, subjectsRequest]);
 
   const trimmedTitle = title.trim();
   const effectiveSubjectId = fixedSubject ? fixedSubject.id : subjectId;
-  const canSubmit = trimmedTitle.length > 0 && effectiveSubjectId.length > 0 && !isSubmitting;
+  const canSubmit = trimmedTitle.length > 0 && effectiveSubjectId.length > 0 && !isSubmitting
+    && (Boolean(fixedSubject) || (!isLoadingSubjects && !subjectsError));
 
   const handleSubmit = () => {
     if (!canSubmit) return;
@@ -72,10 +87,11 @@ function CreateExamForm({ onClose, onSubmit, isSubmitting, error, fixedSubject }
   };
 
   return (
-    <ExamDialog title="New exam" busy={isSubmitting} onClose={onClose}
+    <>
+    <ExamDialog title="New exam" busy={isSubmitting} onClose={requestClose}
       onSubmit={(event) => { event.preventDefault(); void handleSubmit(); }}
       footer={<>
-        <button type="button" className={examSecondary} onClick={onClose} disabled={isSubmitting}>Cancel</button>
+        <button type="button" className={examSecondary} onClick={requestClose} disabled={isSubmitting}>Cancel</button>
         <button type="submit" className={examPrimary} disabled={!canSubmit}>{isSubmitting ? "Creating…" : "Create exam"}</button>
       </>}>
       <label htmlFor={fixedSubject ? undefined : "new-exam-subject"} className="block text-[13px] font-medium mb-2 text-[var(--color-base-content)]">
@@ -86,7 +102,12 @@ function CreateExamForm({ onClose, onSubmit, isSubmitting, error, fixedSubject }
           {fixedSubject.name}
         </p>
       ) : isLoadingSubjects ? (
-        <p className="text-[13px] mb-4 opacity-60 text-[var(--color-base-content)]">Loading subjects...</p>
+        <p role="status" className="text-[13px] mb-4 opacity-60 text-[var(--color-base-content)]">Loading subjects...</p>
+      ) : subjectsError ? (
+        <div role="alert" className="mb-4 text-sm">
+          <p className="mb-2 text-[var(--color-error)]">{subjectsError}</p>
+          <button type="button" className={examSecondary} onClick={retrySubjects}>Retry subjects</button>
+        </div>
       ) : subjects.length === 0 ? (
         <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>
           You aren't assigned to any subjects yet. Ask an admin to assign you one first.
@@ -102,12 +123,6 @@ function CreateExamForm({ onClose, onSubmit, isSubmitting, error, fixedSubject }
           options={subjects.map((subject) => ({ value: subject.id, label: subject.name }))}
         />
       )}
-      {subjectsError && (
-        <p className="text-[13px] mb-4" style={{ color: "var(--color-error)" }}>
-          {subjectsError}
-        </p>
-      )}
-
       <label htmlFor="new-exam-title" className="block text-[13px] font-medium mb-2">
         Exam title
       </label>
@@ -139,5 +154,10 @@ function CreateExamForm({ onClose, onSubmit, isSubmitting, error, fixedSubject }
         </p>
       )}
     </ExamDialog>
+    <ExamConfirmDialog isOpen={confirmDiscard} title="Discard new exam?"
+      message="Your exam title and description have not been saved. Keep editing to return to your draft."
+      confirmLabel="Discard draft" cancelLabel="Keep editing" isProcessing={Boolean(isSubmitting)} error={null}
+      onConfirm={onClose} onCancel={() => setConfirmDiscard(false)} />
+    </>
   );
 }

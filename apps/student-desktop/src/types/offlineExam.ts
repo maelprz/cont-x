@@ -17,6 +17,9 @@ export interface OfflineAttemptKey {
 }
 
 export interface OfflineExamSnapshot extends OfflineAttemptKey {
+  /** Main-process storage only. Removed from all renderer responses. */
+  protectedGradingMaterial?: string;
+  protectedGradingState?: string;
   gradingMaterial?: Record<string, LocalRubric>;
   gradingState?: LocalGradingState;
   examId?: string;

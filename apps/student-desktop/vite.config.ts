@@ -51,6 +51,7 @@ async function startConfiguredMysql() {
 export default defineConfig(async ({ mode, command, isPreview }) => {
   // Main-process storage settings stay out of the renderer's VITE_* variables.
   const localEnv = loadEnv(mode, __dirname, ['CONTX_MYSQL_', 'CONTX_OFFLINE_STORAGE'])
+  const publicEnv = loadEnv(mode, __dirname, 'VITE_SUPABASE_')
   for (const [key, value] of Object.entries(localEnv)) {
     if (process.env[key] === undefined) process.env[key] = value
   }
@@ -69,6 +70,10 @@ export default defineConfig(async ({ mode, command, isPreview }) => {
           entry: 'electron/main.ts',
           // nested vite config, only applies to the main process build
           vite: {
+            define: {
+              'process.env.CONTX_SUPABASE_URL': JSON.stringify(publicEnv.VITE_SUPABASE_URL ?? ''),
+              'process.env.CONTX_SUPABASE_ANON_KEY': JSON.stringify(publicEnv.VITE_SUPABASE_ANON_KEY ?? ''),
+            },
             build: {
               rollupOptions: {
                 // keep these as real require() calls instead of bundling them
