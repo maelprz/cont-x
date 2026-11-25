@@ -53,6 +53,7 @@ export function ExamLibraryScreen() {
     subjects,
     isLoading: isLoadingSubjects,
     error: subjectsError,
+    refetch: refetchSubjects,
   } = useLibrarySubjects(exams);
   const selectedSubject = subjects.find((s) => s.id === selectedSubjectId) ?? null;
 
@@ -197,8 +198,7 @@ export function ExamLibraryScreen() {
   const selectedExamIsSaving = !!backgroundSave && selectedExam?.id === backgroundSave.examId;
   const selectedExamSubject = subjects.find((subject) => subject.id === selectedExam?.subjectId);
   const canCreate = selectedSubject ? selectedSubject.isAssigned : subjects.some((subject) => subject.isAssigned);
-  const isLoading = isLoadingSubjects || isLoadingExams;
-  const loadError = subjectsError ?? examsError;
+  const isLoading = isLoadingExams && exams.length === 0;
 
   return (
     <div className="flex h-dvh overflow-hidden bg-[var(--color-base-200)] text-[var(--color-base-content)]">
@@ -213,18 +213,27 @@ export function ExamLibraryScreen() {
               <input aria-label="Search exams" value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search by title or code" className={`${examField} pl-9`} />
             </label>
             <ExamStatusFilter value={statusFilters} onChange={setStatusFilters} />
-            {canCreate && (
-              <button type="button" className={`${examPrimary} ml-auto shrink-0`} disabled={!!backgroundSave} onClick={() => setIsCreateModalOpen(true)}>
+            {(canCreate || isLoadingSubjects || subjectsError) && (
+              <button type="button" className={`${examPrimary} ml-auto shrink-0`} disabled={!!backgroundSave || isLoadingSubjects || !!subjectsError} onClick={() => setIsCreateModalOpen(true)}>
                 <Plus size={16} aria-hidden="true" /> New exam
               </button>
             )}
           </div>
           {actionError && <p role="alert" className="px-4 py-2 text-sm text-red-700 sm:px-7">{actionError}</p>}
+          {subjectsError && <div className="flex flex-wrap items-center gap-3 px-4 py-2 sm:px-7">
+            <p role="alert" className="text-sm text-red-700">{subjectsError} New exams are unavailable until subjects load.</p>
+            <button type="button" className={examSecondary} onClick={refetchSubjects}>Retry subjects</button>
+          </div>}
+          {isLoadingSubjects && <p role="status" className="px-4 py-2 text-sm text-stone-600 sm:px-7">Loading subjects…</p>}
+          {examsError && <div className="flex flex-wrap items-center gap-3 px-4 py-2 sm:px-7">
+            <p role="alert" className="text-sm text-red-700">{examsError}</p>
+            <button type="button" className={examSecondary} onClick={refetch}>Retry exams</button>
+          </div>}
           <div className="grid min-h-0 flex-1 overflow-y-auto xl:grid-cols-[minmax(300px,2fr)_minmax(0,3fr)] xl:overflow-hidden">
             <section aria-label="Exams" className="min-w-0 border-b border-[var(--color-base-300)] xl:flex xl:min-h-0 xl:flex-col xl:border-r xl:border-b-0">
               <div className="px-3 py-2 xl:min-h-0 xl:overflow-y-auto">
                 {isLoading ? <p role="status" className="p-3 text-sm text-stone-600">Loading exams…</p>
-                  : loadError && !exams.length ? <p role="alert" className="p-3 text-sm text-red-700">{loadError}</p>
+                  : examsError && !exams.length ? null
                   : filtered.length ? (
                     <><ul className="divide-y divide-stone-200">
                       {examPage.items.map((exam) => {

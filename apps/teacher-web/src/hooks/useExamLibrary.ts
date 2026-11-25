@@ -40,7 +40,11 @@ export function useExamLibrary(includeResultsUpdates = false) {
   }, [teacherId, isSavingExam, includeResultsUpdates, refresh]);
 
   // re-runs the fetch, used after publish/end/delete to refresh the list
-  const refetch = () => setRefresh((value) => value + 1);
+  const refetch = () => {
+    setIsLoading(true);
+    setError(null);
+    setRefresh((value) => value + 1);
+  };
 
   return { exams, isLoading, error, refetch };
 }

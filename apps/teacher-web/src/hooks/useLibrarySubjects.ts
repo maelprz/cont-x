@@ -12,10 +12,17 @@ import { useAuthStore } from "../store/useAuthStore";
 export function useLibrarySubjects(exams: ExamCard[]) {
   const teacherId = useAuthStore((state) => state.user?.id);
 
-  const [assigned, setAssigned] = useState<AssignedSubject[]>([]);
-  const [classCounts, setClassCounts] = useState<Record<string, number>>({});
-  const [isLoading, setIsLoading] = useState(true);
-  const [error, setError] = useState<string | null>(null);
+  const [revision, setRevision] = useState(0);
+  const [result, setResult] = useState<{
+    teacherId: string | undefined; revision: number; assigned: AssignedSubject[];
+    classCounts: Record<string, number>; error: string | null; loaded: boolean;
+  }>({ teacherId: undefined, revision: -1, assigned: [], classCounts: {}, error: null, loaded: false });
+  const isCurrentTeacher = result.teacherId === teacherId;
+  const isLoading = !!teacherId && (!isCurrentTeacher || result.revision !== revision);
+  const error = !isLoading && isCurrentTeacher ? result.error : null;
+  const assigned = useMemo(() => isCurrentTeacher ? result.assigned : [], [isCurrentTeacher, result.assigned]);
+  const classCounts = useMemo(() => isCurrentTeacher ? result.classCounts : {}, [isCurrentTeacher, result.classCounts]);
+  const assignmentsKnown = isCurrentTeacher && result.loaded;
 
   useEffect(() => {
     if (!teacherId) return;
@@ -25,20 +32,22 @@ export function useLibrarySubjects(exams: ExamCard[]) {
     Promise.all([getAssignedSubjects(teacherId), getClassCountsBySubject(teacherId)])
       .then(([subjects, counts]) => {
         if (!isActive) return;
-        setAssigned(subjects);
-        setClassCounts(counts);
+        setResult({ teacherId, revision, assigned: subjects, classCounts: counts, error: null, loaded: true });
       })
       .catch(() => {
-        if (isActive) setError("Could not load your subjects. Try again.");
-      })
-      .finally(() => {
-        if (isActive) setIsLoading(false);
+        if (isActive) setResult((previous) => ({
+          teacherId, revision,
+          assigned: previous.teacherId === teacherId ? previous.assigned : [],
+          classCounts: previous.teacherId === teacherId ? previous.classCounts : {},
+          loaded: previous.teacherId === teacherId && previous.loaded,
+          error: "Could not load your subjects. Try again.",
+        }));
       });
 
     return () => {
       isActive = false;
     };
-  }, [teacherId]);
+  }, [teacherId, revision]);
 
   const subjects = useMemo<SubjectCard[]>(() => {
     const byId = new Map<string, SubjectCard>();
@@ -60,7 +69,7 @@ export function useLibrarySubjects(exams: ExamCard[]) {
         // exam under a subject the teacher is no longer assigned to
         card = {
           id: exam.subjectId,
-          name: "Unassigned subject",
+          name: assignmentsKnown ? "Unassigned subject" : "Subject unavailable",
           examCount: 0,
           classCount: 0,
           liveClassCount: 0,
@@ -76,7 +85,7 @@ export function useLibrarySubjects(exams: ExamCard[]) {
       if (a.isAssigned !== b.isAssigned) return a.isAssigned ? -1 : 1;
       return a.name.localeCompare(b.name);
     });
-  }, [assigned, classCounts, exams]);
+  }, [assigned, classCounts, exams, assignmentsKnown]);
 
-  return { subjects, isLoading, error };
+  return { subjects, isLoading, error, refetch: () => setRevision((value) => value + 1) };
 }

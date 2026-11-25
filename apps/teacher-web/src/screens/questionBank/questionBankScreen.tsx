@@ -36,7 +36,6 @@ export function QuestionBankScreen() {
   const { saveQuestion, error: saveError, clearError: clearSaveError } = useSaveBankQuestion();
   const { showToast } = useToast();
   const setNavigationGuard = useRouterLogic((state) => state.setNavigationGuard);
-  const forceNavigateTo = useRouterLogic((state) => state.forceNavigateTo);
 
   const [search, setSearch] = useState("");
   const [topicId, setTopicId] = useState("");
@@ -61,11 +60,11 @@ export function QuestionBankScreen() {
 
   useEffect(() => {
     if (!hasUnsavedChanges && !operation) return;
-    setNavigationGuard((screen) => {
-      if (!busy.current) setPendingLeave(() => () => forceNavigateTo(screen));
+    setNavigationGuard((_screen, proceed) => {
+      if (!busy.current) setPendingLeave(() => proceed);
     });
     return () => setNavigationGuard(null);
-  }, [forceNavigateTo, hasUnsavedChanges, operation, setNavigationGuard]);
+  }, [hasUnsavedChanges, operation, setNavigationGuard]);
 
   useEffect(() => {
     if (!hasUnsavedChanges && !operation) return;

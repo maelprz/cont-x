@@ -4,6 +4,7 @@ import type {
   QuestionScoreCell,
 } from "../screens/examResult/examResultsScreen.types";
 import { buildPoolScores } from "../lib/resultsPools";
+import { loadResultRows } from "./resultPaging";
 
 import type { PoolDrawRow } from "../lib/resultsPools";
 
@@ -15,7 +16,7 @@ type QuestionRow = {
   order_index: number;
 };
 
-// raw shape of one exam_sessions row with its nested joins
+// raw shape of one completed exam_sessions row
 type SessionRow = {
   id: string; // session id
   attempt_number: number;
@@ -26,11 +27,14 @@ type SessionRow = {
   total_score: number | null; // null until the session is graded
   score_adjustment: number; // manual change on top of the auto-graded score
   adjustment_reason: string | null;
-  student_answers: {
-    question_id: string | null; // null for an answer to a pooled question
-    pool_draw_id: string | null; // set for an answer to a pooled question
-    score: number;
-  }[]; // joined answers
+};
+
+type AnswerRow = {
+  id: string;
+  session_id: string;
+  question_id: string | null;
+  pool_draw_id: string | null;
+  score: number;
 };
 
 // one row from get_class_exam_results_students (teachers can't read users directly)
@@ -55,6 +59,16 @@ type ClassExamMetaRow = {
 
 function unwrapOne<T>(value: One<T>): T | null {
   return Array.isArray(value) ? (value[0] ?? null) : value;
+}
+
+function groupBySession<T extends { session_id: string }>(rows: T[]): Map<string, T[]> {
+  const groups = new Map<string, T[]>();
+  for (const row of rows) {
+    const group = groups.get(row.session_id) ?? [];
+    group.push(row);
+    groups.set(row.session_id, group);
+  }
+  return groups;
 }
 
 export type ExamResultsData = {
@@ -86,17 +100,15 @@ export async function getClassExamResults(
   const classRow = unwrapOne(meta.classes);
 
   // all questions of the exam, ordered for column display
-  const { data: questionData, error: questionError } = await supabase
+  const questions = await loadResultRows<QuestionRow>((from, to) => supabase
     .from("questions")
-    .select("id, title, max_points, order_index")
+    .select("id, title, max_points, order_index", { count: "exact" })
     .eq("exam_id", meta.exam_id)
-    .order("order_index", { ascending: true });
+    .order("order_index", { ascending: true })
+    .order("id", { ascending: true }).range(from, to), (row) => row.id);
 
-  if (questionError) throw questionError;
-  const questions = (questionData as QuestionRow[]) ?? [];
-
-  // one row per submitted/timed-out session of THIS class only, with student + answers
-  const { data: sessionData, error: sessionError } = await supabase
+  // one row per submitted/timed-out session of THIS class only
+  const sessions = await loadResultRows<SessionRow>((from, to) => supabase
     .from("exam_sessions")
     .select(
       `
@@ -108,50 +120,63 @@ export async function getClassExamResults(
       overtime_deduction_applied,
       total_score,
       score_adjustment,
-      adjustment_reason,
-      student_answers(question_id, pool_draw_id, score)
+      adjustment_reason
     `,
+      { count: "exact" },
     )
     .eq("class_exam_id", classExamId)
-    .in("status", ["submitted", "timed_out"]); // excludes sessions that never finished
-
-  if (sessionError) throw sessionError;
-  const sessions = (sessionData as unknown as SessionRow[]) ?? [];
+    .in("status", ["submitted", "timed_out"])
+    .order("id", { ascending: true }).range(from, to), (row) => row.id);
 
   // the pooled questions each student drew (empty until the student app draws them)
   const sessionIds = sessions.map((session) => session.id);
-  let draws: PoolDrawRow[] = [];
-  if (sessionIds.length > 0) {
-    const { data: drawData, error: drawError } = await supabase
+  const draws: PoolDrawRow[] = [];
+  const answers: AnswerRow[] = [];
+  // Bounded IN filters avoid URL-size limits on large classes. Answers are loaded
+  // separately so an embedded relation cannot silently hit its own API row cap.
+  for (let start = 0; start < sessionIds.length; start += 100) {
+    const ids = sessionIds.slice(start, start + 100);
+    const [batchDraws, batchAnswers] = await Promise.all([
+      loadResultRows<PoolDrawRow>((from, to) => supabase
       .from("session_pool_questions")
       .select(
         "id, session_id, pool_id, pool_title, pool_order_index, question_bank_id, title, max_points",
+        { count: "exact" },
       )
-      .in("session_id", sessionIds);
-    if (drawError) throw drawError;
-    draws = (drawData as PoolDrawRow[] | null) ?? [];
+      .in("session_id", ids)
+      .order("id", { ascending: true }).range(from, to), (row) => row.id),
+      loadResultRows<AnswerRow>((from, to) => supabase.from("student_answers")
+        .select("id, session_id, question_id, pool_draw_id, score", { count: "exact" })
+        .in("session_id", ids)
+        .order("id", { ascending: true }).range(from, to), (row) => row.id),
+    ]);
+    draws.push(...batchDraws);
+    answers.push(...batchAnswers);
   }
 
   // student names come from a function that only returns ID number + name for this teacher's class
-  const { data: nameData, error: nameError } = await supabase.rpc(
+  const names = await loadResultRows<StudentNameRow>((from, to) => supabase.rpc(
     "get_class_exam_results_students",
     { p_class_exam_id: classExamId },
-  );
-  if (nameError) throw nameError;
-  const namesBySession = new Map(
-    ((nameData as StudentNameRow[] | null) ?? []).map((n) => [n.session_id, n]),
-  );
+    { count: "exact" },
+  ).order("session_id", { ascending: true }).range(from, to), (row) => row.session_id);
+  const namesBySession = new Map(names.map((n) => [n.session_id, n]));
+  if (sessions.some((session) => !namesBySession.has(session.id))) {
+    throw new Error("Student names could not be loaded completely. Refresh and try again.");
+  }
 
   // points from the exam's fixed questions; pooled questions add to this per student below
   const fixedMaxScore = questions.reduce((sum, q) => sum + q.max_points, 0);
+  const answersBySession = groupBySession(answers);
+  const drawsBySession = groupBySession(draws);
 
   // turns each session into one table row, one cell per question
   const rows: StudentResultRow[] = sessions.map((session) => {
+    const sessionAnswers = answersBySession.get(session.id) ?? [];
+    const fixedAnswers = new Map(sessionAnswers.map((answer) => [answer.question_id, answer]));
     const questionScores: QuestionScoreCell[] = questions.map((q, index) => {
       // finds this student's answer for this specific question, if any
-      const answer = session.student_answers.find(
-        (a) => a.question_id === q.id,
-      );
+      const answer = fixedAnswers.get(q.id);
       const score = answer?.score ?? 0; // no answer means zero score
 
       return {
@@ -166,8 +191,8 @@ export async function getClassExamResults(
 
     const student = namesBySession.get(session.id);
     const poolScores = buildPoolScores(
-      draws.filter((draw) => draw.session_id === session.id),
-      session.student_answers,
+      drawsBySession.get(session.id) ?? [],
+      sessionAnswers,
     );
     const maxScore =
       fixedMaxScore + poolScores.reduce((sum, cell) => sum + cell.maxPoints, 0);

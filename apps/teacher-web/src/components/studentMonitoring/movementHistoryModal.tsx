@@ -77,7 +77,7 @@ export function MovementHistoryModal({ classExamId, studentId, studentName, onCl
 
       {history.entries.length > 0 && (
         <>
-          {!error && <p className="mb-3 text-xs text-stone-600">{summaryText(history.summary)}</p>}
+          {!error && <p className="mb-3 text-xs text-stone-600">{history.isTruncated && "Partial summary: "}{summaryText(history.summary)}</p>}
           <ol aria-label="Movement events, newest first" className="divide-y divide-[var(--color-base-300)]">
             {page.items.map((entry) => (
               <li key={entry.id} className="flex items-start gap-2.5 py-2.5">
@@ -95,7 +95,7 @@ export function MovementHistoryModal({ classExamId, studentId, studentName, onCl
           <Pagination label="Movement history pages" {...page} />
         </>
       )}
-      {history.isTruncated && <p className="mt-3 text-xs text-stone-600">Showing the newest 500 events.</p>}
+      {history.isTruncated && <p className="mt-3 text-xs text-stone-600">Only the newest recorded events are shown. This summary may omit earlier activity.</p>}
     </ExamDialog>
   );
 }

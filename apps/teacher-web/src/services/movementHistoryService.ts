@@ -53,9 +53,10 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
   const [eventsResult, sessionResult] = await Promise.all([
     supabase
       .from("session_movement_events")
-      .select("id, event_type, occurred_at, meta")
+      .select("id, event_type, occurred_at, meta", { count: "exact" })
       .eq("session_id", sessionId) // only this attempt
       .order("occurred_at", { ascending: false }) // newest first, so the cap keeps the recent ones
+      .order("id", { ascending: false })
       .limit(MAX_EVENTS),
     supabase
       .from("exam_sessions")
@@ -68,6 +69,9 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
 
   const eventRows = (eventsResult.data ?? []) as EventRow[];
   const session = sessionResult.data as SessionRow;
+  const joinedAt = Date.parse(session.joined_at);
+  const endAt = session.status === "in_progress" ? Date.now()
+    : Date.parse((session.status === "removed" ? session.removed_at : session.submitted_at) ?? "");
 
   // Older clients only send the time spent waiting in the buffer.
   const timed = eventRows
@@ -79,11 +83,14 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
         time: Number.isFinite(capturedAt) ? capturedAt : Date.parse(row.occurred_at) - (row.meta?.delay_ms ?? 0),
       };
     })
+    .filter(({ time }) => Number.isFinite(time))
+    .map((event) => ({ ...event, time: Math.max(joinedAt, Math.min(event.time, Number.isFinite(endAt) ? endAt : event.time)) }))
     .sort((a, b) => a.time - b.time);
 
   // 2. walk the events in order to build sentences and work out how long each away period lasted
   const entries: MovementHistoryEntry[] = [];
   let lostAt: number | null = null; 
+  let lostEntry: MovementHistoryEntry | null = null;
   let windowLeftCount = 0;
   let totalAwaySeconds = 0;
   let questionChanges = 0;
@@ -103,7 +110,8 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
       });
     } else if (row.event_type === "focus_lost") {
       windowLeftCount += 1;
-      lostAt = time; 
+      // Duplicate lost events must not reset an already-open interval.
+      if (lostAt === null) lostAt = time;
       entries.push({
         id: row.id,
         kind: "focus_lost",
@@ -111,6 +119,7 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
         label: `Left the exam window${onQuestion(row.meta?.position)}`,
         detail: null,
       });
+      if (lostEntry === null) lostEntry = entries.at(-1) ?? null;
     } else if (row.event_type === "focus_gained") {
       let detail: string | null = null;
       if (lostAt !== null) {
@@ -118,6 +127,7 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
         totalAwaySeconds += away;
         detail = `Away for ${formatDuration(away)}`;
         lostAt = null; 
+        lostEntry = null;
       }
       entries.push({
         id: row.id,
@@ -126,6 +136,14 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
         label: `Returned to the exam window${onQuestion(row.meta?.position)}`,
         detail,
       });
+    }
+  }
+
+  if (lostAt !== null && Number.isFinite(endAt)) {
+    const away = Math.max(0, Math.round((endAt - lostAt) / 1000));
+    totalAwaySeconds += away;
+    if (lostEntry) {
+      lostEntry.detail = `Away for ${formatDuration(away)} ${session.status === "in_progress" ? "as of this refresh" : "until the attempt ended"}`;
     }
   }
 
@@ -151,6 +169,7 @@ export async function getMovementHistory(sessionId: string): Promise<MovementHis
   return {
     entries,
     summary: { windowLeftCount, totalAwaySeconds, questionChanges },
-    isTruncated: eventRows.length >= MAX_EVENTS, 
+    isTruncated: eventsResult.count !== null
+      ? (eventsResult.count ?? 0) > eventRows.length : eventRows.length >= MAX_EVENTS,
   };
 }
