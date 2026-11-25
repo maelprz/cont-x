@@ -114,7 +114,8 @@ export function ExamBuilderScreen({
   const [statusError, setStatusError] = useState<string | null>(null); // why the draft/saved status change failed
   const [leaveSaveError, setLeaveSaveError] = useState<string | null>(null);
 
-  const [pendingLeaveScreen, setPendingLeaveScreen] = useState<ScreenName | null>(null); // where the user tried to go, while we ask them to confirm
+  const [pendingLeave, setPendingLeave] = useState<{ screen: ScreenName; proceed: () => void } | null>(null);
+  const [typeChange, setTypeChange] = useState<{ questionId: string; type: QuestionType } | null>(null);
   // asks before a points change rescales scores students already earned
   const [rescalePrompt, setRescalePrompt] = useState<{ changes: PointChange[]; attempts: number } | null>(null);
   const rescaleResolver = useRef<((confirmed: boolean) => void) | null>(null); // settles the save that is waiting on the answer
@@ -170,10 +171,10 @@ export function ExamBuilderScreen({
       return;
     }
 
-    setNavigationGuard((nextScreen) => {
+    setNavigationGuard((nextScreen, proceed) => {
       if (saving.current) return;
       setLeaveSaveError(null);
-      setPendingLeaveScreen(nextScreen);
+      setPendingLeave({ screen: nextScreen, proceed });
     });
 
     return () => setNavigationGuard(null); // always clear on unmount or before the next effect run
@@ -229,14 +230,14 @@ export function ExamBuilderScreen({
 
   // teacher chose to discard changes and leave anyway
   const handleLeaveWithoutSaving = () => {
-    if (!pendingLeaveScreen || saving.current) return;
+    if (!pendingLeave || saving.current) return;
     setNavigationGuard(null);
-    forceNavigateTo(pendingLeaveScreen);
-    setPendingLeaveScreen(null);
+    pendingLeave.proceed();
+    setPendingLeave(null);
   };
 
   // teacher chose to stay on this screen
-  const handleCancelLeave = () => { if (!saving.current) setPendingLeaveScreen(null); };
+  const handleCancelLeave = () => { if (!saving.current) setPendingLeave(null); };
 
   const sectionForNewItem = (): string | undefined => {
     if (activeSectionId && sections.some((s) => s.id === activeSectionId)) return activeSectionId;
@@ -496,8 +497,16 @@ export function ExamBuilderScreen({
     );
 
   const handleTabSwitch = (tab: QuestionType) => {
+    if (!activeQuestion || activeQuestion.type === tab || examData?.hasAttempts) return;
+    setTypeChange({ questionId: activeQuestion.id, type: tab });
+  };
+
+  const confirmTypeChange = () => {
+    const change = typeChange;
+    setTypeChange(null);
+    if (!change || !activeQuestion || activeQuestion.id !== change.questionId || examData?.hasAttempts) return;
+    const tab = change.type;
     setEditorTab(tab);
-    if (!activeQuestion || activeQuestion.type === tab) return;
 
     const base = {
       id: activeQuestion.id,
@@ -601,8 +610,9 @@ export function ExamBuilderScreen({
 
   const handleSave = async (action: "draft" | "exam" | "leave") => {
     if (saving.current || isDeleting || !examData?.id || !teacherId) return;
-    const destination = action === "leave" ? pendingLeaveScreen : "examLibrary";
+    const destination = action === "leave" ? pendingLeave?.screen : "examLibrary";
     if (!destination) return;
+    const leavingToLogout = destination === "login";
 
     saving.current = true;
     setSaveAction(action);
@@ -625,14 +635,17 @@ export function ExamBuilderScreen({
       if (!(await confirmRescaleIfNeeded(questions))) return;
       if (useAuthStore.getState().user?.id !== teacherId) return;
       if (destination === "examLibrary") setLibrarySubject(examData.subjectId);
-      setPendingLeaveScreen(null);
-      setBackgroundSave(save);
-      setNavigationGuard(null);
-      forceNavigateTo(destination);
+      if (!leavingToLogout) {
+        setPendingLeave(null);
+        setBackgroundSave(save);
+        setNavigationGuard(null);
+        if (action === "leave") pendingLeave?.proceed();
+        else forceNavigateTo(destination);
+      }
 
       const saveProblem = await persistAllQuestions();
       if (saveProblem) throw new Error(saveProblem);
-      if (useExamBuilderStore.getState().backgroundSave !== save) return;
+      if (!leavingToLogout && useExamBuilderStore.getState().backgroundSave !== save) return;
 
       const statusProblem = await (saveAsExam ? saveExam(examData.id) : saveDraft(examData.id));
       if (statusProblem) {
@@ -640,7 +653,12 @@ export function ExamBuilderScreen({
         throw new Error(statusProblem);
       }
 
-      if (useExamBuilderStore.getState().backgroundSave === save) {
+      if (leavingToLogout) {
+        setBackgroundSave(null);
+        setNavigationGuard(null);
+        setPendingLeave(null);
+        pendingLeave?.proceed();
+      } else if (useExamBuilderStore.getState().backgroundSave === save) {
         setBackgroundSave(null);
         showToast(saveAsExam ? (openedFromEditExam ? "Exam updated." : "Exam saved.") : "Draft saved.", "success");
       }
@@ -737,6 +755,7 @@ export function ExamBuilderScreen({
               ) : undefined
             }
             onTabSwitch={handleTabSwitch}
+            typeChangesDisabled={examData?.hasAttempts}
             onQuestionChange={handleQuestionChange}
             onPreviewRendered={onPreviewRendered}
             onDeleteQuestion={() => handleDeleteQuestion(activeQuestion?.id ?? "")}
@@ -747,6 +766,17 @@ export function ExamBuilderScreen({
       </div>
 
       {/* Overlays */}
+      <ExamConfirmDialog
+        isOpen={typeChange !== null}
+        title="Change question type?"
+        message="Changing type replaces this question's options, accepted answers, or code and test cases. Its title, prompt, topics and points are kept."
+        confirmLabel="Change type"
+        cancelLabel="Keep current type"
+        isProcessing={false}
+        error={null}
+        onConfirm={confirmTypeChange}
+        onCancel={() => setTypeChange(null)}
+      />
       {showQuestionBankModal && (
         <QuestionBankModal
           subjectId={examData?.subjectId ?? null}
@@ -787,7 +817,9 @@ export function ExamBuilderScreen({
       />
 
       <UnsavedChangesPrompt
-        isOpen={Boolean(pendingLeaveScreen)}
+        isOpen={Boolean(pendingLeave)}
+        leaveLabel={pendingLeave?.screen === "login" ? "Log out without saving" : "Leave"}
+        saveLabel={pendingLeave?.screen === "login" ? "Save and log out" : "Save changes"}
         isSaving={saveAction === "leave"}
         error={leaveSaveError}
         onSave={() => handleSave("leave")}

@@ -7,6 +7,7 @@ interface UnsavedChangesPromptProps {
   error?: string | null;
   recordLabel?: string;
   leaveLabel?: string;
+  saveLabel?: string;
   onSave: () => void | Promise<void>;
   onLeaveWithoutSaving: () => void;
   onCancel: () => void;
@@ -18,6 +19,7 @@ export function UnsavedChangesPrompt({
   error,
   recordLabel = "exam",
   leaveLabel = "Leave",
+  saveLabel = "Save changes",
   onSave,
   onLeaveWithoutSaving,
   onCancel,
@@ -27,9 +29,10 @@ export function UnsavedChangesPrompt({
   return (
     <ExamDialog title="Unsaved changes" busy={isSaving} onClose={onCancel} footer={<>
       <button type="button" className={`${examSecondary} text-red-700`} disabled={isSaving} onClick={onLeaveWithoutSaving}>{leaveLabel}</button>
+      <button type="button" className={examSecondary} disabled={isSaving} onClick={onCancel}>Cancel</button>
       <button type="button" className={examPrimary} disabled={isSaving} onClick={onSave}>
         {isSaving && <LoaderCircle size={16} className="motion-safe:animate-spin" aria-hidden="true" />}
-        {isSaving ? "Saving…" : "Save changes"}
+        {isSaving ? "Saving…" : saveLabel}
       </button>
     </>}>
       <p role="status" className="text-sm text-stone-600">{isSaving ? `Saving your ${recordLabel} changes…` : `Save your ${recordLabel} changes before leaving?`}</p>

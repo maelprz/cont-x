@@ -174,25 +174,17 @@ export async function attachExamToClass(
   classId: string,
   settings: NewClassExamSettings,
 ): Promise<string> {
-  const { data, error } = await supabase
-    .from("class_exams")
-    .insert({
-      exam_id: examId,
-      class_id: classId,
-      status: "scheduled",
-      duration_minutes: settings.durationMinutes,
-      max_attempts: settings.maxAttempts,
-      pass_mark: settings.passMark,
-      randomize_order: settings.randomizeOrder,
-      starts_at: settings.startsAt,
-      ends_at: settings.endsAt,
-    })
-    .select("id")
-    .single();
-
-  if (error || !data) throw error ?? new Error("Could not add this exam to the class.");
-  if (settings.verificationCode) await writeSessionCode(data.id, settings.verificationCode);
-  return data.id;
+  const { data, error } = await supabase.rpc("attach_exam_to_class", {
+    p_exam_id: examId, p_class_id: classId,
+    p_settings: {
+      duration_minutes: settings.durationMinutes, max_attempts: settings.maxAttempts,
+      pass_mark: settings.passMark, randomize_order: settings.randomizeOrder,
+      starts_at: settings.startsAt, ends_at: settings.endsAt, verification_code: settings.verificationCode,
+    },
+  });
+  if (error) throw new Error(error.message);
+  if (!data) throw new Error("Could not add this exam to the class.");
+  return data;
 }
 
 // distinct message so the UI can tell "needs a code" apart from a real failure —
@@ -295,30 +287,11 @@ export async function updateClassExamSettings(
     answer_change_deduction: settings.answerChangeDeduction,
   };
 
-  if (settings.verificationCode !== undefined) {
-    const { data: row, error: statusError } = await supabase
-      .from("class_exams")
-      .select("status")
-      .eq("id", classExamId)
-      .single();
-
-    if (statusError || !row) throw statusError ?? new Error("Class attachment not found.");
-
-    if (row.status !== "scheduled") {
-      throw new Error("Session code can only be changed before this class goes live.");
-    }
-
-  }
-
-  const { error } = await supabase
-    .from("class_exams")
-    .update(updatePayload)
-    .eq("id", classExamId);
-  if (error) throw error;
-
-  if (settings.verificationCode !== undefined) {
-    await writeSessionCode(classExamId, settings.verificationCode);
-  }
+  if (settings.verificationCode !== undefined) updatePayload.verification_code = settings.verificationCode;
+  const { error } = await supabase.rpc("update_class_exam_settings", {
+    p_class_exam_id: classExamId, p_settings: updatePayload,
+  });
+  if (error) throw new Error(error.message);
 }
 
 // removes an attachment outright — only sensible while still 'scheduled';

@@ -19,9 +19,9 @@ const RESTORABLE_SCREENS: ScreenName[] = [
 
 interface AppRouterState {
   currentScreen: ScreenName;
-  navigateTo: (screen: ScreenName) => void;
-  navigationGuard: ((nextScreen: ScreenName) => void) | null;
-  setNavigationGuard: (guard: ((nextScreen: ScreenName) => void) | null) => void;
+  navigateTo: (screen: ScreenName, onProceed?: () => void) => void;
+  navigationGuard: ((nextScreen: ScreenName, proceed: () => void) => void) | null;
+  setNavigationGuard: (guard: ((nextScreen: ScreenName, proceed: () => void) => void) | null) => void;
   // used by the guard itself once it's decided navigation should actually happen
   forceNavigateTo: (screen: ScreenName) => void;
 }
@@ -33,13 +33,14 @@ export const useRouterLogic = create<AppRouterState>()(
       navigationGuard: null,
       setNavigationGuard: (guard) => set({ navigationGuard: guard }),
       forceNavigateTo: (screen) => set({ currentScreen: screen }),
-      navigateTo: (screen) => {
+      navigateTo: (screen, onProceed) => {
         const { navigationGuard, currentScreen } = get();
+        const proceed = onProceed ?? (() => set({ currentScreen: screen }));
         if (navigationGuard && screen !== currentScreen) {
-          navigationGuard(screen); // guard now owns deciding what happens next
+          navigationGuard(screen, proceed); // sign-out also waits for the editor's decision
           return;
         }
-        set({ currentScreen: screen });
+        proceed();
       },
     }),
     {
