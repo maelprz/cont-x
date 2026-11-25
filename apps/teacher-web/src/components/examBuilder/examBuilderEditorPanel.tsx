@@ -28,6 +28,7 @@ interface ExamBuilderEditorPaneProps {
   isDeleting: boolean;
   poolPanel?: React.ReactNode; // when set, replaces the question editor (a random pool is selected)
   onTabSwitch?: (tab: QuestionType) => void;
+  typeChangesDisabled?: boolean;
   onQuestionChange: (question: BuilderQuestion) => void;
   onPreviewRendered?: () => void;
   onDeleteQuestion?: () => void;
@@ -49,6 +50,7 @@ export function ExamBuilderEditorPanel({
   isDeleting,
   poolPanel,
   onTabSwitch,
+  typeChangesDisabled = false,
   onQuestionChange,
   onPreviewRendered,
   onDeleteQuestion,
@@ -93,8 +95,9 @@ export function ExamBuilderEditorPanel({
                   key={tab}
                   type="button"
                   aria-pressed={editorTab === tab}
+                  disabled={typeChangesDisabled && editorTab !== tab}
                   onClick={() => onTabSwitch(tab)}
-                  className="rounded-md px-3 py-1.5 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-[#465a3b]"
+                  className="rounded-md px-3 py-1.5 text-[13px] font-semibold focus-visible:outline-2 focus-visible:outline-[#465a3b] disabled:cursor-not-allowed disabled:opacity-40"
                   style={{
                     backgroundColor:
                       editorTab === tab ? "var(--color-base-100)" : "transparent",
@@ -107,6 +110,8 @@ export function ExamBuilderEditorPanel({
                 </button>
               ))}
             </div>}
+
+            {typeChangesDisabled && <p className="mb-4 text-sm text-stone-600">Question type is locked because students have already started this exam. Create a new exam version to change it.</p>}
 
             <QuestionTopics key={activeQuestion.id} compact subjectId={subjectId} selectedIds={activeQuestion.topicIds ?? []} onChange={(topicIds) => onQuestionChange({ ...activeQuestion, topicIds })} />
 

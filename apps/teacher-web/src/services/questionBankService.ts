@@ -1,14 +1,9 @@
 import { supabase } from "./supabaseClient";
-import { requireFitbAnswer } from "../lib/fitbAnswers";
-import { DEFAULT_TEST_TIME_LIMIT_MS, validateQuestionForSave } from "../lib/questionValidation";
-import { requireTopicIds } from "./questionTopicService";
+import { saveQuestionWithDetails } from "./questionSaveService";
 import type { SubjectTopic } from "./questionTopicService";
 import type {
   BuilderQuestion,
   CodingProgramType,
-  FITBAnswer,
-  MCQOption,
-  TestCase,
 } from "../screens/examBuilder/examBuilderScreen.types"; // reusing the same shapes exam builder uses
 
 // one row of mcq_bank_option exactly as stored in the database
@@ -268,156 +263,9 @@ export async function getBankQuestionById(id: string): Promise<BuilderQuestion> 
   return { ...question, topicIds: getBankTopics(row).map((topic) => topic.id) };
 }
 
-// deletes options no longer in the current list, then upserts the rest
-async function syncMcqBankOptions(bankQuestionId: string, options: MCQOption[]): Promise<void> {
-  const { data: existingRows, error: fetchError } = await supabase
-    .from("mcq_bank_option")
-    .select("id")
-    .eq("mcq_bank_question_id", bankQuestionId);
-  if (fetchError) throw fetchError;
-
-  const existingIds = new Set((existingRows ?? []).map((r) => r.id));
-  const currentIds = new Set(options.map((o) => o.id));
-  const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id)); // removed by teacher
-
-  if (idsToDelete.length > 0) {
-    const { error: deleteError } = await supabase.from("mcq_bank_option").delete().in("id", idsToDelete);
-    if (deleteError) throw deleteError;
-  }
-
-  if (options.length > 0) {
-    const { error: upsertError } = await supabase.from("mcq_bank_option").upsert(
-      options.map((o) => ({
-        id: o.id, // real uuid, insert or update depending on if it exists
-        mcq_bank_question_id: bankQuestionId,
-        option_text: o.text,
-        is_correct: o.isCorrect,
-      })),
-    );
-    if (upsertError) throw upsertError;
-  }
-}
-
-// deletes accepted answers no longer in the current list, then upserts the rest
-async function syncFitbBankAnswers(bankQuestionId: string, answers: FITBAnswer[]): Promise<void> {
-  const { data: existingRows, error: fetchError } = await supabase
-    .from("fitb_bank_answer")
-    .select("id")
-    .eq("fitb_bank_question_id", bankQuestionId);
-  if (fetchError) throw fetchError;
-
-  const existingIds = new Set((existingRows ?? []).map((r) => r.id));
-  const currentIds = new Set(answers.map((a) => a.id));
-  const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id));
-
-  if (idsToDelete.length > 0) {
-    const { error: deleteError } = await supabase.from("fitb_bank_answer").delete().in("id", idsToDelete);
-    if (deleteError) throw deleteError;
-  }
-
-  const { error: upsertError } = await supabase.from("fitb_bank_answer").upsert(
-    answers.map((a) => ({
-      id: a.id,
-      fitb_bank_question_id: bankQuestionId,
-      answer_text: a.text,
-    })),
-  );
-  if (upsertError) throw upsertError;
-}
-
-// deletes test cases no longer in the current list, then upserts the rest
-async function syncTestCaseBank(bankQuestionId: string, testCases: TestCase[]): Promise<void> {
-  const { data: existingRows, error: fetchError } = await supabase
-    .from("test_case_bank")
-    .select("id")
-    .eq("coding_bank_question_id", bankQuestionId);
-  if (fetchError) throw fetchError;
-
-  const existingIds = new Set((existingRows ?? []).map((r) => r.id));
-  const currentIds = new Set(testCases.map((t) => t.id));
-  const idsToDelete = [...existingIds].filter((id) => !currentIds.has(id));
-
-  if (idsToDelete.length > 0) {
-    const { error: deleteError } = await supabase.from("test_case_bank").delete().in("id", idsToDelete);
-    if (deleteError) throw deleteError;
-  }
-
-  if (testCases.length > 0) {
-    const { error: upsertError } = await supabase.from("test_case_bank").upsert(
-      testCases.map((t) => ({
-        id: t.id,
-        coding_bank_question_id: bankQuestionId,
-        input: t.input,
-        expected_output: t.expectedOutput,
-        is_hidden: t.isHidden,
-        time_limit_ms: t.timeLimitMs ?? DEFAULT_TEST_TIME_LIMIT_MS,
-      })),
-    );
-    if (upsertError) throw upsertError;
-  }
-}
-
-// saves one bank question (and its type-specific child rows) to the database
-export async function saveBankQuestion(
-  _teacherId: string, // ownership comes from the authenticated RPC, never this argument
-  subjectId: string, // every bank question lives under a subject now (NOT NULL in the db)
-  question: BuilderQuestion,
-): Promise<void> {
-  validateQuestionForSave(question);
-  const topicIds = requireTopicIds(question.topicIds);
-  // checked before anything is written, so a question with no usable answer never reaches the database
-  const fitbAnswers =
-    question.type === "fill-in-the-blank" ? requireFitbAnswer(question.acceptedAnswers) : [];
-
-  const dbType =
-    question.type === "multiple-choice"
-      ? "mcq"
-      : question.type === "fill-in-the-blank"
-        ? "fitb"
-        : "coding"; // matches db's check constraint
-
-  const { error: questionError } = await supabase.rpc("save_question_base_with_topics", {
-    p_subject_id: subjectId,
-    p_topic_ids: topicIds,
-    p_question: {
-    id: question.id, // real uuid, insert or update depending on if it exists
-    title: question.title,
-    type: dbType,
-    prompt: question.description,
-    max_points: question.points,
-    },
-  });
-  if (questionError) throw questionError;
-
-  if (question.type === "multiple-choice") {
-    const { error: mcqError } = await supabase
-      .from("mcq_bank_question")
-      .upsert({ question_bank_id: question.id });
-    if (mcqError) throw mcqError;
-
-    await syncMcqBankOptions(question.id, question.options);
-  } else if (question.type === "fill-in-the-blank") {
-    const { error: fitbError } = await supabase.from("fitb_bank_question").upsert({
-      question_bank_id: question.id,
-      case_sensitive: question.caseSensitive,
-      ignore_extra_spaces: question.ignoreExtraSpaces,
-    });
-    if (fitbError) throw fitbError;
-
-    await syncFitbBankAnswers(question.id, fitbAnswers);
-  } else {
-    const { error: codingError } = await supabase.from("coding_bank_question").upsert({
-      question_bank_id: question.id,
-      starter_code: question.starterCode,
-      program_type: question.programType,
-      main_code: question.mainCode,
-      check_penalty_per_attempt: question.deductionPerAttempt,
-      reference_solution: question.referenceSolution,
-    });
-    if (codingError) throw codingError;
-
-    await syncTestCaseBank(question.id, question.testCases);
-  }
+// Bank questions and their grading data are saved together.
+export async function saveBankQuestion(_teacherId: string, subjectId: string, question: BuilderQuestion): Promise<void> {
+  await saveQuestionWithDetails(question, { subjectId });
 }
 
 // permanently deletes a bank question — cascades remove its own child rows

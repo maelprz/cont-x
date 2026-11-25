@@ -4,6 +4,9 @@ export const DEFAULT_TEST_TIME_LIMIT_MS = 5000;
 export const MAX_TEST_TIME_LIMIT_MS = 30000;
 
 export function validateQuestionForSave(question: BuilderQuestion): void {
+  if (!Number.isFinite(question.points) || question.points <= 0) {
+    throw new Error(`"${question.title || "Untitled question"}" needs points greater than 0.`);
+  }
   if (question.type === "multiple-choice") {
     if (question.options.length < 2 || question.options.some((option) => !option.text.trim())) {
       throw new Error(`"${question.title || "Untitled question"}" needs at least two non-empty choices.`);

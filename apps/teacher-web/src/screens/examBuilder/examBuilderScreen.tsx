@@ -115,6 +115,7 @@ export function ExamBuilderScreen({
   const [leaveSaveError, setLeaveSaveError] = useState<string | null>(null);
 
   const [pendingLeaveScreen, setPendingLeaveScreen] = useState<ScreenName | null>(null); // where the user tried to go, while we ask them to confirm
+  const [typeChange, setTypeChange] = useState<{ questionId: string; type: QuestionType } | null>(null);
   // asks before a points change rescales scores students already earned
   const [rescalePrompt, setRescalePrompt] = useState<{ changes: PointChange[]; attempts: number } | null>(null);
   const rescaleResolver = useRef<((confirmed: boolean) => void) | null>(null); // settles the save that is waiting on the answer
@@ -496,8 +497,16 @@ export function ExamBuilderScreen({
     );
 
   const handleTabSwitch = (tab: QuestionType) => {
+    if (!activeQuestion || activeQuestion.type === tab || examData?.hasAttempts) return;
+    setTypeChange({ questionId: activeQuestion.id, type: tab });
+  };
+
+  const confirmTypeChange = () => {
+    const change = typeChange;
+    setTypeChange(null);
+    if (!change || !activeQuestion || activeQuestion.id !== change.questionId || examData?.hasAttempts) return;
+    const tab = change.type;
     setEditorTab(tab);
-    if (!activeQuestion || activeQuestion.type === tab) return;
 
     const base = {
       id: activeQuestion.id,
@@ -737,6 +746,7 @@ export function ExamBuilderScreen({
               ) : undefined
             }
             onTabSwitch={handleTabSwitch}
+            typeChangesDisabled={examData?.hasAttempts}
             onQuestionChange={handleQuestionChange}
             onPreviewRendered={onPreviewRendered}
             onDeleteQuestion={() => handleDeleteQuestion(activeQuestion?.id ?? "")}
@@ -747,6 +757,17 @@ export function ExamBuilderScreen({
       </div>
 
       {/* Overlays */}
+      <ExamConfirmDialog
+        isOpen={typeChange !== null}
+        title="Change question type?"
+        message="Changing type replaces this question's options, accepted answers, or code and test cases. Its title, prompt, topics and points are kept."
+        confirmLabel="Change type"
+        cancelLabel="Keep current type"
+        isProcessing={false}
+        error={null}
+        onConfirm={confirmTypeChange}
+        onCancel={() => setTypeChange(null)}
+      />
       {showQuestionBankModal && (
         <QuestionBankModal
           subjectId={examData?.subjectId ?? null}
